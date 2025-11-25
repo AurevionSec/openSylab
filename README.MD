@@ -267,7 +267,7 @@ Siehe [CONTRIBUTING.md](CONTRIBUTING.md) für Details.
 - **GitHub**: [OpenSylab Repository](https://github.com/opensylab/opensylab)
 - **Issues**: [GitHub Issues](https://github.com/opensylab/opensylab/issues)
 - **Diskussionen**: [GitHub Discussions](https://github.com/opensylab/opensylab/discussions)
-- **E-Mail**: [Kontakt-E-Mail hier einfügen]
+- **E-Mail**: A@Eddelbuet.tel
 
 ## Danksagung
 
