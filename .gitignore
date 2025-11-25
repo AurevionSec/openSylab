@@ -1,0 +1,78 @@
+# Build directories
+build/
+cmake-build-*/
+bin/
+lib/
+out/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+cmake_install.cmake
+install_manifest.txt
+CTestTestfile.cmake
+_deps/
+*.cmake
+
+# Compiled Object files
+*.o
+*.obj
+*.lo
+*.slo
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Compiled Static libraries
+*.a
+*.lib
+*.la
+
+# Executables
+*.exe
+*.out
+*.app
+openSylab
+
+# IDE-specific files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Qt Creator
+*.pro.user
+*.pro.user.*
+
+# Visual Studio
+*.vs/
+*.vcxproj.user
+*.sln
+*.vcxproj
+*.vcxproj.filters
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Log files
+*.log
+
+# Backup files
+*~
+*.bak
+*.backup
+
+# Configuration files with sensitive data
+config/local_*.conf
+config/*_local.conf

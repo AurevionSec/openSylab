@@ -1,0 +1,32 @@
+# Tests für OpenSylab v0.1
+
+# Sammle alle Test-Quellen
+set(TEST_SOURCES
+    unit/test_sample.cpp
+    unit/test_database.cpp
+    unit/test_csvimport.cpp
+    unit/test_runner.cpp
+)
+
+# Test-Executable erstellen
+add_executable(opensylab_tests ${TEST_SOURCES})
+
+# Include-Verzeichnisse
+target_include_directories(opensylab_tests PRIVATE
+    ${PROJECT_SOURCE_DIR}/include
+)
+
+# Libraries verlinken
+target_link_libraries(opensylab_tests PRIVATE SQLite::SQLite3)
+
+# Quellcode-Dateien die getestet werden sollen
+target_sources(opensylab_tests PRIVATE
+    ${PROJECT_SOURCE_DIR}/src/core/Sample.cpp
+    ${PROJECT_SOURCE_DIR}/src/db/Database.cpp
+    ${PROJECT_SOURCE_DIR}/src/utils/CsvImport.cpp
+)
+
+# Test hinzufügen
+add_test(NAME opensylab_unit_tests COMMAND opensylab_tests)
+
+message(STATUS "Test framework konfiguriert - Ausführen mit 'make test' oder 'ctest'")

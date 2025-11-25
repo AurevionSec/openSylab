@@ -1,0 +1,6 @@
+sample_id,patient_id,patient_name,description,status
+S001,P12345,Max Mustermann,Blutprobe,Erfasst
+S002,P12346,Erika Musterfrau,Urinprobe,Erfasst
+S003,P12347,Hans Schmidt,Gewebeprobe,In Analyse
+S004,P12348,Anna Müller,Blutprobe,Erfasst
+S005,P12349,Peter Weber,Stuhlprobe,Analysiert
