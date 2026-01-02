@@ -6,7 +6,7 @@ Diese Roadmap beschreibt die schrittweise Entwicklung von OpenSylab von der aktu
 
 OpenSylab folgt dem Prinzip **"Stabilität vor Features"**. Jede Version wird erst freigegeben, wenn sie gründlich getestet ist und zuverlässig funktioniert. Neue Funktionen werden nur dann integriert, wenn die bereits vorhandenen stabil laufen.
 
-## Version 0.1.1 (Aktuell) ✓ ABGESCHLOSSEN
+## Version 0.1.1 ✓ ABGESCHLOSSEN
 
 **Status:** Stabile CLI-basierte Grundversion
 **Release-Datum:** 2025-11-25
@@ -23,6 +23,44 @@ OpenSylab folgt dem Prinzip **"Stabilität vor Features"**. Jede Version wird er
 - ✅ **Test-Framework**: 18 Unit-Tests (6 Sample, 7 Database, 5 CSV-Import)
 - ✅ **Dokumentation**: Vollständige Dokumentation (README, CHANGELOG, TESTING)
 
+---
+
+## Version 0.2.0 (Aktuell) ✓ ABGESCHLOSSEN
+
+**Status:** Erweiterte CLI mit LIMS-Kernfunktionen
+**Release-Datum:** 2026-01-02
+
+### Implementierte Features
+
+- ✅ **Auftragsverwaltung**: Order-Modul mit Status und Prioritäten
+  - Status: REQUESTED, IN_PROGRESS, COMPLETED, VALIDATED, CANCELLED
+  - Prioritäten: NORMAL, URGENT, EMERGENCY
+  - Verknüpfung mit Proben via sampleId
+
+- ✅ **Ergebniseingabe**: TestResult-Modul mit Plausibilitätsprüfung
+  - Status: PENDING, ENTERED, VALIDATED, REJECTED, REPEATED
+  - Flags: NORMAL, LOW, HIGH, CRITICAL, UNDEFINED
+  - Automatische Flag-Berechnung anhand Referenzbereichen
+
+- ✅ **Gerätedatenschnittstelle**:
+  - CSV-Import für Ergebnisdaten
+  - HL7-Parser für Laborgeräte
+  - Batch-Import mit Validierung
+
+- ✅ **Audit-Trail**: Vollständige Protokollierung
+  - Wer, Was, Wann für jede Aktion
+  - Unveränderliche Audit-Einträge
+  - Aktionstypen: CREATE, UPDATE, DELETE, LOGIN, etc.
+
+- ✅ **Benutzerauthentifizierung**:
+  - Login/Logout-Funktionalität
+  - Rollen: USER, ADMIN, LAB_TECH, VALIDATOR
+  - Passwort-Hashing mit SHA-256
+  - Admin-Benutzerverwaltung
+
+- ✅ **Test-Framework**: 62 Unit-Tests
+  - Sample-, Order-, TestResult-, Database-, CSV-Import-Tests
+
 ### Technologie-Stack
 
 - C++17
@@ -34,60 +72,11 @@ OpenSylab folgt dem Prinzip **"Stabilität vor Features"**. Jede Version wird er
 
 ```text
 src/
-├── core/     - Geschäftslogik (Sample-Klasse)
+├── core/     - Geschäftslogik (Sample, Order, TestResult, AuditEntry, User)
 ├── db/       - Datenbank-Zugriffsschicht
-├── utils/    - CLI + CSV-Import
+├── utils/    - CLI + CSV-Import + HL7-Parser
 └── main.cpp  - Hauptprogramm
 ```
-
----
-
-## Version 0.2 - Erweiterte CLI & PostgreSQL
-
-**Status:** Geplant
-**Geschätzter Zeitrahmen:** Q1 2026
-
-### Ziele
-
-Stabilisierung der v0.1-Basis und Hinzufügen erster Multi-User-Fähigkeiten durch PostgreSQL-Support.
-
-### Geplante Features
-
-#### Kern-Features
-
-- **PostgreSQL-Unterstützung**: Alternative zu SQLite für größere Installationen
-  - Multi-User-fähige Datenbank
-  - Transaktionsmanagement
-  - Datenbank-Abstraktionsschicht für beide Backends
-
-- **Erweiterte CLI-Funktionen**:
-  - Erweiterte Suchfunktionen (Filter nach Datum, Status, Patient)
-  - Batch-Operationen (mehrere Proben auf einmal aktualisieren)
-  - Export-Funktionen (CSV, JSON)
-  - Konfigurationsdateien für Datenbankverbindung
-
-- **Benutzer-Authentifizierung** (Grundversion):
-  - Login-System mit Passwort-Hashing (bcrypt/Argon2)
-  - Einfache Rollenverwaltung (Admin, User)
-  - Session-Management
-
-- **Audit-Trail** (Grundversion):
-  - Protokollierung wichtiger Aktionen
-  - Wer hat wann was geändert
-  - Unveränderbare Log-Einträge
-
-### Technische Verbesserungen
-
-- Konfigurationsmanagement (JSON/YAML-Dateien)
-- Verbessertes Logging-System
-- Datenbank-Migrationen (Schema-Versionierung)
-- Performance-Optimierungen
-
-### Tests
-
-- Erweiterte Unit-Tests (Ziel: 30+ Tests)
-- Erste Integrationstests
-- PostgreSQL-spezifische Tests
 
 ---
 
@@ -322,10 +311,10 @@ Die Roadmap ist flexibel und wird basierend auf Community-Feedback angepasst. Ak
 
 ## Meilensteine
 
-| Version | Status | Fortschritt | Geschätztes Release |
-|---------|--------|-------------|---------------------|
+| Version | Status | Fortschritt | Release-Datum |
+|---------|--------|-------------|---------------|
 | v0.1.1  | ✅ Abgeschlossen | 100% | 2025-11-25 |
-| v0.2    | 📋 Geplant | 0% | Q1 2026 |
+| v0.2.0  | ✅ Abgeschlossen | 100% | 2026-01-02 |
 | v0.5    | 💡 Konzept | 0% | Q3 2026 |
 | v1.0    | 💡 Vision | 0% | Q2 2027 |
 | v2.0    | 💭 Langfristig | 0% | 2028+ |
@@ -349,5 +338,5 @@ Diese Roadmap ist ein lebendiges Dokument. Wir freuen uns über:
 
 ---
 
-**Letzte Aktualisierung:** 2025-11-25
-**Version des Dokuments:** 1.1
+**Letzte Aktualisierung:** 2026-01-02
+**Version des Dokuments:** 1.2

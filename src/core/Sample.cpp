@@ -7,69 +7,49 @@ namespace core {
 
 // Konstruktoren
 Sample::Sample()
-    : id_(0)
-    , sampleId_("")
-    , patientId_("")
-    , patientName_("")
-    , description_("")
-    , status_(Status::REGISTERED)
-    , registrationDate_(std::time(nullptr))
-{
-}
+    : id_(0), sampleId_(""), patientId_(""), patientName_(""), description_(""),
+      status_(Status::REGISTERED), registrationDate_(std::time(nullptr)) {}
 
-Sample::Sample(const std::string& sampleId, const std::string& patientId)
-    : id_(0)
-    , sampleId_(sampleId)
-    , patientId_(patientId)
-    , patientName_("")
-    , description_("")
-    , status_(Status::REGISTERED)
-    , registrationDate_(std::time(nullptr))
-{
-}
+Sample::Sample(const std::string &sampleId, const std::string &patientId)
+    : id_(0), sampleId_(sampleId), patientId_(patientId), patientName_(""),
+      description_(""), status_(Status::REGISTERED),
+      registrationDate_(std::time(nullptr)) {}
 
 // Hilfsfunktionen
-std::string Sample::getStatusString() const {
-    return statusToString(status_);
-}
+std::string Sample::getStatusString() const { return statusToString(status_); }
 
 std::string Sample::statusToString(Status status) {
-    switch (status) {
-        case Status::REGISTERED:
-            return "Erfasst";
-        case Status::IN_ANALYSIS:
-            return "In Analyse";
-        case Status::ANALYZED:
-            return "Analysiert";
-        case Status::VALIDATED:
-            return "Validiert";
-        case Status::ARCHIVED:
-            return "Archiviert";
-        default:
-            return "Unbekannt";
-    }
+  switch (status) {
+  case Status::REGISTERED:
+    return "Erfasst";
+  case Status::IN_ANALYSIS:
+    return "In Analyse";
+  case Status::ANALYZED:
+    return "Analysiert";
+  case Status::VALIDATED:
+    return "Validiert";
+  case Status::ARCHIVED:
+    return "Archiviert";
+  default:
+    return "Unbekannt";
+  }
 }
 
-Sample::Status Sample::stringToStatus(const std::string& statusStr) {
-    static const std::unordered_map<std::string, Status> statusMap = {
-        {"Erfasst", Status::REGISTERED},
-        {"REGISTERED", Status::REGISTERED},
-        {"In Analyse", Status::IN_ANALYSIS},
-        {"IN_ANALYSIS", Status::IN_ANALYSIS},
-        {"Analysiert", Status::ANALYZED},
-        {"ANALYZED", Status::ANALYZED},
-        {"Validiert", Status::VALIDATED},
-        {"VALIDATED", Status::VALIDATED},
-        {"Archiviert", Status::ARCHIVED},
-        {"ARCHIVED", Status::ARCHIVED},
-    };
+Sample::Status Sample::stringToStatus(const std::string &statusStr) {
+  static const std::unordered_map<std::string, Status> statusMap = {
+      {"Erfasst", Status::REGISTERED},     {"REGISTERED", Status::REGISTERED},
+      {"In Analyse", Status::IN_ANALYSIS}, {"IN_ANALYSIS", Status::IN_ANALYSIS},
+      {"Analysiert", Status::ANALYZED},    {"ANALYZED", Status::ANALYZED},
+      {"Validiert", Status::VALIDATED},    {"VALIDATED", Status::VALIDATED},
+      {"Archiviert", Status::ARCHIVED},    {"ARCHIVED", Status::ARCHIVED},
+  };
 
-    auto it = statusMap.find(statusStr);
-    if (it != statusMap.end()) {
-        return it->second;
-    }
+  auto it = statusMap.find(statusStr);
+  if (it != statusMap.end()) {
+    return it->second;
+  }
 
-    throw std::invalid_argument("Ungültiger Status-String: " + statusStr);
+  throw std::invalid_argument("Ungültiger Status-String: " + statusStr);
 }
 
 } // namespace core

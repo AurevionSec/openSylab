@@ -2,7 +2,7 @@
 
 ## Übersicht
 
-OpenSylab v0.1.1 enthält ein einfaches, selbst implementiertes Test-Framework ohne externe Abhängigkeiten. Dies ermöglicht schnelles Testen ohne komplexe Setup-Prozesse.
+OpenSylab v0.2 enthält ein einfaches, selbst implementiertes Test-Framework ohne externe Abhängigkeiten. Dies ermöglicht schnelles Testen ohne komplexe Setup-Prozesse. Die Test-Suite umfasst 62 automatisierte Unit-Tests.
 
 ## Test-Framework
 
@@ -11,8 +11,11 @@ OpenSylab v0.1.1 enthält ein einfaches, selbst implementiertes Test-Framework o
 Das Test-Framework besteht aus:
 - **test_runner.cpp**: Haupt-Test-Runner mit Makros für Tests
 - **test_sample.cpp**: Unit-Tests für Sample-Klasse
+- **test_order.cpp**: Unit-Tests für Order-Klasse
+- **test_testresult.cpp**: Unit-Tests für TestResult-Klasse
 - **test_database.cpp**: Unit-Tests für Database-Klasse
 - **test_csvimport.cpp**: Unit-Tests für CsvImport-Klasse
+- **test_csvresultimport.cpp**: Unit-Tests für CsvResultImport-Klasse
 
 ### Test-Makros
 
@@ -67,7 +70,29 @@ ctest --output-on-failure
 - ✓ StringToStatus
 - ✓ StatusRoundtrip
 
-### Database-Tests (7 Tests)
+### Order-Tests (8 Tests)
+- ✓ DefaultConstructor
+- ✓ ParameterizedConstructor
+- ✓ SettersAndGetters
+- ✓ StatusToString
+- ✓ StringToStatus
+- ✓ PriorityToString
+- ✓ StringToPriority
+- ✓ StatusRoundtrip
+
+### TestResult-Tests (10 Tests)
+- ✓ DefaultConstructor
+- ✓ ParameterizedConstructor
+- ✓ SettersAndGetters
+- ✓ StatusToString
+- ✓ StringToStatus
+- ✓ FlagToString
+- ✓ StringToFlag
+- ✓ CalculateFlag_Normal
+- ✓ CalculateFlag_Abnormal
+- ✓ CalculateFlag_NoRange
+
+### Database-Tests (26 Tests)
 - ✓ OpenAndClose
 - ✓ InitializeSchema
 - ✓ CreateSample
@@ -75,6 +100,25 @@ ctest --output-on-failure
 - ✓ GetAllSamples
 - ✓ GetAllSamples_EmptyDatabase
 - ✓ UpdateSample
+- ✓ CreateOrder
+- ✓ GetOrder
+- ✓ GetOrderByOrderId
+- ✓ GetOrdersBySampleId
+- ✓ GetAllOrders
+- ✓ UpdateOrder
+- ✓ DeleteOrder
+- ✓ CreateTestResult
+- ✓ GetTestResult
+- ✓ GetTestResultByResultId
+- ✓ GetTestResultsByOrderId
+- ✓ GetAllTestResults
+- ✓ UpdateTestResult
+- ✓ DeleteTestResult
+- ✓ LogAudit
+- ✓ GetAuditLog
+- ✓ GetAuditLogByEntity
+- ✓ CreateUser
+- ✓ AuthenticateUser
 
 ### CsvImport-Tests (5 Tests)
 - ✓ ImportValidCsv
@@ -83,41 +127,51 @@ ctest --output-on-failure
 - ✓ ImportWithWhitespaceId
 - ✓ ImportMixedValidAndInvalid
 
+### CsvResultImport-Tests (5 Tests)
+- ✓ ImportValidCsv
+- ✓ ImportWithMissingFields
+- ✓ ImportWithInvalidValue
+- ✓ ImportWithFlags
+- ✓ ImportMixedValidAndInvalid
+
 ## Erwartete Ausgabe
 
 ```
 ╔═══════════════════════════════════════════════════════════╗
-║          OpenSylab v0.1 - Unit Test Suite                 ║
+║          OpenSylab v0.2 - Unit Test Suite                 ║
 ╚═══════════════════════════════════════════════════════════╝
 
-Running 18 tests...
+Running 62 tests...
 
 TEST: Sample::DefaultConstructor... ✓ PASSED
 TEST: Sample::ParameterizedConstructor... ✓ PASSED
-TEST: Sample::SettersAndGetters... ✓ PASSED
 ...
-TEST: CsvImport::ImportMixedValidAndInvalid... ✓ PASSED
+TEST: CsvResultImport::ImportMixedValidAndInvalid... ✓ PASSED
 
 ═══════════════════════════════════════════════════════════
 Results:
-  ✓ Passed: 18
+  ✓ Passed: 62
   ✗ Failed: 0
-  Total:   18
+  Total:   62
 ═══════════════════════════════════════════════════════════
 ```
 
 ## Test-Coverage
 
 Aktuell getestet:
-- ✅ Datenmodell (Sample-Klasse)
-- ✅ Datenbank-Operationen (CRUD)
-- ✅ CSV-Import mit Validierung
+- ✅ Datenmodelle (Sample, Order, TestResult, AuditEntry, User)
+- ✅ Datenbank-Operationen (CRUD für alle Entitäten)
+- ✅ CSV-Import von Probendaten
+- ✅ CSV-Import von Analyseergebnissen
+- ✅ Audit-Trail Logging
+- ✅ Benutzer-Authentifizierung
 - ✅ Fehlerbehandlung
 
 Noch nicht getestet:
 - ⏳ CLI-Interface (schwierig automatisch zu testen)
 - ⏳ End-to-End Workflows
 - ⏳ Performance unter Last
+- ⏳ Berechtigungsprüfung im Detail
 
 ## Neue Tests hinzufügen
 
@@ -206,9 +260,10 @@ Der Exit-Code ist 0 bei Erfolg, 1 bei Fehler.
 
 ## Zukünftige Erweiterungen
 
-Für v0.2 geplant:
+Für v0.3 geplant:
 - Integration von Google Test für erweiterte Features
-- Code-Coverage-Analyse
+- Code-Coverage-Analyse mit gcov/lcov
 - Performance-Benchmarks
-- Integration-Tests mit echter Datenbank
-- Mock-Objekte für Isolierung
+- Integration-Tests für komplette Workflows
+- Mock-Objekte für bessere Isolierung
+- Automatisierte CI/CD-Pipeline

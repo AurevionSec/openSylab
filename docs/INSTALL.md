@@ -1,4 +1,4 @@
-# OpenSylab v0.1 - Installation und Kompilierung
+# OpenSylab v0.2 - Installation und Kompilierung
 
 ## Systemanforderungen
 
@@ -217,14 +217,19 @@ make
 make VERBOSE=1
 ```
 
-## Tests ausführen (zukünftig)
+## Tests ausführen
 
 ```bash
 cd build
-ctest
+make test
+# Oder für detaillierte Ausgabe:
+ctest --output-on-failure
+# Oder direktes Ausführen:
+./opensylab_tests
 ```
 
-*Hinweis: Test-Framework wird in v0.2 hinzugefügt.*
+Die Test-Suite enthält 62 automatisierte Unit-Tests für alle Kernkomponenten.
+Siehe [TESTING.md](TESTING.md) für Details.
 
 ## Deinstallation
 

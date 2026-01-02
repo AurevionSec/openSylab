@@ -1,10 +1,14 @@
 #ifndef OPENSYLAB_DATABASE_H
 #define OPENSYLAB_DATABASE_H
 
+#include "core/AuditEntry.h"
+#include "core/Order.h"
+#include "core/Sample.h"
+#include "core/TestResult.h"
+#include "core/User.h"
+#include <memory>
 #include <string>
 #include <vector>
-#include <memory>
-#include "core/Sample.h"
 
 // Forward declaration für SQLite
 struct sqlite3;
@@ -20,49 +24,111 @@ namespace db {
  */
 class Database {
 public:
-    /**
-     * @brief Konstruktor
-     * @param dbPath Pfad zur SQLite-Datenbankdatei
-     */
-    explicit Database(const std::string& dbPath);
+  /**
+   * @brief Konstruktor
+   * @param dbPath Pfad zur SQLite-Datenbankdatei
+   */
+  explicit Database(const std::string &dbPath);
 
-    /**
-     * @brief Destruktor - schließt die Datenbankverbindung
-     */
-    ~Database();
+  /**
+   * @brief Destruktor - schließt die Datenbankverbindung
+   */
+  ~Database();
 
-    // Datenbankoperationen
-    bool open();
-    bool close();
-    bool isOpen() const { return isOpen_; }
+  // Nicht kopierbar oder bewegbar (hat SQLite-Handle)
+  Database(const Database &) = delete;
+  Database &operator=(const Database &) = delete;
+  Database(Database &&) = delete;
+  Database &operator=(Database &&) = delete;
 
-    /**
-     * @brief Initialisiert das Datenbankschema
-     * @return true bei Erfolg
-     */
-    bool initializeSchema();
+  // Datenbankoperationen
+  [[nodiscard]] bool open();
+  bool close(); // Kein nodiscard - wird im Destruktor ohne Check aufgerufen
+  [[nodiscard]] bool isOpen() const { return isOpen_; }
 
-    // Sample-Operationen (CRUD)
-    bool createSample(const core::Sample& sample);
-    std::unique_ptr<core::Sample> getSample(int id);
-    std::unique_ptr<core::Sample> getSampleByBarcode(const std::string& barcode);
-    std::vector<std::unique_ptr<core::Sample>> getAllSamples();
-    bool updateSample(const core::Sample& sample);
-    bool deleteSample(int id);
+  /**
+   * @brief Initialisiert das Datenbankschema
+   * @return true bei Erfolg
+   */
+  [[nodiscard]] bool initializeSchema();
 
-    // Fehlerbehandlung
-    std::string getLastError() const { return lastError_; }
-    bool hasError() const { return !lastError_.empty(); }
-    void clearError() { lastError_.clear(); }
+  // Sample-Operationen (CRUD)
+  [[nodiscard]] bool createSample(const core::Sample &sample);
+  [[nodiscard]] std::unique_ptr<core::Sample> getSample(int id);
+  [[nodiscard]] std::unique_ptr<core::Sample>
+  getSampleByBarcode(const std::string &barcode);
+  [[nodiscard]] std::vector<std::unique_ptr<core::Sample>> getAllSamples();
+  [[nodiscard]] bool updateSample(const core::Sample &sample);
+  [[nodiscard]] bool deleteSample(int id);
+
+  // Order-Operationen (CRUD)
+  [[nodiscard]] bool createOrder(const core::Order &order);
+  [[nodiscard]] std::unique_ptr<core::Order> getOrder(int id);
+  [[nodiscard]] std::unique_ptr<core::Order>
+  getOrderByOrderId(const std::string &orderId);
+  [[nodiscard]] std::vector<std::unique_ptr<core::Order>>
+  getOrdersBySampleId(const std::string &sampleId);
+  [[nodiscard]] std::vector<std::unique_ptr<core::Order>> getAllOrders();
+  [[nodiscard]] bool updateOrder(const core::Order &order);
+  [[nodiscard]] bool deleteOrder(int id);
+
+  // TestResult-Operationen (CRUD)
+  [[nodiscard]] bool createTestResult(const core::TestResult &result);
+  [[nodiscard]] std::unique_ptr<core::TestResult> getTestResult(int id);
+  [[nodiscard]] std::unique_ptr<core::TestResult>
+  getTestResultByResultId(const std::string &resultId);
+  [[nodiscard]] std::vector<std::unique_ptr<core::TestResult>>
+  getTestResultsByOrderId(int orderId);
+  [[nodiscard]] std::vector<std::unique_ptr<core::TestResult>>
+  getAllTestResults();
+  [[nodiscard]] bool updateTestResult(const core::TestResult &result);
+  [[nodiscard]] bool deleteTestResult(int id);
+
+  // Audit-Operationen
+  [[nodiscard]] bool logAudit(const core::AuditEntry &entry);
+  [[nodiscard]] std::vector<std::unique_ptr<core::AuditEntry>>
+  getAuditLog(int limit = 100);
+  [[nodiscard]] std::vector<std::unique_ptr<core::AuditEntry>>
+  getAuditLogByEntity(core::AuditEntry::EntityType entity,
+                      const std::string &entityId);
+
+  // Audit-Hilfsmethoden
+  void logSampleAction(core::AuditEntry::ActionType action,
+                       const std::string &sampleId, const std::string &user,
+                       const std::string &details = "");
+  void logOrderAction(core::AuditEntry::ActionType action,
+                      const std::string &orderId, const std::string &user,
+                      const std::string &details = "");
+  void logResultAction(core::AuditEntry::ActionType action,
+                       const std::string &resultId, const std::string &user,
+                       const std::string &details = "");
+
+  // User-Operationen (CRUD)
+  [[nodiscard]] bool createUser(const core::User &user);
+  [[nodiscard]] std::unique_ptr<core::User> getUser(int id);
+  [[nodiscard]] std::unique_ptr<core::User>
+  getUserByUsername(const std::string &username);
+  [[nodiscard]] std::vector<std::unique_ptr<core::User>> getAllUsers();
+  [[nodiscard]] bool updateUser(const core::User &user);
+  [[nodiscard]] bool deleteUser(int id);
+
+  // Authentifizierung
+  [[nodiscard]] std::unique_ptr<core::User>
+  authenticateUser(const std::string &username, const std::string &password);
+
+  // Fehlerbehandlung
+  const std::string &getLastError() const { return lastError_; }
+  bool hasError() const { return !lastError_.empty(); }
+  void clearError() { lastError_.clear(); }
 
 private:
-    std::string dbPath_;
-    sqlite3* db_;
-    bool isOpen_;
-    std::string lastError_;
+  std::string dbPath_;
+  sqlite3 *db_ = nullptr;
+  bool isOpen_ = false;
+  std::string lastError_;
 
-    // Hilfsfunktionen
-    void setError(const std::string& error);
+  // Hilfsfunktionen
+  void setError(const std::string &error);
 };
 
 } // namespace db

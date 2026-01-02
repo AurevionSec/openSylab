@@ -4,7 +4,7 @@
 
 OpenSylab ist ein Laborinformations- und Managementsystem (LIMS), das als Open-Source-Projekt ins Leben gerufen wurde, um eine entscheidende Lücke in der Laborwelt zu schließen. Viele kleine medizinische Labore stehen vor der Herausforderung, entweder auf teure proprietäre LIMS zurückzugreifen oder ineffiziente manuelle Prozesse zu nutzen. OpenSylab existiert, um dieser Problematik zu begegnen: Es bietet kostenfrei und quelloffen ein vollwertiges System, mit dem ein klinisches Diagnostiklabor seine gesamten Abläufe digital verwalten kann.
 
-**Aktueller Entwicklungsstand:** Version 0.1.1 ist eine funktionale Grundversion mit CLI-Interface und fokussiert auf die Kernfunktionalitäten der Probenverwaltung. Fortgeschrittene Features wie Web-Interface, REST-API und Geräteschnittstellen sind für spätere Versionen geplant (siehe [ROADMAP.MD](ROADMAP.MD)).
+**Aktueller Entwicklungsstand:** Version 0.2.0 ist eine funktionsfähige Version mit CLI-Interface, die neben der Probenverwaltung nun auch Auftragsverwaltung, Ergebniseingabe mit Plausibilitätsprüfung, Gerätedatenschnittstelle (CSV/HL7), Audit-Trail und Benutzerauthentifizierung bietet. Web-Interface und REST-API sind für spätere Versionen geplant (siehe [ROADMAP.MD](ROADMAP.MD)).
 
 ## Manifest
 
@@ -17,9 +17,9 @@ Unser Manifest formuliert die grundlegenden Werte, Ziele und Prinzipien von Open
 - **Ethik und Gemeinwohl**: Gemeinnützig orientiert, kostenlos verfügbar
 - **Dezentralisierung und Unabhängigkeit**: Daten bleiben vor Ort unter voller Kontrolle
 
-## Features von OpenSylab 0.1.1
+## Features von OpenSylab 0.2.0
 
-Die aktuelle Version konzentriert sich auf solide Grundfunktionen:
+Die aktuelle Version bietet umfassende LIMS-Funktionalität:
 
 ### Implementierte Features
 
@@ -28,6 +28,32 @@ Die aktuelle Version konzentriert sich auf solide Grundfunktionen:
   - Verknüpfung mit Patientendaten
   - Statusverfolgung (Erfasst, In Analyse, Analysiert, Validiert, Archiviert)
   - Vollständige CRUD-Operationen (Create, Read, Update, Delete)
+
+- **Auftragsverwaltung** (NEU in v0.2):
+  - Aufträge mit Status (REQUESTED, IN_PROGRESS, COMPLETED, VALIDATED, CANCELLED)
+  - Prioritäten (NORMAL, URGENT, EMERGENCY)
+  - Verknüpfung mit Proben
+
+- **Ergebniseingabe** (NEU in v0.2):
+  - Testergebnisse mit Status und Flags
+  - Automatische Plausibilitätsprüfung gegen Referenzbereiche
+  - Flag-Berechnung (NORMAL, LOW, HIGH, CRITICAL)
+
+- **Gerätedatenschnittstelle** (NEU in v0.2):
+  - CSV-Import für Geräteergebnisse
+  - HL7-Parser für Laborgeräte
+  - Batch-Import mit Validierung
+
+- **Audit-Trail** (NEU in v0.2):
+  - Vollständige Protokollierung aller Änderungen
+  - Wer, Was, Wann für jede Aktion
+  - Unveränderliche Audit-Einträge
+
+- **Benutzerauthentifizierung** (NEU in v0.2):
+  - Login/Logout-Funktionalität
+  - Rollen: USER, ADMIN, LAB_TECH, VALIDATOR
+  - Passwort-Hashing mit SHA-256
+  - Benutzerverwaltung (nur für Admins)
 
 - **Datenbankverwaltung**:
   - SQLite-Datenbank für zuverlässige Datenpersistenz
@@ -40,22 +66,10 @@ Die aktuelle Version konzentriert sich auf solide Grundfunktionen:
   - Detaillierte Fehlerstatistik mit Zeilennummern
   - Whitespace-Erkennung und Ablehnung leerer Felder
 
-- **Eingabevalidierung**:
-  - Validierung von Pflichtfeldern mit Wiederholungsschleife
-  - Alphanumerische ID-Prüfung (erlaubt: a-z, A-Z, 0-9, -, _)
-  - Automatisches Trimmen von Whitespace
-  - Benutzerfreundliche Fehlermeldungen
-
-- **Fehlerbehandlung**:
-  - Klare Unterscheidung zwischen DB-Fehlern und leeren Ergebnissen
-  - Fehlerpropagierung von Datenbank bis CLI
-  - Lückenlose Fehlerprotokollierung
-
 - **Interaktive CLI**:
   - Menügeführte Benutzeroberfläche
-  - Proben anlegen, suchen, anzeigen, aktualisieren, löschen
+  - Module: Proben, Aufträge, Ergebnisse, Benutzer
   - CSV-Import über Menü
-  - Statistik-Übersicht nach Status
   - Unicode-Symbole für bessere Lesbarkeit (✓ ✗ ℹ)
 
 ### In Entwicklung (zukünftige Versionen)
@@ -63,15 +77,12 @@ Die aktuelle Version konzentriert sich auf solide Grundfunktionen:
 - Web-basierte Benutzeroberfläche
 - REST-API für externe Systeme
 - PostgreSQL-Unterstützung für größere Installationen
-- Geräteschnittstellen (HL7, ASTM)
-- Benutzer- und Rollenverwaltung
-- Audit-Trail
 - Qualitätskontrolle (QC)
 - Befunderstellung
 
 Details siehe [ROADMAP.MD](ROADMAP.MD).
 
-## Technologie-Stack (v0.1.1)
+## Technologie-Stack (v0.2.0)
 
 ### Aktuelle Implementierung
 
@@ -104,7 +115,7 @@ OpenSylab/
 │   ├── core/                # Core-Headers
 │   ├── db/                  # Database-Headers
 │   └── utils/               # Utils-Headers
-├── test/                    # Testfälle (18 Unit-Tests)
+├── test/                    # Testfälle (62 Unit-Tests)
 │   ├── CMakeLists.txt       # Test-Build-Konfiguration
 │   └── unit/                # Unit-Tests
 │       ├── test_runner.cpp  # Test-Framework
@@ -165,11 +176,13 @@ Details siehe [docs/INSTALL.md](docs/INSTALL.md).
 
 ## Testing
 
-OpenSylab v0.1.1 verfügt über ein selbst implementiertes Test-Framework mit **18 Unit-Tests**:
+OpenSylab v0.2.0 verfügt über ein selbst implementiertes Test-Framework mit **62 Unit-Tests**:
 
-- **Sample-Tests** (6): Konstruktoren, Getter/Setter, Status-Konvertierung
-- **Database-Tests** (7): CRUD-Operationen, Fehlerbehandlung
-- **CSV-Import-Tests** (5): Validierung, Fehlerbehandlung, gemischte Daten
+- **Sample-Tests**: Konstruktoren, Getter/Setter, Status-Konvertierung
+- **Order-Tests**: Auftragsverwaltung, Status, Prioritäten
+- **TestResult-Tests**: Ergebnisse, Plausibilitätsprüfung, Flags
+- **Database-Tests**: CRUD-Operationen, Fehlerbehandlung
+- **CSV-Import-Tests**: Proben- und Ergebnisimport, Validierung
 
 ```bash
 # Tests ausführen
@@ -181,12 +194,12 @@ cd build && ctest --output-on-failure
 
 Detaillierte Informationen: [docs/TESTING.md](docs/TESTING.md)
 
-**Test-Ergebnisse v0.1.1:**
+**Test-Ergebnisse v0.2.0:**
 
 ```text
-✓ Passed: 18
+✓ Passed: 62
 ✗ Failed: 0
-Total:   18
+Total:   62
 ```
 
 ## Lizenz
@@ -211,15 +224,15 @@ Siehe [LICENSE.txt](LICENSE.txt) für Details.
 
 OpenSylab wird schrittweise entwickelt:
 
-- **v0.1.1** (Aktuell): CLI + SQLite, Basis-Probenverwaltung, Tests ✓
-- **v0.2**: Erweiterte CLI-Features, PostgreSQL-Support
+- **v0.1.1**: CLI + SQLite, Basis-Probenverwaltung ✓
+- **v0.2.0** (Aktuell): Aufträge, Ergebnisse, Audit-Trail, Benutzer ✓
 - **v0.5**: REST-API, Web-Interface (Alpha)
 - **v1.0**: Produktionsreifes LIMS mit vollständigem Feature-Set
-- **v2.0+**: Multi-Site, KI-Integration, Geräteschnittstellen
+- **v2.0+**: Multi-Site, KI-Integration
 
 Details siehe [ROADMAP.MD](ROADMAP.MD).
 
-## Systemanforderungen (v0.1.1)
+## Systemanforderungen (v0.2.0)
 
 ### Minimum
 
@@ -277,13 +290,14 @@ OpenSylab wird entwickelt von einer weltweiten Community von Entwicklern, Laborf
 
 Siehe [CHANGELOG.md](CHANGELOG.md) für detaillierte Änderungen.
 
-**Aktuelle Version**: v0.1.1 (2025-11-25)
+**Aktuelle Version**: v0.2.0 (2026-01-02)
 
-- ✓ 18 Unit-Tests implementiert
-- ✓ Eingabevalidierung in CLI
-- ✓ CSV-Import-Validierung
-- ✓ Fehlerbehandlung DB → CLI
-- ✓ Umfassende Dokumentation
+- ✓ 62 Unit-Tests implementiert
+- ✓ Auftragsverwaltung (Order-Modul)
+- ✓ Ergebniseingabe mit Plausibilitätsprüfung
+- ✓ Gerätedatenschnittstelle (CSV/HL7)
+- ✓ Audit-Trail für alle Änderungen
+- ✓ Benutzerauthentifizierung und Rollenverwaltung
 
 ---
 

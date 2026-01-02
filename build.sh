@@ -1,13 +1,13 @@
 #!/bin/bash
 #
-# OpenSylab v0.1 - Build-Skript
+# OpenSylab v0.2 - Build-Skript
 # Dieses Skript kompiliert das OpenSylab-Projekt
 #
 
 set -e  # Bei Fehler abbrechen
 
 echo "================================"
-echo "OpenSylab v0.1 Build-Skript"
+echo "OpenSylab v0.2 Build-Skript"
 echo "================================"
 echo ""
 
