@@ -2,6 +2,8 @@
 #include <iostream>
 #include <memory>
 #include <sqlite3.h>
+#include <sstream>
+#include <vector>
 
 namespace {
 // Stellt sicher, dass vorbereitete Statements immer finalisiert werden.
@@ -451,6 +453,109 @@ std::vector<std::unique_ptr<core::Sample>> Database::getAllSamples() {
   }
 
   // Kein Fehler - erfolgreich (auch wenn samples leer ist)
+  return samples;
+}
+
+std::vector<std::unique_ptr<core::Sample>>
+Database::getSamplesByFilter(const SampleFilter &filter) {
+  std::vector<std::unique_ptr<core::Sample>> samples;
+
+  clearError();
+
+  if (!isOpen_) {
+    setError("Datenbank ist nicht geöffnet");
+    return samples;
+  }
+
+  std::vector<std::string> conditions;
+  std::string queryPattern;
+  if (!filter.query.empty()) {
+    std::string escaped;
+    escaped.reserve(filter.query.size());
+    for (char c : filter.query) {
+      if (c == '%' || c == '_' || c == '\\') {
+        escaped.push_back('\\');
+      }
+      escaped.push_back(c);
+    }
+    queryPattern = "%" + escaped + "%";
+    conditions.emplace_back(
+        "(sample_id LIKE ? ESCAPE '\\' OR patient_id LIKE ? ESCAPE '\\' "
+        "OR patient_name LIKE ? ESCAPE '\\')");
+  }
+  if (!filter.status.empty()) {
+    conditions.emplace_back("status = ?");
+  }
+  if (filter.fromDate.has_value()) {
+    conditions.emplace_back("registration_date >= ?");
+  }
+  if (filter.toDate.has_value()) {
+    conditions.emplace_back("registration_date <= ?");
+  }
+
+  std::ostringstream sql;
+  sql << "SELECT id, sample_id, patient_id, patient_name, description, status, "
+         "registration_date FROM samples";
+
+  if (!conditions.empty()) {
+    sql << " WHERE ";
+    for (size_t i = 0; i < conditions.size(); ++i) {
+      if (i > 0) {
+        sql << " AND ";
+      }
+      sql << conditions[i];
+    }
+  }
+
+  sql << " ORDER BY registration_date DESC;";
+
+  sqlite3_stmt *rawStmt = nullptr;
+  int rc = sqlite3_prepare_v2(db_, sql.str().c_str(), -1, &rawStmt, nullptr);
+
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Vorbereiten des SELECT: " +
+             std::string(sqlite3_errmsg(db_)));
+    return samples;
+  }
+
+  auto stmt = makeStatement(rawStmt);
+
+  int bindIndex = 1;
+  if (!filter.query.empty()) {
+    sqlite3_bind_text(stmt.get(), bindIndex++, queryPattern.c_str(), -1,
+                      SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt.get(), bindIndex++, queryPattern.c_str(), -1,
+                      SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt.get(), bindIndex++, queryPattern.c_str(), -1,
+                      SQLITE_TRANSIENT);
+  }
+  if (!filter.status.empty()) {
+    sqlite3_bind_text(stmt.get(), bindIndex++, filter.status.c_str(), -1,
+                      SQLITE_TRANSIENT);
+  }
+  if (filter.fromDate.has_value()) {
+    sqlite3_bind_int64(stmt.get(), bindIndex++,
+                       static_cast<sqlite3_int64>(filter.fromDate.value()));
+  }
+  if (filter.toDate.has_value()) {
+    sqlite3_bind_int64(stmt.get(), bindIndex++,
+                       static_cast<sqlite3_int64>(filter.toDate.value()));
+  }
+
+  while ((rc = sqlite3_step(stmt.get())) == SQLITE_ROW) {
+    try {
+      samples.push_back(sampleFromRow(stmt.get()));
+    } catch (const std::exception &e) {
+      setError("Fehler beim Verarbeiten der Probe: " + std::string(e.what()));
+      return samples;
+    }
+  }
+
+  if (rc != SQLITE_DONE) {
+    setError("Fehler beim Abrufen der Proben: " +
+             std::string(sqlite3_errmsg(db_)));
+  }
+
   return samples;
 }
 

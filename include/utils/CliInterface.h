@@ -115,6 +115,7 @@ private:
   static std::string trim(const std::string &str);
   static bool isValidId(const std::string &id);
   static bool isEmpty(const std::string &str);
+  static bool parseDate(const std::string &input, std::time_t &out);
 };
 
 } // namespace utils

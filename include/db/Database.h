@@ -6,7 +6,9 @@
 #include "core/Sample.h"
 #include "core/TestResult.h"
 #include "core/User.h"
+#include <ctime>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -24,6 +26,12 @@ namespace db {
  */
 class Database {
 public:
+  struct SampleFilter {
+    std::string query;
+    std::string status;
+    std::optional<std::time_t> fromDate;
+    std::optional<std::time_t> toDate;
+  };
   /**
    * @brief Konstruktor
    * @param dbPath Pfad zur SQLite-Datenbankdatei
@@ -58,6 +66,8 @@ public:
   [[nodiscard]] std::unique_ptr<core::Sample>
   getSampleByBarcode(const std::string &barcode);
   [[nodiscard]] std::vector<std::unique_ptr<core::Sample>> getAllSamples();
+  [[nodiscard]] std::vector<std::unique_ptr<core::Sample>>
+  getSamplesByFilter(const SampleFilter &filter);
   [[nodiscard]] bool updateSample(const core::Sample &sample);
   [[nodiscard]] bool deleteSample(int id);
 

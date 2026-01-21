@@ -1,9 +1,12 @@
 #include "utils/CliInterface.h"
 #include "utils/CsvImport.h"
 #include "utils/CsvResultImport.h"
+#include <ctime>
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <optional>
+#include <sstream>
 #include <vector>
 
 namespace opensylab {
@@ -259,21 +262,114 @@ void CliInterface::handleListSamples() {
   printSeparator();
   std::cout << "\n";
 
-  auto samples = database_->getAllSamples();
+  db::Database::SampleFilter filter;
+  bool useFilter = false;
 
-  // Fehlerprüfung ZUERST
-  if (database_->hasError()) {
-    std::cout << "✗ Fehler beim Abrufen der Proben:\n";
-    std::cout << "  " << database_->getLastError() << "\n";
-  } else if (samples.empty()) {
-    std::cout << "ℹ Keine Proben in der Datenbank.\n";
-  } else {
+  std::string useFilterInput = readInput("Filter anwenden? (j/n)");
+  if (!running_)
+    return;
+  useFilterInput = trim(useFilterInput);
+  if (!useFilterInput.empty() &&
+      (useFilterInput == "j" || useFilterInput == "ja" ||
+       useFilterInput == "y" || useFilterInput == "yes")) {
+    useFilter = true;
+  }
+
+  if (useFilter) {
+    std::string query =
+        readInput("Suchbegriff (Proben-/Patienten-ID oder Name, optional)");
+    if (!running_)
+      return;
+    query = trim(query);
+    filter.query = query;
+
+    std::cout << "\nStatus-Filter:\n";
+    std::cout << "  [0] Alle\n";
+    std::cout << "  [1] Erfasst\n";
+    std::cout << "  [2] In Analyse\n";
+    std::cout << "  [3] Analysiert\n";
+    std::cout << "  [4] Validiert\n";
+    std::cout << "  [5] Archiviert\n";
+    std::string statusChoice = readInput("Status-Auswahl (0-5, optional)");
+    if (!running_)
+      return;
+    statusChoice = trim(statusChoice);
+    if (!statusChoice.empty() && statusChoice != "0") {
+      if (statusChoice == "1") {
+        filter.status = "Erfasst";
+      } else if (statusChoice == "2") {
+        filter.status = "In Analyse";
+      } else if (statusChoice == "3") {
+        filter.status = "Analysiert";
+      } else if (statusChoice == "4") {
+        filter.status = "Validiert";
+      } else if (statusChoice == "5") {
+        filter.status = "Archiviert";
+      } else {
+        std::cout << "\n✗ Ungültige Status-Auswahl.\n";
+        waitForEnter();
+        return;
+      }
+    }
+
+    std::string fromDateInput =
+        readInput("Von-Datum (YYYY-MM-DD, optional)");
+    if (!running_)
+      return;
+    fromDateInput = trim(fromDateInput);
+    if (!fromDateInput.empty()) {
+      std::time_t fromDate;
+      if (!parseDate(fromDateInput, fromDate)) {
+        std::cout << "\n✗ Ungültiges Von-Datum.\n";
+        waitForEnter();
+        return;
+      }
+      filter.fromDate = fromDate;
+    }
+
+    std::string toDateInput = readInput("Bis-Datum (YYYY-MM-DD, optional)");
+    if (!running_)
+      return;
+    toDateInput = trim(toDateInput);
+    if (!toDateInput.empty()) {
+      std::time_t toDate;
+      if (!parseDate(toDateInput, toDate)) {
+        std::cout << "\n✗ Ungültiges Bis-Datum.\n";
+        waitForEnter();
+        return;
+      }
+      filter.toDate = toDate + (24 * 60 * 60 - 1);
+    }
+
+    if (filter.fromDate.has_value() && filter.toDate.has_value() &&
+        filter.fromDate.value() > filter.toDate.value()) {
+      std::cout << "\n✗ Von-Datum darf nicht nach dem Bis-Datum liegen.\n";
+      waitForEnter();
+      return;
+    }
+  }
+
+  auto printSamples = [&](const std::string &title,
+                          const std::vector<std::unique_ptr<core::Sample>>
+                              &samplesToPrint) {
+    std::cout << "\n" << title << "\n";
+    printSeparator();
+    if (database_->hasError()) {
+      std::cout << "✗ Fehler beim Abrufen der Proben:\n";
+      std::cout << "  " << database_->getLastError() << "\n";
+      return;
+    }
+    if (samplesToPrint.empty()) {
+      std::cout << "ℹ Keine Proben in der Datenbank.\n";
+      return;
+    }
+
     std::cout << std::left << std::setw(5) << "ID" << std::setw(15)
               << "Proben-ID" << std::setw(15) << "Patienten-ID" << std::setw(25)
               << "Name" << std::setw(15) << "Status" << "\n";
     printSeparator();
 
-    for (const auto &sample : samples) {
+    for (const auto &sample : samplesToPrint) {
       std::cout << std::left << std::setw(5) << sample->getId() << std::setw(15)
                 << sample->getSampleId() << std::setw(15)
                 << sample->getPatientId() << std::setw(25)
@@ -281,7 +377,30 @@ void CliInterface::handleListSamples() {
                 << sample->getStatusString() << "\n";
     }
 
-    std::cout << "\nGesamt: " << samples.size() << " Proben\n";
+    std::cout << "\nGesamt: " << samplesToPrint.size() << " Proben\n";
+  };
+
+  bool filtersActive = useFilter &&
+                       (!filter.query.empty() || !filter.status.empty() ||
+                        filter.fromDate.has_value() || filter.toDate.has_value());
+  auto samples = filtersActive ? database_->getSamplesByFilter(filter)
+                               : database_->getAllSamples();
+
+  printSamples(filtersActive ? "Suchergebnisse" : "Alle Proben", samples);
+
+  if (filtersActive) {
+    std::string resetInput =
+        readInput("\nFilter zuruecksetzen und alle Proben anzeigen? (j/n)");
+    if (!running_)
+      return;
+    resetInput = trim(resetInput);
+    if (!resetInput.empty() &&
+        (resetInput == "j" || resetInput == "ja" || resetInput == "y" ||
+         resetInput == "yes")) {
+      database_->clearError();
+      auto allSamples = database_->getAllSamples();
+      printSamples("Alle Proben", allSamples);
+    }
   }
 
   waitForEnter();
@@ -2016,6 +2135,32 @@ bool CliInterface::isValidId(const std::string &id) {
 
 bool CliInterface::isEmpty(const std::string &str) {
   return str.empty() || str.find_first_not_of(" \t\r\n") == std::string::npos;
+}
+
+bool CliInterface::parseDate(const std::string &input, std::time_t &out) {
+  std::tm tm = {};
+  std::istringstream ss(input);
+  ss >> std::get_time(&tm, "%Y-%m-%d");
+  if (ss.fail()) {
+    return false;
+  }
+  tm.tm_hour = 0;
+  tm.tm_min = 0;
+  tm.tm_sec = 0;
+
+  std::tm normalized = tm;
+  std::time_t parsed = std::mktime(&normalized);
+  if (parsed == static_cast<std::time_t>(-1)) {
+    return false;
+  }
+
+  if (normalized.tm_year != tm.tm_year || normalized.tm_mon != tm.tm_mon ||
+      normalized.tm_mday != tm.tm_mday) {
+    return false;
+  }
+
+  out = parsed;
+  return true;
 }
 
 } // namespace utils
