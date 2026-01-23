@@ -186,6 +186,58 @@ bool test_csvimport_ImportUnclosedQuotes() {
   return true;
 }
 
+bool test_csvimport_FailedRowsTracked() {
+  std::string csvPath = uniqueCsvPath();
+  createTestCsv(csvPath,
+                "sample_id,patient_id\n"
+                "S001,P001\n"
+                ",P002\n"
+                "S003,P003\n");
+
+  CsvImport importer;
+  auto samples = importer.importSamples(csvPath);
+
+  ASSERT_EQ(samples.size(), static_cast<size_t>(2));
+  ASSERT_EQ(importer.getImportedCount(), 2);
+  ASSERT_EQ(importer.getFailedCount(), 1);
+  ASSERT_EQ(importer.getFailedRecords().size(), static_cast<size_t>(1));
+  ASSERT_EQ(importer.getFailedRecords()[0].recordNumber, 2);
+
+  std::remove(csvPath.c_str());
+  return true;
+}
+
+bool test_csvimport_RetryCsvContainsFailedRows() {
+  std::string csvPath = uniqueCsvPath();
+  std::string retryPath = uniqueCsvPath();
+  createTestCsv(csvPath,
+                "sample_id,patient_id\n"
+                ",P001\n"
+                "S002\n");
+
+  CsvImport importer;
+  auto samples = importer.importSamples(csvPath);
+
+  ASSERT_EQ(samples.size(), static_cast<size_t>(0));
+  ASSERT_EQ(importer.getFailedCount(), 2);
+  ASSERT_TRUE(importer.writeRetryCsv(retryPath));
+
+  std::ifstream retryFile(retryPath);
+  std::stringstream buffer;
+  buffer << retryFile.rdbuf();
+  retryFile.close();
+
+  std::string expected =
+      "sample_id,patient_id\n"
+      ",P001\n"
+      "S002\n";
+  ASSERT_EQ(buffer.str(), expected);
+
+  std::remove(csvPath.c_str());
+  std::remove(retryPath.c_str());
+  return true;
+}
+
 void registerCsvImportTests() {
   registerTest("CsvImport::ImportValidCsv", test_csvimport_ImportValidCsv);
   registerTest("CsvImport::ImportWithMissingFields",
@@ -203,4 +255,7 @@ void registerCsvImportTests() {
                test_csvimport_ImportMultilineFields);
   registerTest("CsvImport::ImportUnclosedQuotes",
                test_csvimport_ImportUnclosedQuotes);
+  registerTest("CsvImport::FailedRowsTracked", test_csvimport_FailedRowsTracked);
+  registerTest("CsvImport::RetryCsvContainsFailedRows",
+               test_csvimport_RetryCsvContainsFailedRows);
 }

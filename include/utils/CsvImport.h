@@ -16,6 +16,12 @@ namespace utils {
  */
 class CsvImport {
 public:
+  struct FailedRecord {
+    int recordNumber;
+    std::string record;
+    std::string error;
+  };
+
   /**
    * @brief Konstruktor
    */
@@ -55,17 +61,42 @@ public:
    */
   int getImportedCount() const { return importedCount_; }
 
+  /**
+   * @brief Gibt alle fehlgeschlagenen CSV-Records zurück
+   */
+  const std::vector<FailedRecord> &getFailedRecords() const {
+    return failedRecords_;
+  }
+
+  /**
+   * @brief Gibt die Anzahl fehlgeschlagener Records zurück
+   */
+  int getFailedCount() const {
+    return static_cast<int>(failedRecords_.size());
+  }
+
+  /**
+   * @brief Schreibt fehlgeschlagene Records in eine Retry-CSV
+   * @param filePath Zielpfad für Retry-Datei
+   * @return true wenn Datei geschrieben wurde
+   */
+  bool writeRetryCsv(const std::string &filePath) const;
+
 private:
   char delimiter_;
   bool hasHeader_;
   std::string lastError_;
   int importedCount_;
+  std::vector<FailedRecord> failedRecords_;
+  std::string headerLine_;
 
   // Hilfsfunktionen
   std::vector<std::string> parseLine(const std::string &line);
   core::Sample parseRecord(const std::vector<std::string> &fields);
   bool processRecord(const std::string &record, int recordNumber,
                      std::vector<core::Sample> &samples);
+  void addFailedRecord(int recordNumber, const std::string &record,
+                       const std::string &error);
   void setError(const std::string &error);
 };
 

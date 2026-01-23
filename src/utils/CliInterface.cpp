@@ -658,39 +658,86 @@ void CliInterface::handleImportCsv() {
   if (!running_)
     return; // EOF
 
-  CsvImport importer;
-  auto samples = importer.importSamples(filePath);
+  auto buildRetryPath = [](const std::string &path) {
+    std::string retryPath = path;
+    const std::string suffix = ".csv";
+    size_t pos = retryPath.rfind(suffix);
+    if (pos != std::string::npos && pos == retryPath.size() - suffix.size()) {
+      retryPath.insert(pos, "_retry");
+    } else {
+      retryPath += "_retry.csv";
+    }
+    return retryPath;
+  };
 
-  if (samples.empty()) {
-    std::cout << "\n✗ Keine Proben importiert: " << importer.getLastError()
-              << "\n";
-  } else {
-    size_t imported = 0;
-    size_t failed = 0;
-    std::vector<std::string> failedSamples;
+  std::string currentPath = filePath;
+  bool retryImport = false;
 
-    for (const auto &sample : samples) {
-      if (database_->createSample(sample)) {
-        imported++;
+  do {
+    CsvImport importer;
+    auto samples = importer.importSamples(currentPath);
+
+    if (samples.empty()) {
+      std::cout << "\n✗ Keine Proben importiert: " << importer.getLastError()
+                << "\n";
+    } else {
+      size_t imported = 0;
+      size_t failed = 0;
+      std::vector<std::string> failedSamples;
+
+      for (const auto &sample : samples) {
+        if (database_->createSample(sample)) {
+          imported++;
+        } else {
+          failed++;
+          failedSamples.push_back(sample.getSampleId() + ": " +
+                                  database_->getLastError());
+        }
+      }
+
+      std::cout << "\n✓ " << imported << " von " << samples.size()
+                << " Proben erfolgreich importiert!\n";
+
+      // Fehlgeschlagene Importe anzeigen
+      if (failed > 0) {
+        std::cout << "\n✗ " << failed
+                  << " Proben konnten nicht importiert werden:\n";
+        for (const auto &msg : failedSamples) {
+          std::cout << "  - " << msg << "\n";
+        }
+      }
+    }
+
+    if (importer.getFailedCount() > 0) {
+      std::cout << "\n✗ CSV-Fehler (" << importer.getFailedCount()
+                << " Zeilen):\n";
+      for (const auto &failed : importer.getFailedRecords()) {
+        std::cout << "  - Zeile " << failed.recordNumber << ": " << failed.error
+                  << " (\"" << failed.record << "\")\n";
+      }
+
+      std::string retryPath = buildRetryPath(currentPath);
+      if (importer.writeRetryCsv(retryPath)) {
+        std::cout << "\n✓ Retry-Datei erstellt: " << retryPath << "\n";
+        std::cout << "  Tipp: Datei korrigieren und erneut importieren.\n";
+
+        std::string choice = readInput("Retry-Datei jetzt importieren? (y/n)");
+        if (!running_)
+          return;
+
+        if (!choice.empty() &&
+            (choice[0] == 'y' || choice[0] == 'Y')) {
+          currentPath = retryPath;
+          retryImport = true;
+          continue;
+        }
       } else {
-        failed++;
-        failedSamples.push_back(sample.getSampleId() + ": " +
-                                database_->getLastError());
+        std::cout << "\n✗ Konnte Retry-Datei nicht schreiben.\n";
       }
     }
 
-    std::cout << "\n✓ " << imported << " von " << samples.size()
-              << " Proben erfolgreich importiert!\n";
-
-    // Fehlgeschlagene Importe anzeigen
-    if (failed > 0) {
-      std::cout << "\n✗ " << failed
-                << " Proben konnten nicht importiert werden:\n";
-      for (const auto &msg : failedSamples) {
-        std::cout << "  - " << msg << "\n";
-      }
-    }
-  }
+    retryImport = false;
+  } while (retryImport);
 
   waitForEnter();
 }

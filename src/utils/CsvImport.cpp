@@ -44,8 +44,10 @@ bool CsvImport::processRecord(const std::string &record, int recordNumber,
   std::vector<std::string> fields = parseLine(record);
 
   if (fields.size() < 2) {
-    std::cerr << "✗ Fehler Record " << recordNumber
-              << ": Zu wenig Felder (erwartet mindestens 2)\n";
+    const std::string error =
+        "Zu wenig Felder (erwartet mindestens 2)";
+    std::cerr << "✗ Fehler Record " << recordNumber << ": " << error << "\n";
+    addFailedRecord(recordNumber, record, error);
     return false;
   }
 
@@ -56,9 +58,11 @@ bool CsvImport::processRecord(const std::string &record, int recordNumber,
     return true;
   } catch (const std::invalid_argument &e) {
     std::cerr << "✗ Fehler Record " << recordNumber << ": " << e.what() << "\n";
+    addFailedRecord(recordNumber, record, e.what());
   } catch (const std::exception &e) {
     std::cerr << "✗ Unerwarteter Fehler Record " << recordNumber << ": "
               << e.what() << "\n";
+    addFailedRecord(recordNumber, record, e.what());
   }
   return false;
 }
@@ -68,6 +72,8 @@ CsvImport::importSamples(const std::string &filePath) {
   std::vector<core::Sample> samples;
   importedCount_ = 0;
   lastError_ = "";
+  failedRecords_.clear();
+  headerLine_.clear();
 
   std::ifstream file(filePath);
   if (!file.is_open()) {
@@ -82,6 +88,7 @@ CsvImport::importSamples(const std::string &filePath) {
   if (hasHeader_) {
     std::string headerLine;
     if (std::getline(file, headerLine)) {
+      headerLine_ = headerLine;
       std::cout << "Header: " << headerLine << std::endl;
     }
   }
@@ -137,6 +144,28 @@ CsvImport::importSamples(const std::string &filePath) {
   }
 
   return samples;
+}
+
+bool CsvImport::writeRetryCsv(const std::string &filePath) const {
+  if (failedRecords_.empty()) {
+    return false;
+  }
+
+  std::ofstream file(filePath);
+  if (!file.is_open()) {
+    return false;
+  }
+
+  if (hasHeader_ && !headerLine_.empty()) {
+    file << headerLine_ << "\n";
+  }
+
+  for (const auto &failed : failedRecords_) {
+    file << failed.record << "\n";
+  }
+
+  file.close();
+  return true;
 }
 
 std::vector<std::string> CsvImport::parseLine(const std::string &line) {
@@ -211,6 +240,11 @@ core::Sample CsvImport::parseRecord(const std::vector<std::string> &fields) {
   }
 
   return sample;
+}
+
+void CsvImport::addFailedRecord(int recordNumber, const std::string &record,
+                                const std::string &error) {
+  failedRecords_.push_back({recordNumber, record, error});
 }
 
 void CsvImport::setError(const std::string &error) {
