@@ -441,6 +441,41 @@ bool test_database_GetOrdersByFilter() {
   return true;
 }
 
+bool test_database_LogOrderStatusUpdate() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  Sample sample("ORD_SAMPLE", "P020");
+  ASSERT_TRUE(db.createSample(sample));
+
+  Order order("ORD_UPD_1", "ORD_SAMPLE", "Blutbild");
+  ASSERT_TRUE(db.createOrder(order));
+
+  auto stored = db.getOrderByOrderId("ORD_UPD_1");
+  ASSERT_NOT_NULL(stored);
+  stored->setStatus(Order::Status::IN_PROGRESS);
+  ASSERT_TRUE(db.updateOrder(*stored));
+
+  db.logOrderAction(AuditEntry::ActionType::UPDATE, "ORD_UPD_1", "tester",
+                    "Status: Angefordert -> In Bearbeitung");
+
+  auto entries =
+      db.getAuditLogByEntity(AuditEntry::EntityType::ORDER, "ORD_UPD_1");
+  ASSERT_FALSE(db.hasError());
+  ASSERT_FALSE(entries.empty());
+  ASSERT_EQ(entries[0]->getAction(), AuditEntry::ActionType::UPDATE);
+  ASSERT_EQ(entries[0]->getEntity(), AuditEntry::EntityType::ORDER);
+  ASSERT_EQ(entries[0]->getEntityId(), "ORD_UPD_1");
+  ASSERT_EQ(entries[0]->getDetails(),
+            "Status: Angefordert -> In Bearbeitung");
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
 void registerDatabaseTests() {
   registerTest("Database::OpenAndClose", test_database_OpenAndClose);
   registerTest("Database::InitializeSchema", test_database_InitializeSchema);
@@ -455,6 +490,8 @@ void registerDatabaseTests() {
   registerTest("Database::LogSampleStatusUpdate",
                test_database_LogSampleStatusUpdate);
   registerTest("Database::LogSampleDelete", test_database_LogSampleDelete);
+  registerTest("Database::LogOrderStatusUpdate",
+               test_database_LogOrderStatusUpdate);
   registerTest("Database::CreateOrder_RequestedDateStored",
                test_database_CreateOrder_RequestedDateStored);
   registerTest("Database::CreateOrder_MissingFieldsRejected",

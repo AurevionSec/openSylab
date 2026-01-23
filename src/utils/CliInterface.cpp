@@ -1163,6 +1163,7 @@ void CliInterface::handleUpdateOrder() {
   if (!running_)
     return;
 
+  std::string oldStatus = order->getStatusString();
   core::Order::Status newStatus;
   switch (statusChoice) {
   case 1:
@@ -1191,6 +1192,16 @@ void CliInterface::handleUpdateOrder() {
 
   if (database_->updateOrder(*order)) {
     std::cout << "\n✓ Auftrag erfolgreich aktualisiert!\n";
+    std::string details =
+        "Status: " + oldStatus + " -> " + order->getStatusString();
+    database_->logOrderAction(core::AuditEntry::ActionType::UPDATE,
+                              order->getOrderId(), getCurrentUsername(),
+                              details);
+    if (database_->hasError()) {
+      std::cout << "\n✗ Audit-Log konnte nicht geschrieben werden: "
+                << database_->getLastError() << "\n";
+      database_->clearError();
+    }
   } else {
     std::cout << "\n✗ Fehler beim Aktualisieren: " << database_->getLastError()
               << "\n";
