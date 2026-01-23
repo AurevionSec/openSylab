@@ -169,6 +169,16 @@ bool test_database_GetSamplesByFilter() {
   ASSERT_EQ(byLiteral.size(), static_cast<size_t>(1));
   ASSERT_EQ(byLiteral[0]->getSampleId(), "%_ID");
 
+  Sample s5("ARCH001", "P005");
+  s5.setStatus(Sample::Status::ARCHIVED);
+  ASSERT_TRUE(db.createSample(s5));
+
+  Database::SampleFilter excludeArchived;
+  excludeArchived.excludeArchived = true;
+  auto withoutArchived = db.getSamplesByFilter(excludeArchived);
+  ASSERT_FALSE(db.hasError());
+  ASSERT_EQ(withoutArchived.size(), static_cast<size_t>(4));
+
   db.close();
   std::remove(dbPath.c_str());
   return true;
@@ -305,6 +315,32 @@ bool test_database_DeleteSample_NotFound() {
   return true;
 }
 
+bool test_database_LogSampleDelete() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  Sample sample("DEL001", "P011");
+  ASSERT_TRUE(db.createSample(sample));
+
+  db.logSampleAction(AuditEntry::ActionType::DELETE, "DEL001", "tester",
+                     "Sample gelöscht");
+
+  auto entries =
+      db.getAuditLogByEntity(AuditEntry::EntityType::SAMPLE, "DEL001");
+  ASSERT_FALSE(db.hasError());
+  ASSERT_FALSE(entries.empty());
+  ASSERT_EQ(entries[0]->getAction(), AuditEntry::ActionType::DELETE);
+  ASSERT_EQ(entries[0]->getEntity(), AuditEntry::EntityType::SAMPLE);
+  ASSERT_EQ(entries[0]->getEntityId(), "DEL001");
+  ASSERT_EQ(entries[0]->getDetails(), "Sample gelöscht");
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
 void registerDatabaseTests() {
   registerTest("Database::OpenAndClose", test_database_OpenAndClose);
   registerTest("Database::InitializeSchema", test_database_InitializeSchema);
@@ -318,6 +354,7 @@ void registerDatabaseTests() {
   registerTest("Database::UpdateSample", test_database_UpdateSample);
   registerTest("Database::LogSampleStatusUpdate",
                test_database_LogSampleStatusUpdate);
+  registerTest("Database::LogSampleDelete", test_database_LogSampleDelete);
   registerTest("Database::UpdateSample_NoChangesStillSuccess",
                test_database_UpdateSample_NoChangesStillSuccess);
   registerTest("Database::UpdateSample_NotFound",

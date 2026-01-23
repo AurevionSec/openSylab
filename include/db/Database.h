@@ -31,6 +31,7 @@ public:
     std::string status;
     std::optional<std::time_t> fromDate;
     std::optional<std::time_t> toDate;
+    bool excludeArchived = false;
   };
   /**
    * @brief Konstruktor

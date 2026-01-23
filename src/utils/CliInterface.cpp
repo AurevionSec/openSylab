@@ -310,6 +310,8 @@ void CliInterface::handleListSamples() {
         waitForEnter();
         return;
       }
+    } else {
+      filter.excludeArchived = true;
     }
 
     std::string fromDateInput =
@@ -380,15 +382,17 @@ void CliInterface::handleListSamples() {
     std::cout << "\nGesamt: " << samplesToPrint.size() << " Proben\n";
   };
 
-  bool filtersActive = useFilter &&
-                       (!filter.query.empty() || !filter.status.empty() ||
-                        filter.fromDate.has_value() || filter.toDate.has_value());
-  auto samples = filtersActive ? database_->getSamplesByFilter(filter)
-                               : database_->getAllSamples();
+  if (!useFilter) {
+    filter.excludeArchived = true;
+  }
 
-  printSamples(filtersActive ? "Suchergebnisse" : "Alle Proben", samples);
+  bool hasCriteria = !filter.query.empty() || !filter.status.empty() ||
+                     filter.fromDate.has_value() || filter.toDate.has_value();
+  auto samples = database_->getSamplesByFilter(filter);
 
-  if (filtersActive) {
+  printSamples(hasCriteria ? "Suchergebnisse" : "Alle Proben", samples);
+
+  if (useFilter && hasCriteria) {
     std::string resetInput =
         readInput("\nFilter zuruecksetzen und alle Proben anzeigen? (j/n)");
     if (!running_)
@@ -398,7 +402,9 @@ void CliInterface::handleListSamples() {
         (resetInput == "j" || resetInput == "ja" || resetInput == "y" ||
          resetInput == "yes")) {
       database_->clearError();
-      auto allSamples = database_->getAllSamples();
+      db::Database::SampleFilter resetFilter;
+      resetFilter.excludeArchived = true;
+      auto allSamples = database_->getSamplesByFilter(resetFilter);
       printSamples("Alle Proben", allSamples);
     }
   }
@@ -566,26 +572,76 @@ void CliInterface::handleDeleteSample() {
   std::cout << "  Proben-ID: " << sample->getSampleId() << "\n";
   std::cout << "  Patient: " << sample->getPatientName() << "\n\n";
 
-  std::string confirm = readInput("Wirklich löschen? (ja/nein)");
+  std::cout << "Aktion wählen:\n";
+  std::cout << "  [1] Archivieren\n";
+  std::cout << "  [2] Löschen\n";
+  std::cout << "  [0] Abbrechen\n\n";
+
+  int actionChoice = readInteger("Ihre Wahl");
   if (!running_)
     return; // EOF
 
-  // Case-insensitive Prüfung
+  if (actionChoice == 0) {
+    std::cout << "\nAbgebrochen.\n";
+    waitForEnter();
+    return;
+  }
+
+  std::string confirmPrompt =
+      actionChoice == 1 ? "Wirklich archivieren? (ja/nein)"
+                        : "Wirklich löschen? (ja/nein)";
+  std::string confirm = readInput(confirmPrompt);
+  if (!running_)
+    return; // EOF
+
   std::string confirmLower = confirm;
   for (char &c : confirmLower) {
     c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
   }
 
-  if (confirmLower == "ja" || confirmLower == "j" || confirmLower == "yes" ||
-      confirmLower == "y") {
+  if (confirmLower != "ja" && confirmLower != "j" && confirmLower != "yes" &&
+      confirmLower != "y") {
+    std::cout << "\nAktion abgebrochen.\n";
+    waitForEnter();
+    return;
+  }
+
+  std::string sampleId = sample->getSampleId();
+  std::string oldStatus = sample->getStatusString();
+
+  if (actionChoice == 1) {
+    sample->setStatus(core::Sample::Status::ARCHIVED);
+    if (database_->updateSample(*sample)) {
+      std::cout << "\n✓ Probe erfolgreich archiviert!\n";
+      database_->logSampleAction(
+          core::AuditEntry::ActionType::UPDATE, sampleId,
+          getCurrentUsername(),
+          "Status: " + oldStatus + " -> " + sample->getStatusString());
+      if (database_->hasError()) {
+        std::cout << "\n✗ Audit-Log konnte nicht geschrieben werden: "
+                  << database_->getLastError() << "\n";
+        database_->clearError();
+      }
+    } else {
+      std::cout << "\n✗ Fehler beim Archivieren: " << database_->getLastError()
+                << "\n";
+    }
+  } else if (actionChoice == 2) {
     if (database_->deleteSample(id)) {
       std::cout << "\n✓ Probe erfolgreich gelöscht!\n";
+      database_->logSampleAction(core::AuditEntry::ActionType::DELETE, sampleId,
+                                 getCurrentUsername(), "Sample gelöscht");
+      if (database_->hasError()) {
+        std::cout << "\n✗ Audit-Log konnte nicht geschrieben werden: "
+                  << database_->getLastError() << "\n";
+        database_->clearError();
+      }
     } else {
       std::cout << "\n✗ Fehler beim Löschen: " << database_->getLastError()
                 << "\n";
     }
   } else {
-    std::cout << "\nLöschen abgebrochen.\n";
+    std::cout << "\nUngültige Auswahl.\n";
   }
 
   waitForEnter();

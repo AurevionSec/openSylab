@@ -486,6 +486,9 @@ Database::getSamplesByFilter(const SampleFilter &filter) {
   if (!filter.status.empty()) {
     conditions.emplace_back("status = ?");
   }
+  if (filter.excludeArchived) {
+    conditions.emplace_back("status != ?");
+  }
   if (filter.fromDate.has_value()) {
     conditions.emplace_back("registration_date >= ?");
   }
@@ -531,6 +534,12 @@ Database::getSamplesByFilter(const SampleFilter &filter) {
   }
   if (!filter.status.empty()) {
     sqlite3_bind_text(stmt.get(), bindIndex++, filter.status.c_str(), -1,
+                      SQLITE_TRANSIENT);
+  }
+  if (filter.excludeArchived) {
+    std::string archived =
+        core::Sample::statusToString(core::Sample::Status::ARCHIVED);
+    sqlite3_bind_text(stmt.get(), bindIndex++, archived.c_str(), -1,
                       SQLITE_TRANSIENT);
   }
   if (filter.fromDate.has_value()) {
