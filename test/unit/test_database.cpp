@@ -341,6 +341,57 @@ bool test_database_LogSampleDelete() {
   return true;
 }
 
+bool test_database_CreateOrder_RequestedDateStored() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  Sample sample("ORD_SAMPLE", "P100");
+  ASSERT_TRUE(db.createSample(sample));
+
+  Order order("ORD001", "ORD_SAMPLE", "Blutbild");
+  std::tm tm = {};
+  tm.tm_year = 2026 - 1900;
+  tm.tm_mon = 0;
+  tm.tm_mday = 15;
+  std::time_t requestedDate = std::mktime(&tm);
+  order.setRequestedDate(requestedDate);
+
+  ASSERT_TRUE(db.createOrder(order));
+
+  auto stored = db.getOrderByOrderId("ORD001");
+  ASSERT_NOT_NULL(stored);
+  ASSERT_EQ(stored->getRequestedDate(), requestedDate);
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_database_CreateOrder_MissingFieldsRejected() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  Order missingOrderId("", "S001", "Blutbild");
+  ASSERT_FALSE(db.createOrder(missingOrderId));
+  ASSERT_FALSE(db.getLastError().empty());
+
+  Order missingSampleId("ORD002", "", "Blutbild");
+  ASSERT_FALSE(db.createOrder(missingSampleId));
+  ASSERT_FALSE(db.getLastError().empty());
+
+  Order missingTestType("ORD003", "S001", "");
+  ASSERT_FALSE(db.createOrder(missingTestType));
+  ASSERT_FALSE(db.getLastError().empty());
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
 void registerDatabaseTests() {
   registerTest("Database::OpenAndClose", test_database_OpenAndClose);
   registerTest("Database::InitializeSchema", test_database_InitializeSchema);
@@ -355,6 +406,10 @@ void registerDatabaseTests() {
   registerTest("Database::LogSampleStatusUpdate",
                test_database_LogSampleStatusUpdate);
   registerTest("Database::LogSampleDelete", test_database_LogSampleDelete);
+  registerTest("Database::CreateOrder_RequestedDateStored",
+               test_database_CreateOrder_RequestedDateStored);
+  registerTest("Database::CreateOrder_MissingFieldsRejected",
+               test_database_CreateOrder_MissingFieldsRejected);
   registerTest("Database::UpdateSample_NoChangesStillSuccess",
                test_database_UpdateSample_NoChangesStillSuccess);
   registerTest("Database::UpdateSample_NotFound",

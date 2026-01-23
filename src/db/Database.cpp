@@ -708,6 +708,19 @@ bool Database::createOrder(const core::Order &order) {
     return false;
   }
 
+  if (order.getOrderId().empty()) {
+    setError("Auftrags-ID darf nicht leer sein");
+    return false;
+  }
+  if (order.getSampleId().empty()) {
+    setError("Proben-ID darf nicht leer sein");
+    return false;
+  }
+  if (order.getTestType().empty()) {
+    setError("Testtyp darf nicht leer sein");
+    return false;
+  }
+
   const char *insertSQL = R"(
         INSERT INTO orders (order_id, sample_id, test_type, status, priority,
                            requested_date, completed_date, requested_by, notes)

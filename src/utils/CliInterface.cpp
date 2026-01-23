@@ -944,6 +944,24 @@ void CliInterface::handleNewOrder() {
   if (!running_)
     return;
 
+  // Gewünschtes Datum (YYYY-MM-DD)
+  std::time_t requestedDate = 0;
+  while (true) {
+    std::string dateInput = readInput("Gewünschtes Datum (YYYY-MM-DD)");
+    if (!running_)
+      return;
+    dateInput = trim(dateInput);
+    if (isEmpty(dateInput)) {
+      std::cout << "✗ Datum darf nicht leer sein!\n";
+      continue;
+    }
+    if (!parseDate(dateInput, requestedDate)) {
+      std::cout << "✗ Ungültiges Datum. Format: YYYY-MM-DD\n";
+      continue;
+    }
+    break;
+  }
+
   // Priorität
   std::cout << "\nPriorität:\n";
   std::cout << "  [1] Normal\n";
@@ -977,6 +995,7 @@ void CliInterface::handleNewOrder() {
   notes = trim(notes);
 
   core::Order order(orderId, sampleId, testType);
+  order.setRequestedDate(requestedDate);
   order.setPriority(priority);
   order.setNotes(notes);
 
