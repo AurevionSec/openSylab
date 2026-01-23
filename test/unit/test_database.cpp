@@ -195,6 +195,38 @@ bool test_database_UpdateSample() {
   return true;
 }
 
+bool test_database_LogSampleStatusUpdate() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  Sample sample("AUDIT001", "P010");
+  ASSERT_TRUE(db.createSample(sample));
+
+  auto retrieved = db.getSampleByBarcode("AUDIT001");
+  ASSERT_NOT_NULL(retrieved);
+  retrieved->setStatus(Sample::Status::VALIDATED);
+  ASSERT_TRUE(db.updateSample(*retrieved));
+
+  db.logSampleAction(AuditEntry::ActionType::UPDATE, "AUDIT001", "tester",
+                     "Status: Erfasst -> Validiert");
+
+  auto entries = db.getAuditLogByEntity(AuditEntry::EntityType::SAMPLE,
+                                        "AUDIT001");
+  ASSERT_FALSE(db.hasError());
+  ASSERT_FALSE(entries.empty());
+  ASSERT_EQ(entries[0]->getAction(), AuditEntry::ActionType::UPDATE);
+  ASSERT_EQ(entries[0]->getEntity(), AuditEntry::EntityType::SAMPLE);
+  ASSERT_EQ(entries[0]->getEntityId(), "AUDIT001");
+  ASSERT_EQ(entries[0]->getUser(), "tester");
+  ASSERT_EQ(entries[0]->getDetails(), "Status: Erfasst -> Validiert");
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
 bool test_database_UpdateSample_NoChangesStillSuccess() {
   std::string dbPath = uniqueDbPath();
   Database db(dbPath);
@@ -284,6 +316,8 @@ void registerDatabaseTests() {
                test_database_GetAllSamples_EmptyDatabase);
   registerTest("Database::GetSamplesByFilter", test_database_GetSamplesByFilter);
   registerTest("Database::UpdateSample", test_database_UpdateSample);
+  registerTest("Database::LogSampleStatusUpdate",
+               test_database_LogSampleStatusUpdate);
   registerTest("Database::UpdateSample_NoChangesStillSuccess",
                test_database_UpdateSample_NoChangesStillSuccess);
   registerTest("Database::UpdateSample_NotFound",

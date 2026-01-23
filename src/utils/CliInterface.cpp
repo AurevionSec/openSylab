@@ -456,6 +456,12 @@ void CliInterface::handleUpdateSample() {
   printSeparator();
   std::cout << "\n";
 
+  if (!canEdit()) {
+    std::cout << "✗ Keine Berechtigung. Bitte anmelden.\n";
+    waitForEnter();
+    return;
+  }
+
   int id = readInteger("Proben-ID (numerisch)");
   if (!running_)
     return; // EOF
@@ -470,7 +476,9 @@ void CliInterface::handleUpdateSample() {
   }
 
   std::cout << "\nAktuelle Werte:\n";
-  std::cout << "  Status: " << sample->getStatusString() << "\n";
+  core::Sample::Status oldStatusEnum = sample->getStatus();
+  std::string oldStatus = sample->getStatusString();
+  std::cout << "  Status: " << oldStatus << "\n";
   std::cout << "  Beschreibung: " << sample->getDescription() << "\n\n";
 
   std::cout << "Status-Optionen:\n";
@@ -507,10 +515,25 @@ void CliInterface::handleUpdateSample() {
     return;
   }
 
+  if (newStatus == oldStatusEnum) {
+    std::cout << "\nℹ Status bleibt unverändert.\n";
+    waitForEnter();
+    return;
+  }
+
   sample->setStatus(newStatus);
 
   if (database_->updateSample(*sample)) {
     std::cout << "\n✓ Probe erfolgreich aktualisiert!\n";
+    database_->logSampleAction(core::AuditEntry::ActionType::UPDATE,
+                               sample->getSampleId(), getCurrentUsername(),
+                               "Status: " + oldStatus + " -> " +
+                                   sample->getStatusString());
+    if (database_->hasError()) {
+      std::cout << "\n✗ Audit-Log konnte nicht geschrieben werden: "
+                << database_->getLastError() << "\n";
+      database_->clearError();
+    }
   } else {
     std::cout << "\n✗ Fehler beim Aktualisieren: " << database_->getLastError()
               << "\n";
