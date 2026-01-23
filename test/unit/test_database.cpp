@@ -392,6 +392,55 @@ bool test_database_CreateOrder_MissingFieldsRejected() {
   return true;
 }
 
+bool test_database_GetOrdersByFilter() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  Sample sampleA("SAMP_A", "P200");
+  Sample sampleB("SAMP_B", "P201");
+  ASSERT_TRUE(db.createSample(sampleA));
+  ASSERT_TRUE(db.createSample(sampleB));
+
+  Order o1("ORD_A1", "SAMP_A", "Blutbild");
+  o1.setPriority(Order::Priority::NORMAL);
+  ASSERT_TRUE(db.createOrder(o1));
+
+  Order o2("ORD_A2", "SAMP_A", "Glucose");
+  o2.setPriority(Order::Priority::URGENT);
+  o2.setStatus(Order::Status::IN_PROGRESS);
+  ASSERT_TRUE(db.createOrder(o2));
+
+  Order o3("ORD_B1", "SAMP_B", "PCR");
+  o3.setPriority(Order::Priority::EMERGENCY);
+  ASSERT_TRUE(db.createOrder(o3));
+
+  Database::OrderFilter statusFilter;
+  statusFilter.status = Order::statusToString(Order::Status::IN_PROGRESS);
+  auto byStatus = db.getOrdersByFilter(statusFilter);
+  ASSERT_FALSE(db.hasError());
+  ASSERT_EQ(byStatus.size(), static_cast<size_t>(1));
+  ASSERT_EQ(byStatus[0]->getOrderId(), "ORD_A2");
+
+  Database::OrderFilter sampleFilter;
+  sampleFilter.sampleId = "SAMP_A";
+  auto bySample = db.getOrdersByFilter(sampleFilter);
+  ASSERT_FALSE(db.hasError());
+  ASSERT_EQ(bySample.size(), static_cast<size_t>(2));
+
+  Database::OrderFilter priorityFilter;
+  priorityFilter.priority = Order::priorityToString(Order::Priority::EMERGENCY);
+  auto byPriority = db.getOrdersByFilter(priorityFilter);
+  ASSERT_FALSE(db.hasError());
+  ASSERT_EQ(byPriority.size(), static_cast<size_t>(1));
+  ASSERT_EQ(byPriority[0]->getOrderId(), "ORD_B1");
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
 void registerDatabaseTests() {
   registerTest("Database::OpenAndClose", test_database_OpenAndClose);
   registerTest("Database::InitializeSchema", test_database_InitializeSchema);
@@ -410,6 +459,8 @@ void registerDatabaseTests() {
                test_database_CreateOrder_RequestedDateStored);
   registerTest("Database::CreateOrder_MissingFieldsRejected",
                test_database_CreateOrder_MissingFieldsRejected);
+  registerTest("Database::GetOrdersByFilter",
+               test_database_GetOrdersByFilter);
   registerTest("Database::UpdateSample_NoChangesStillSuccess",
                test_database_UpdateSample_NoChangesStillSuccess);
   registerTest("Database::UpdateSample_NotFound",

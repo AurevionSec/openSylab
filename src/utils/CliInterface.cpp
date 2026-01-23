@@ -1016,11 +1016,46 @@ void CliInterface::handleListOrders() {
   printSeparator();
   std::cout << "\n";
 
-  auto orders = database_->getAllOrders();
+  std::cout << "Filter (optional):\n";
+  std::cout << "  Status:    (z.B. Angefordert, In Bearbeitung, Abgeschlossen,\n";
+  std::cout << "              Validiert, Storniert)\n";
+  std::cout << "  Proben-ID: (z.B. S001)\n";
+  std::cout << "  Priorität: (Normal, Dringend, Notfall)\n";
+  std::cout << "  [Enter] leer lassen = kein Filter\n\n";
+
+  std::string statusFilter = trim(readInput("Status-Filter"));
+  if (!running_)
+    return;
+  std::string sampleFilter = trim(readInput("Proben-ID-Filter"));
+  if (!running_)
+    return;
+  std::string priorityFilter = trim(readInput("Priorität-Filter"));
+  if (!running_)
+    return;
+
+  db::Database::OrderFilter filter;
+  filter.status = statusFilter;
+  filter.sampleId = sampleFilter;
+  filter.priority = priorityFilter;
+
+  auto orders = (statusFilter.empty() && sampleFilter.empty() &&
+                 priorityFilter.empty())
+                    ? database_->getAllOrders()
+                    : database_->getOrdersByFilter(filter);
 
   if (database_->hasError()) {
     std::cout << "✗ Fehler beim Abrufen der Aufträge:\n";
     std::cout << "  " << database_->getLastError() << "\n";
+  } else if (orders.empty() &&
+             !(statusFilter.empty() && sampleFilter.empty() &&
+               priorityFilter.empty())) {
+    std::cout << "ℹ Keine passenden Aufträge für die Filter.\n";
+    std::string reset = readInput("Filter zurücksetzen? (y/n)");
+    if (!running_)
+      return;
+    if (!reset.empty() && (reset[0] == 'y' || reset[0] == 'Y')) {
+      orders = database_->getAllOrders();
+    }
   } else if (orders.empty()) {
     std::cout << "ℹ Keine Aufträge in der Datenbank.\n";
   } else {

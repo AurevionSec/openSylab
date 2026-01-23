@@ -33,6 +33,12 @@ public:
     std::optional<std::time_t> toDate;
     bool excludeArchived = false;
   };
+
+  struct OrderFilter {
+    std::string status;
+    std::string sampleId;
+    std::string priority;
+  };
   /**
    * @brief Konstruktor
    * @param dbPath Pfad zur SQLite-Datenbankdatei
@@ -80,6 +86,8 @@ public:
   [[nodiscard]] std::vector<std::unique_ptr<core::Order>>
   getOrdersBySampleId(const std::string &sampleId);
   [[nodiscard]] std::vector<std::unique_ptr<core::Order>> getAllOrders();
+  [[nodiscard]] std::vector<std::unique_ptr<core::Order>>
+  getOrdersByFilter(const OrderFilter &filter);
   [[nodiscard]] bool updateOrder(const core::Order &order);
   [[nodiscard]] bool deleteOrder(int id);
 

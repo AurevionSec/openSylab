@@ -950,6 +950,78 @@ std::vector<std::unique_ptr<core::Order>> Database::getAllOrders() {
   return orders;
 }
 
+std::vector<std::unique_ptr<core::Order>>
+Database::getOrdersByFilter(const OrderFilter &filter) {
+  clearError();
+
+  std::vector<std::unique_ptr<core::Order>> orders;
+
+  if (!isOpen_) {
+    setError("Datenbank ist nicht geöffnet");
+    return orders;
+  }
+
+  std::ostringstream query;
+  query << R"(
+        SELECT id, order_id, sample_id, test_type, status, priority,
+               requested_date, completed_date, requested_by, notes
+        FROM orders
+        WHERE 1=1
+    )";
+
+  if (!filter.status.empty()) {
+    query << " AND status = ?";
+  }
+  if (!filter.sampleId.empty()) {
+    query << " AND sample_id = ?";
+  }
+  if (!filter.priority.empty()) {
+    query << " AND priority = ?";
+  }
+  query << " ORDER BY requested_date DESC";
+
+  sqlite3_stmt *rawStmt = nullptr;
+  int rc = sqlite3_prepare_v2(db_, query.str().c_str(), -1, &rawStmt, nullptr);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Vorbereiten des SELECT: " +
+             std::string(sqlite3_errmsg(db_)));
+    return orders;
+  }
+  auto stmt = makeStatement(rawStmt);
+
+  int index = 1;
+  if (!filter.status.empty()) {
+    sqlite3_bind_text(stmt.get(), index++, filter.status.c_str(), -1,
+                      SQLITE_TRANSIENT);
+  }
+  if (!filter.sampleId.empty()) {
+    sqlite3_bind_text(stmt.get(), index++, filter.sampleId.c_str(), -1,
+                      SQLITE_TRANSIENT);
+  }
+  if (!filter.priority.empty()) {
+    sqlite3_bind_text(stmt.get(), index++, filter.priority.c_str(), -1,
+                      SQLITE_TRANSIENT);
+  }
+
+  while ((rc = sqlite3_step(stmt.get())) == SQLITE_ROW) {
+    try {
+      orders.push_back(orderFromRow(stmt.get()));
+    } catch (const std::exception &e) {
+      setError("Fehler beim Verarbeiten der Aufträge: " +
+               std::string(e.what()));
+      return {};
+    }
+  }
+
+  if (rc != SQLITE_DONE) {
+    setError("SQL-Fehler beim Abrufen der Aufträge: " +
+             std::string(sqlite3_errmsg(db_)));
+    return {};
+  }
+
+  return orders;
+}
+
 bool Database::updateOrder(const core::Order &order) {
   clearError();
 
