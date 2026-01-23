@@ -676,6 +676,8 @@ void CliInterface::handleImportCsv() {
   do {
     CsvImport importer;
     auto samples = importer.importSamples(currentPath);
+    const auto &importedRecords = importer.getImportedRecords();
+    std::vector<CsvImport::FailedRecord> dbFailedRecords;
 
     if (samples.empty()) {
       std::cout << "\n✗ Keine Proben importiert: " << importer.getLastError()
@@ -685,17 +687,21 @@ void CliInterface::handleImportCsv() {
       size_t failed = 0;
       std::vector<std::string> failedSamples;
 
-      for (const auto &sample : samples) {
-        if (database_->createSample(sample)) {
+      for (const auto &record : importedRecords) {
+        if (database_->createSample(record.sample)) {
           imported++;
         } else {
           failed++;
-          failedSamples.push_back(sample.getSampleId() + ": " +
-                                  database_->getLastError());
+          const std::string error = database_->getLastError();
+          failedSamples.push_back("Zeile " + std::to_string(record.recordNumber) +
+                                  " (" + record.sample.getSampleId() + "): " +
+                                  error);
+          dbFailedRecords.push_back(
+              {record.recordNumber, record.record, error});
         }
       }
 
-      std::cout << "\n✓ " << imported << " von " << samples.size()
+      std::cout << "\n✓ " << imported << " von " << importedRecords.size()
                 << " Proben erfolgreich importiert!\n";
 
       // Fehlgeschlagene Importe anzeigen
@@ -708,16 +714,27 @@ void CliInterface::handleImportCsv() {
       }
     }
 
-    if (importer.getFailedCount() > 0) {
-      std::cout << "\n✗ CSV-Fehler (" << importer.getFailedCount()
-                << " Zeilen):\n";
-      for (const auto &failed : importer.getFailedRecords()) {
-        std::cout << "  - Zeile " << failed.recordNumber << ": " << failed.error
-                  << " (\"" << failed.record << "\")\n";
+    if (importer.getFailedCount() > 0 || !dbFailedRecords.empty()) {
+      if (importer.getFailedCount() > 0) {
+        std::cout << "\n✗ CSV-Fehler (" << importer.getFailedCount()
+                  << " Zeilen):\n";
+        for (const auto &failed : importer.getFailedRecords()) {
+          std::cout << "  - Zeile " << failed.recordNumber << ": "
+                    << failed.error << " (\"" << failed.record << "\")\n";
+        }
+      }
+
+      if (!dbFailedRecords.empty()) {
+        std::cout << "\n✗ DB-Fehler (" << dbFailedRecords.size()
+                  << " Zeilen):\n";
+        for (const auto &failed : dbFailedRecords) {
+          std::cout << "  - Zeile " << failed.recordNumber << ": "
+                    << failed.error << " (\"" << failed.record << "\")\n";
+        }
       }
 
       std::string retryPath = buildRetryPath(currentPath);
-      if (importer.writeRetryCsv(retryPath)) {
+      if (importer.writeRetryCsv(retryPath, dbFailedRecords)) {
         std::cout << "\n✓ Retry-Datei erstellt: " << retryPath << "\n";
         std::cout << "  Tipp: Datei korrigieren und erneut importieren.\n";
 

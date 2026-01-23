@@ -55,6 +55,7 @@ bool CsvImport::processRecord(const std::string &record, int recordNumber,
     core::Sample sample = parseRecord(fields);
     samples.push_back(sample);
     importedCount_++;
+    importedRecords_.push_back({sample, recordNumber, record});
     return true;
   } catch (const std::invalid_argument &e) {
     std::cerr << "✗ Fehler Record " << recordNumber << ": " << e.what() << "\n";
@@ -72,6 +73,7 @@ CsvImport::importSamples(const std::string &filePath) {
   std::vector<core::Sample> samples;
   importedCount_ = 0;
   lastError_ = "";
+  importedRecords_.clear();
   failedRecords_.clear();
   headerLine_.clear();
 
@@ -147,7 +149,13 @@ CsvImport::importSamples(const std::string &filePath) {
 }
 
 bool CsvImport::writeRetryCsv(const std::string &filePath) const {
-  if (failedRecords_.empty()) {
+  return writeRetryCsv(filePath, {});
+}
+
+bool CsvImport::writeRetryCsv(
+    const std::string &filePath,
+    const std::vector<FailedRecord> &extraFailed) const {
+  if (failedRecords_.empty() && extraFailed.empty()) {
     return false;
   }
 
@@ -161,6 +169,9 @@ bool CsvImport::writeRetryCsv(const std::string &filePath) const {
   }
 
   for (const auto &failed : failedRecords_) {
+    file << failed.record << "\n";
+  }
+  for (const auto &failed : extraFailed) {
     file << failed.record << "\n";
   }
 
@@ -230,10 +241,8 @@ core::Sample CsvImport::parseRecord(const std::vector<std::string> &fields) {
   if (fields.size() > 4 && !fields[4].empty()) {
     try {
       sample.setStatus(core::Sample::stringToStatus(fields[4]));
-    } catch (const std::exception &e) {
-      std::cerr << "Warnung: Ungültiger Status '" << fields[4]
-                << "', verwende Standard 'Erfasst'" << std::endl;
-      sample.setStatus(core::Sample::Status::REGISTERED);
+    } catch (const std::exception &) {
+      throw std::invalid_argument("Ungueltiger Status: " + fields[4]);
     }
   } else {
     sample.setStatus(core::Sample::Status::REGISTERED);

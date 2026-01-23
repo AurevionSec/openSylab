@@ -238,6 +238,54 @@ bool test_csvimport_RetryCsvContainsFailedRows() {
   return true;
 }
 
+bool test_csvimport_InvalidStatusReported() {
+  std::string csvPath = uniqueCsvPath();
+  createTestCsv(csvPath,
+                "sample_id,patient_id,patient_name,description,status\n"
+                "S001,P001,Test,Desc,INVALID\n");
+
+  CsvImport importer;
+  auto samples = importer.importSamples(csvPath);
+
+  ASSERT_EQ(samples.size(), static_cast<size_t>(0));
+  ASSERT_EQ(importer.getFailedCount(), 1);
+  ASSERT_TRUE(importer.getFailedRecords()[0].error.find("Ungueltiger Status") !=
+              std::string::npos);
+
+  std::remove(csvPath.c_str());
+  return true;
+}
+
+bool test_csvimport_RetryCsvIncludesExtraFailures() {
+  std::string csvPath = uniqueCsvPath();
+  std::string retryPath = uniqueCsvPath();
+  createTestCsv(csvPath,
+                "sample_id,patient_id\n"
+                "S001,P001\n");
+
+  CsvImport importer;
+  importer.importSamples(csvPath);
+
+  std::vector<CsvImport::FailedRecord> extraFailed;
+  extraFailed.push_back({2, "S002,P002", "DB Fehler"});
+
+  ASSERT_TRUE(importer.writeRetryCsv(retryPath, extraFailed));
+
+  std::ifstream retryFile(retryPath);
+  std::stringstream buffer;
+  buffer << retryFile.rdbuf();
+  retryFile.close();
+
+  std::string expected =
+      "sample_id,patient_id\n"
+      "S002,P002\n";
+  ASSERT_EQ(buffer.str(), expected);
+
+  std::remove(csvPath.c_str());
+  std::remove(retryPath.c_str());
+  return true;
+}
+
 void registerCsvImportTests() {
   registerTest("CsvImport::ImportValidCsv", test_csvimport_ImportValidCsv);
   registerTest("CsvImport::ImportWithMissingFields",
@@ -258,4 +306,8 @@ void registerCsvImportTests() {
   registerTest("CsvImport::FailedRowsTracked", test_csvimport_FailedRowsTracked);
   registerTest("CsvImport::RetryCsvContainsFailedRows",
                test_csvimport_RetryCsvContainsFailedRows);
+  registerTest("CsvImport::InvalidStatusReported",
+               test_csvimport_InvalidStatusReported);
+  registerTest("CsvImport::RetryCsvIncludesExtraFailures",
+               test_csvimport_RetryCsvIncludesExtraFailures);
 }

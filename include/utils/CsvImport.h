@@ -22,6 +22,12 @@ public:
     std::string error;
   };
 
+  struct ImportedRecord {
+    core::Sample sample;
+    int recordNumber;
+    std::string record;
+  };
+
   /**
    * @brief Konstruktor
    */
@@ -69,6 +75,13 @@ public:
   }
 
   /**
+   * @brief Gibt alle erfolgreich importierten Records mit Metadaten zurück
+   */
+  const std::vector<ImportedRecord> &getImportedRecords() const {
+    return importedRecords_;
+  }
+
+  /**
    * @brief Gibt die Anzahl fehlgeschlagener Records zurück
    */
   int getFailedCount() const {
@@ -81,12 +94,15 @@ public:
    * @return true wenn Datei geschrieben wurde
    */
   bool writeRetryCsv(const std::string &filePath) const;
+  bool writeRetryCsv(const std::string &filePath,
+                     const std::vector<FailedRecord> &extraFailed) const;
 
 private:
   char delimiter_;
   bool hasHeader_;
   std::string lastError_;
   int importedCount_;
+  std::vector<ImportedRecord> importedRecords_;
   std::vector<FailedRecord> failedRecords_;
   std::string headerLine_;
 
