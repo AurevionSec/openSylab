@@ -476,6 +476,40 @@ bool test_database_LogOrderStatusUpdate() {
   return true;
 }
 
+bool test_database_CancelOrderLogsAudit() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  Sample sample("CANCEL_SAMPLE", "P030");
+  ASSERT_TRUE(db.createSample(sample));
+
+  Order order("ORD_CANCEL", "CANCEL_SAMPLE", "PCR");
+  ASSERT_TRUE(db.createOrder(order));
+
+  auto stored = db.getOrderByOrderId("ORD_CANCEL");
+  ASSERT_NOT_NULL(stored);
+  stored->setStatus(Order::Status::CANCELLED);
+  ASSERT_TRUE(db.updateOrder(*stored));
+
+  db.logOrderAction(AuditEntry::ActionType::UPDATE, "ORD_CANCEL", "tester",
+                    "Status: Angefordert -> Storniert");
+
+  auto entries =
+      db.getAuditLogByEntity(AuditEntry::EntityType::ORDER, "ORD_CANCEL");
+  ASSERT_FALSE(db.hasError());
+  ASSERT_FALSE(entries.empty());
+  ASSERT_EQ(entries[0]->getAction(), AuditEntry::ActionType::UPDATE);
+  ASSERT_EQ(entries[0]->getEntity(), AuditEntry::EntityType::ORDER);
+  ASSERT_EQ(entries[0]->getEntityId(), "ORD_CANCEL");
+  ASSERT_EQ(entries[0]->getDetails(), "Status: Angefordert -> Storniert");
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
 void registerDatabaseTests() {
   registerTest("Database::OpenAndClose", test_database_OpenAndClose);
   registerTest("Database::InitializeSchema", test_database_InitializeSchema);
@@ -492,6 +526,8 @@ void registerDatabaseTests() {
   registerTest("Database::LogSampleDelete", test_database_LogSampleDelete);
   registerTest("Database::LogOrderStatusUpdate",
                test_database_LogOrderStatusUpdate);
+  registerTest("Database::CancelOrderLogsAudit",
+               test_database_CancelOrderLogsAudit);
   registerTest("Database::CreateOrder_RequestedDateStored",
                test_database_CreateOrder_RequestedDateStored);
   registerTest("Database::CreateOrder_MissingFieldsRejected",

@@ -1235,7 +1235,7 @@ void CliInterface::handleDeleteOrder() {
   std::cout << "  Testtyp: " << order->getTestType() << "\n";
   std::cout << "  Status: " << order->getStatusString() << "\n\n";
 
-  std::string confirm = readInput("Wirklich löschen? (ja/nein)");
+  std::string confirm = readInput("Auftrag wirklich stornieren? (ja/nein)");
   if (!running_)
     return;
 
@@ -1246,14 +1246,26 @@ void CliInterface::handleDeleteOrder() {
 
   if (confirmLower == "ja" || confirmLower == "j" || confirmLower == "yes" ||
       confirmLower == "y") {
-    if (database_->deleteOrder(id)) {
-      std::cout << "\n✓ Auftrag erfolgreich gelöscht!\n";
+    std::string oldStatus = order->getStatusString();
+    order->setStatus(core::Order::Status::CANCELLED);
+    if (database_->updateOrder(*order)) {
+      std::cout << "\n✓ Auftrag erfolgreich storniert!\n";
+      std::string details =
+          "Status: " + oldStatus + " -> " + order->getStatusString();
+      database_->logOrderAction(core::AuditEntry::ActionType::UPDATE,
+                                order->getOrderId(), getCurrentUsername(),
+                                details);
+      if (database_->hasError()) {
+        std::cout << "\n✗ Audit-Log konnte nicht geschrieben werden: "
+                  << database_->getLastError() << "\n";
+        database_->clearError();
+      }
     } else {
-      std::cout << "\n✗ Fehler beim Löschen: " << database_->getLastError()
+      std::cout << "\n✗ Fehler beim Stornieren: " << database_->getLastError()
                 << "\n";
     }
   } else {
-    std::cout << "\nLöschen abgebrochen.\n";
+    std::cout << "\nStornieren abgebrochen.\n";
   }
 
   waitForEnter();
