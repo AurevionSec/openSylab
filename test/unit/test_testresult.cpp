@@ -209,6 +209,39 @@ bool test_testresult_EvaluateFlag_High() {
   return true;
 }
 
+bool test_testresult_EvaluateFlag_CriticalLow() {
+  TestResult result;
+  result.setValue("20");
+  result.setReferenceLow(70.0);
+  result.setReferenceHigh(100.0);
+
+  TestResult::Flag flag = result.evaluateFlag();
+  ASSERT_EQ(flag, TestResult::Flag::CRITICAL);
+  return true;
+}
+
+bool test_testresult_EvaluateFlag_CriticalHigh() {
+  TestResult result;
+  result.setValue("200");
+  result.setReferenceLow(70.0);
+  result.setReferenceHigh(100.0);
+
+  TestResult::Flag flag = result.evaluateFlag();
+  ASSERT_EQ(flag, TestResult::Flag::CRITICAL);
+  return true;
+}
+
+bool test_testresult_EvaluateFlag_MissingReference() {
+  TestResult result;
+  result.setValue("85");
+  result.setReferenceLow(70.0);
+  result.setReferenceHigh(0.0);
+
+  TestResult::Flag flag = result.evaluateFlag();
+  ASSERT_EQ(flag, TestResult::Flag::UNDEFINED);
+  return true;
+}
+
 bool test_testresult_EvaluateFlag_NoReference() {
   TestResult result;
   result.setValue("85");
@@ -251,6 +284,12 @@ void registerTestResultTests() {
                test_testresult_EvaluateFlag_Low);
   registerTest("TestResult::EvaluateFlag_High",
                test_testresult_EvaluateFlag_High);
+  registerTest("TestResult::EvaluateFlag_CriticalLow",
+               test_testresult_EvaluateFlag_CriticalLow);
+  registerTest("TestResult::EvaluateFlag_CriticalHigh",
+               test_testresult_EvaluateFlag_CriticalHigh);
+  registerTest("TestResult::EvaluateFlag_MissingReference",
+               test_testresult_EvaluateFlag_MissingReference);
   registerTest("TestResult::EvaluateFlag_NoReference",
                test_testresult_EvaluateFlag_NoReference);
   registerTest("TestResult::EvaluateFlag_NonNumeric",

@@ -129,8 +129,8 @@ double TestResult::getNumericValue() const {
 }
 
 TestResult::Flag TestResult::evaluateFlag() const {
-  // Wenn kein Referenzbereich definiert ist
-  if (referenceLow_ == 0.0 && referenceHigh_ == 0.0) {
+  // Wenn Referenzwerte fehlen
+  if (referenceLow_ == 0.0 || referenceHigh_ == 0.0) {
     return Flag::UNDEFINED;
   }
 
@@ -140,6 +140,13 @@ TestResult::Flag TestResult::evaluateFlag() const {
   }
 
   double numValue = getNumericValue();
+  double criticalLow = referenceLow_ * 0.5;
+  double criticalHigh = referenceHigh_ * 1.5;
+
+  // Prüfung gegen kritische Grenzen
+  if (numValue < criticalLow || numValue > criticalHigh) {
+    return Flag::CRITICAL;
+  }
 
   // Prüfung gegen Referenzbereich
   if (numValue < referenceLow_) {
