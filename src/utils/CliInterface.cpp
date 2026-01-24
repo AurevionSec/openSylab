@@ -1360,15 +1360,29 @@ void CliInterface::handleNewResult() {
   if (!running_)
     return;
 
-  std::string value = readInput("Messwert");
-  if (!running_)
-    return;
-  value = trim(value);
+  std::string value;
+  while (true) {
+    value = trim(readInput("Messwert"));
+    if (!running_)
+      return;
+    if (isEmpty(value)) {
+      std::cout << "✗ Messwert darf nicht leer sein!\n";
+      continue;
+    }
+    break;
+  }
 
-  std::string unit = readInput("Einheit (z.B. mg/dL)");
-  if (!running_)
-    return;
-  unit = trim(unit);
+  std::string unit;
+  while (true) {
+    unit = trim(readInput("Einheit (z.B. mg/dL)"));
+    if (!running_)
+      return;
+    if (isEmpty(unit)) {
+      std::cout << "✗ Einheit darf nicht leer sein!\n";
+      continue;
+    }
+    break;
+  }
 
   std::string referenceRange = readInput("Referenzbereich (z.B. 70-100)");
   if (!running_)
@@ -1378,24 +1392,38 @@ void CliInterface::handleNewResult() {
   double referenceLow = 0.0;
   double referenceHigh = 0.0;
 
-  std::string refLowStr =
-      readInput("Unterer Referenzwert (numerisch, 0 für keinen)");
-  if (!running_)
-    return;
-  try {
-    referenceLow = std::stod(trim(refLowStr));
-  } catch (...) {
-    referenceLow = 0.0;
+  while (true) {
+    std::string refLowStr =
+        trim(readInput("Unterer Referenzwert (numerisch, optional)"));
+    if (!running_)
+      return;
+    if (isEmpty(refLowStr)) {
+      referenceLow = 0.0;
+      break;
+    }
+    try {
+      referenceLow = std::stod(refLowStr);
+      break;
+    } catch (...) {
+      std::cout << "✗ Unterer Referenzwert muss numerisch sein!\n";
+    }
   }
 
-  std::string refHighStr =
-      readInput("Oberer Referenzwert (numerisch, 0 für keinen)");
-  if (!running_)
-    return;
-  try {
-    referenceHigh = std::stod(trim(refHighStr));
-  } catch (...) {
-    referenceHigh = 0.0;
+  while (true) {
+    std::string refHighStr =
+        trim(readInput("Oberer Referenzwert (numerisch, optional)"));
+    if (!running_)
+      return;
+    if (isEmpty(refHighStr)) {
+      referenceHigh = 0.0;
+      break;
+    }
+    try {
+      referenceHigh = std::stod(refHighStr);
+      break;
+    } catch (...) {
+      std::cout << "✗ Oberer Referenzwert muss numerisch sein!\n";
+    }
   }
 
   std::string measuredBy = readInput("Gemessen von (Benutzer)");

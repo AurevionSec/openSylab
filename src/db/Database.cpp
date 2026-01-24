@@ -1165,6 +1165,32 @@ bool Database::createTestResult(const core::TestResult &result) {
     return false;
   }
 
+  if (result.getResultId().empty()) {
+    setError("Ergebnis-ID darf nicht leer sein");
+    return false;
+  }
+  if (result.getOrderId() <= 0) {
+    setError("Auftrags-ID ist ungültig");
+    return false;
+  }
+  if (result.getTestParameter().empty()) {
+    setError("Testparameter darf nicht leer sein");
+    return false;
+  }
+  if (result.getValue().empty()) {
+    setError("Messwert darf nicht leer sein");
+    return false;
+  }
+  if (result.getUnit().empty()) {
+    setError("Einheit darf nicht leer sein");
+    return false;
+  }
+
+  auto order = getOrder(result.getOrderId());
+  if (!order) {
+    return false;
+  }
+
   const char *insertSQL = R"(
         INSERT INTO test_results (result_id, order_id, test_parameter, value, unit,
                                   reference_range, reference_low, reference_high,

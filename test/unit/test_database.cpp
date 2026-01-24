@@ -392,6 +392,100 @@ bool test_database_CreateOrder_MissingFieldsRejected() {
   return true;
 }
 
+bool test_database_CreateTestResult_Valid() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  Sample sample("RES_SAMPLE", "P300");
+  ASSERT_TRUE(db.createSample(sample));
+
+  Order order("ORD_RES_1", "RES_SAMPLE", "Glucose");
+  ASSERT_TRUE(db.createOrder(order));
+
+  auto storedOrder = db.getOrderByOrderId("ORD_RES_1");
+  ASSERT_NOT_NULL(storedOrder);
+  int orderDbId = storedOrder->getId();
+
+  TestResult result("RES001", orderDbId, "Glucose");
+  result.setValue("98");
+  result.setUnit("mg/dL");
+  result.setReferenceRange("70-100");
+  result.setReferenceLow(70);
+  result.setReferenceHigh(100);
+  result.setStatus(TestResult::Status::ENTERED);
+  result.setFlag(TestResult::Flag::NORMAL);
+  result.setMeasuredDate(123456789);
+
+  ASSERT_TRUE(db.createTestResult(result));
+
+  auto stored = db.getTestResultByResultId("RES001");
+  ASSERT_NOT_NULL(stored);
+  ASSERT_EQ(stored->getOrderId(), orderDbId);
+  ASSERT_EQ(stored->getTestParameter(), "Glucose");
+  ASSERT_EQ(stored->getValue(), "98");
+  ASSERT_EQ(stored->getUnit(), "mg/dL");
+  ASSERT_EQ(stored->getReferenceRange(), "70-100");
+  ASSERT_EQ(stored->getReferenceLow(), 70);
+  ASSERT_EQ(stored->getReferenceHigh(), 100);
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_database_CreateTestResult_MissingFieldsRejected() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  Sample sample("RES_SAMPLE_2", "P301");
+  ASSERT_TRUE(db.createSample(sample));
+
+  Order order("ORD_RES_2", "RES_SAMPLE_2", "PCR");
+  ASSERT_TRUE(db.createOrder(order));
+
+  auto storedOrder = db.getOrderByOrderId("ORD_RES_2");
+  ASSERT_NOT_NULL(storedOrder);
+  int orderDbId = storedOrder->getId();
+
+  TestResult missingResultId("", orderDbId, "PCR");
+  missingResultId.setValue("1.2");
+  missingResultId.setUnit("mg/L");
+  ASSERT_FALSE(db.createTestResult(missingResultId));
+  ASSERT_FALSE(db.getLastError().empty());
+
+  TestResult missingParameter("RES_MISS_PARAM", orderDbId, "");
+  missingParameter.setValue("1.2");
+  missingParameter.setUnit("mg/L");
+  ASSERT_FALSE(db.createTestResult(missingParameter));
+  ASSERT_FALSE(db.getLastError().empty());
+
+  TestResult missingValue("RES_MISS_VALUE", orderDbId, "PCR");
+  missingValue.setValue("");
+  missingValue.setUnit("mg/L");
+  ASSERT_FALSE(db.createTestResult(missingValue));
+  ASSERT_FALSE(db.getLastError().empty());
+
+  TestResult missingUnit("RES_MISS_UNIT", orderDbId, "PCR");
+  missingUnit.setValue("1.2");
+  missingUnit.setUnit("");
+  ASSERT_FALSE(db.createTestResult(missingUnit));
+  ASSERT_FALSE(db.getLastError().empty());
+
+  TestResult missingOrder("RES_BAD_ORDER", orderDbId + 999, "PCR");
+  missingOrder.setValue("1.2");
+  missingOrder.setUnit("mg/L");
+  ASSERT_FALSE(db.createTestResult(missingOrder));
+  ASSERT_FALSE(db.getLastError().empty());
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
 bool test_database_GetOrdersByFilter() {
   std::string dbPath = uniqueDbPath();
   Database db(dbPath);
@@ -532,6 +626,10 @@ void registerDatabaseTests() {
                test_database_CreateOrder_RequestedDateStored);
   registerTest("Database::CreateOrder_MissingFieldsRejected",
                test_database_CreateOrder_MissingFieldsRejected);
+  registerTest("Database::CreateTestResult_Valid",
+               test_database_CreateTestResult_Valid);
+  registerTest("Database::CreateTestResult_MissingFieldsRejected",
+               test_database_CreateTestResult_MissingFieldsRejected);
   registerTest("Database::GetOrdersByFilter",
                test_database_GetOrdersByFilter);
   registerTest("Database::UpdateSample_NoChangesStillSuccess",
