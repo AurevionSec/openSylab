@@ -242,6 +242,28 @@ bool test_testresult_EvaluateFlag_MissingReference() {
   return true;
 }
 
+bool test_testresult_EvaluateFlag_ZeroLowerBound() {
+  TestResult result;
+  result.setValue("50");
+  result.setReferenceLow(0.0);
+  result.setReferenceHigh(100.0);
+
+  TestResult::Flag flag = result.evaluateFlag();
+  ASSERT_EQ(flag, TestResult::Flag::NORMAL);
+  return true;
+}
+
+bool test_testresult_EvaluateFlag_InvalidRange() {
+  TestResult result;
+  result.setValue("85");
+  result.setReferenceLow(100.0);
+  result.setReferenceHigh(70.0);
+
+  TestResult::Flag flag = result.evaluateFlag();
+  ASSERT_EQ(flag, TestResult::Flag::UNDEFINED);
+  return true;
+}
+
 bool test_testresult_EvaluateFlag_NoReference() {
   TestResult result;
   result.setValue("85");
@@ -290,6 +312,10 @@ void registerTestResultTests() {
                test_testresult_EvaluateFlag_CriticalHigh);
   registerTest("TestResult::EvaluateFlag_MissingReference",
                test_testresult_EvaluateFlag_MissingReference);
+  registerTest("TestResult::EvaluateFlag_ZeroLowerBound",
+               test_testresult_EvaluateFlag_ZeroLowerBound);
+  registerTest("TestResult::EvaluateFlag_InvalidRange",
+               test_testresult_EvaluateFlag_InvalidRange);
   registerTest("TestResult::EvaluateFlag_NoReference",
                test_testresult_EvaluateFlag_NoReference);
   registerTest("TestResult::EvaluateFlag_NonNumeric",

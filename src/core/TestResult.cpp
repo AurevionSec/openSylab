@@ -129,19 +129,21 @@ double TestResult::getNumericValue() const {
 }
 
 TestResult::Flag TestResult::evaluateFlag() const {
-  // Wenn Referenzwerte fehlen
-  if (referenceLow_ == 0.0 || referenceHigh_ == 0.0) {
-    return Flag::UNDEFINED;
-  }
-
-  // Wenn Wert nicht numerisch ist
   if (!isNumeric()) {
     return Flag::UNDEFINED;
   }
 
+  // Referenzwerte unvollständig oder ungueltig
+  if ((referenceLow_ == 0.0 && referenceHigh_ == 0.0) ||
+      referenceHigh_ <= referenceLow_) {
+    return Flag::UNDEFINED;
+  }
+
   double numValue = getNumericValue();
-  double criticalLow = referenceLow_ * 0.5;
-  double criticalHigh = referenceHigh_ * 1.5;
+  constexpr double kCriticalLowMultiplier = 0.5;
+  constexpr double kCriticalHighMultiplier = 1.5;
+  double criticalLow = referenceLow_ * kCriticalLowMultiplier;
+  double criticalHigh = referenceHigh_ * kCriticalHighMultiplier;
 
   // Prüfung gegen kritische Grenzen
   if (numValue < criticalLow || numValue > criticalHigh) {
