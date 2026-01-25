@@ -1534,6 +1534,34 @@ bool Database::updateTestResult(const core::TestResult &result) {
   return true;
 }
 
+bool Database::validateTestResult(const std::string &resultId,
+                                  const std::string &user) {
+  clearError();
+
+  if (!isOpen_) {
+    setError("Datenbank ist nicht geöffnet");
+    return false;
+  }
+
+  auto result = getTestResultByResultId(resultId);
+  if (!result) {
+    return false;
+  }
+
+  std::string oldStatus = result->getStatusString();
+  result->setStatus(core::TestResult::Status::VALIDATED);
+
+  if (!updateTestResult(*result)) {
+    return false;
+  }
+
+  const std::string actor = user.empty() ? "system" : user;
+  logResultAction(core::AuditEntry::ActionType::UPDATE, resultId, actor,
+                  "Status: " + oldStatus + " -> " + result->getStatusString());
+
+  return true;
+}
+
 bool Database::deleteTestResult(int id) {
   clearError();
 

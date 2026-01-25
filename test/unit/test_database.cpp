@@ -486,6 +486,52 @@ bool test_database_CreateTestResult_MissingFieldsRejected() {
   return true;
 }
 
+bool test_database_ValidateResultLogsAudit() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  Sample sample("RES_AUDIT", "P302");
+  ASSERT_TRUE(db.createSample(sample));
+
+  Order order("ORD_RES_AUDIT", "RES_AUDIT", "PCR");
+  ASSERT_TRUE(db.createOrder(order));
+
+  auto storedOrder = db.getOrderByOrderId("ORD_RES_AUDIT");
+  ASSERT_NOT_NULL(storedOrder);
+  int orderDbId = storedOrder->getId();
+
+  TestResult result("RES_AUDIT_1", orderDbId, "PCR");
+  result.setValue("1.0");
+  result.setUnit("mg/L");
+  result.setStatus(TestResult::Status::ENTERED);
+  result.setFlag(result.evaluateFlag());
+  ASSERT_TRUE(db.createTestResult(result));
+
+  auto storedResult = db.getTestResultByResultId("RES_AUDIT_1");
+  ASSERT_NOT_NULL(storedResult);
+  ASSERT_TRUE(db.validateTestResult("RES_AUDIT_1", "tester"));
+
+  auto validated = db.getTestResultByResultId("RES_AUDIT_1");
+  ASSERT_NOT_NULL(validated);
+  ASSERT_EQ(validated->getStatus(), TestResult::Status::VALIDATED);
+
+  auto entries =
+      db.getAuditLogByEntity(AuditEntry::EntityType::RESULT, "RES_AUDIT_1");
+  ASSERT_FALSE(db.hasError());
+  ASSERT_FALSE(entries.empty());
+  ASSERT_EQ(entries[0]->getAction(), AuditEntry::ActionType::UPDATE);
+  ASSERT_EQ(entries[0]->getEntity(), AuditEntry::EntityType::RESULT);
+  ASSERT_EQ(entries[0]->getEntityId(), "RES_AUDIT_1");
+  ASSERT_EQ(entries[0]->getUser(), "tester");
+  ASSERT_EQ(entries[0]->getDetails(), "Status: Eingegeben -> Validiert");
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
 bool test_database_GetOrdersByFilter() {
   std::string dbPath = uniqueDbPath();
   Database db(dbPath);
@@ -630,6 +676,8 @@ void registerDatabaseTests() {
                test_database_CreateTestResult_Valid);
   registerTest("Database::CreateTestResult_MissingFieldsRejected",
                test_database_CreateTestResult_MissingFieldsRejected);
+  registerTest("Database::ValidateResultLogsAudit",
+               test_database_ValidateResultLogsAudit);
   registerTest("Database::GetOrdersByFilter",
                test_database_GetOrdersByFilter);
   registerTest("Database::UpdateSample_NoChangesStillSuccess",

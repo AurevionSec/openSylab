@@ -1641,6 +1641,8 @@ void CliInterface::handleValidateResult() {
     return;
 
   core::TestResult::Status newStatus = result->getStatus();
+  const std::string actor =
+      currentUser_ ? currentUser_->getUsername() : std::string("system");
 
   switch (choice) {
   case 1:
@@ -1662,14 +1664,24 @@ void CliInterface::handleValidateResult() {
     return;
   }
 
-  result->setStatus(newStatus);
-
-  if (database_->updateTestResult(*result)) {
-    std::cout << "\n✓ Status erfolgreich geändert auf: "
-              << result->getStatusString() << "\n";
+  if (choice == 1) {
+    if (database_->validateTestResult(result->getResultId(), actor)) {
+      result->setStatus(core::TestResult::Status::VALIDATED);
+      std::cout << "\n✓ Status erfolgreich geändert auf: "
+                << result->getStatusString() << "\n";
+    } else {
+      std::cout << "\n✗ Fehler beim Aktualisieren:\n";
+      std::cout << "  " << database_->getLastError() << "\n";
+    }
   } else {
-    std::cout << "\n✗ Fehler beim Aktualisieren:\n";
-    std::cout << "  " << database_->getLastError() << "\n";
+    result->setStatus(newStatus);
+    if (database_->updateTestResult(*result)) {
+      std::cout << "\n✓ Status erfolgreich geändert auf: "
+                << result->getStatusString() << "\n";
+    } else {
+      std::cout << "\n✗ Fehler beim Aktualisieren:\n";
+      std::cout << "  " << database_->getLastError() << "\n";
+    }
   }
 
   waitForEnter();
