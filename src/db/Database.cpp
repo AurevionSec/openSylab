@@ -1,4 +1,5 @@
 #include "db/Database.h"
+#include <fstream>
 #include <iostream>
 #include <memory>
 #include <sqlite3.h>
@@ -16,6 +17,22 @@ StatementPtr makeStatement(sqlite3_stmt *stmt) {
 std::string columnText(sqlite3_stmt *stmt, int index) {
   const unsigned char *text = sqlite3_column_text(stmt, index);
   return text ? reinterpret_cast<const char *>(text) : "";
+}
+
+std::string escapeCsvField(const std::string &value) {
+  if (value.find_first_of(",\"\n\r") == std::string::npos) {
+    return value;
+  }
+
+  std::string escaped;
+  escaped.reserve(value.size() + 2);
+  for (char ch : value) {
+    if (ch == '"') {
+      escaped.push_back('"');
+    }
+    escaped.push_back(ch);
+  }
+  return "\"" + escaped + "\"";
 }
 
 std::unique_ptr<opensylab::core::Sample> sampleFromRow(sqlite3_stmt *stmt) {
@@ -1579,6 +1596,83 @@ bool Database::updateTestResultWithAudit(const core::TestResult &result,
     const std::string actor = user.empty() ? "system" : user;
     logResultAction(core::AuditEntry::ActionType::UPDATE, result.getResultId(),
                     actor, details.str());
+  }
+
+  return true;
+}
+
+bool Database::exportValidatedResultsToCsv(const std::string &filePath,
+                                           const std::string &user,
+                                           std::optional<int> orderId) {
+  clearError();
+
+  if (!isOpen_) {
+    setError("Datenbank ist nicht geöffnet");
+    return false;
+  }
+
+  std::vector<std::unique_ptr<core::TestResult>> results;
+  if (orderId.has_value()) {
+    results = getTestResultsByOrderId(*orderId);
+  } else {
+    results = getAllTestResults();
+  }
+
+  if (hasError()) {
+    return false;
+  }
+
+  std::vector<core::TestResult *> validated;
+  validated.reserve(results.size());
+  for (auto &result : results) {
+    if (result->getStatus() == core::TestResult::Status::VALIDATED) {
+      validated.push_back(result.get());
+    }
+  }
+
+  if (validated.empty()) {
+    setError("Keine validierten Ergebnisse zum Export");
+    return false;
+  }
+
+  std::ofstream output(filePath);
+  if (!output.is_open()) {
+    setError("Exportdatei konnte nicht geschrieben werden");
+    return false;
+  }
+
+  output << "result_id,order_id,test_parameter,value,unit,reference_low,"
+            "reference_high,status,flag,measured_date,measured_by,comment\n";
+
+  for (const auto *result : validated) {
+    std::ostringstream low;
+    low << result->getReferenceLow();
+    std::ostringstream high;
+    high << result->getReferenceHigh();
+
+    output << escapeCsvField(result->getResultId()) << ","
+           << result->getOrderId() << ","
+           << escapeCsvField(result->getTestParameter()) << ","
+           << escapeCsvField(result->getValue()) << ","
+           << escapeCsvField(result->getUnit()) << "," << low.str() << ","
+           << high.str() << "," << escapeCsvField(result->getStatusString())
+           << "," << escapeCsvField(result->getFlagString()) << ","
+           << static_cast<long long>(result->getMeasuredDate()) << ","
+           << escapeCsvField(result->getMeasuredBy()) << ","
+           << escapeCsvField(result->getComment()) << "\n";
+  }
+
+  if (!output) {
+    setError("Fehler beim Schreiben der Exportdatei");
+    return false;
+  }
+
+  const std::string actor = user.empty() ? "system" : user;
+  const std::string details = "Export: " + filePath + "; Anzahl: " +
+                              std::to_string(validated.size());
+  for (const auto *result : validated) {
+    logResultAction(core::AuditEntry::ActionType::UPDATE,
+                    result->getResultId(), actor, details);
   }
 
   return true;

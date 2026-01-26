@@ -74,6 +74,7 @@ private:
   void handleValidateResult();
   void handleResultsForOrder();
   void handleImportResultsCsv();
+  void handleExportResults();
 
   // Audit-Menü-Aktionen
   void handleShowAuditLog();

@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
+#include <fstream>
 #include <sstream>
 
 using namespace opensylab::db;
@@ -532,6 +533,141 @@ bool test_database_ValidateResultLogsAudit() {
   return true;
 }
 
+bool test_database_ExportValidatedResults_CsvOutput() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  Sample sample("RES_EXP", "P305");
+  ASSERT_TRUE(db.createSample(sample));
+
+  Order order("ORD_RES_EXP", "RES_EXP", "PCR");
+  ASSERT_TRUE(db.createOrder(order));
+
+  auto storedOrder = db.getOrderByOrderId("ORD_RES_EXP");
+  ASSERT_NOT_NULL(storedOrder);
+  int orderDbId = storedOrder->getId();
+
+  TestResult validated("RES_EXP_1", orderDbId, "PCR");
+  validated.setValue("1.1");
+  validated.setUnit("mg/L");
+  validated.setReferenceLow(1.0);
+  validated.setReferenceHigh(2.0);
+  validated.setMeasuredDate(1700000000);
+  validated.setMeasuredBy("tester");
+  validated.setComment("ok");
+  validated.setStatus(TestResult::Status::VALIDATED);
+  validated.setFlag(validated.evaluateFlag());
+  ASSERT_TRUE(db.createTestResult(validated));
+
+  TestResult pending("RES_EXP_2", orderDbId, "PCR");
+  pending.setValue("3.3");
+  pending.setUnit("mg/L");
+  pending.setReferenceLow(1.0);
+  pending.setReferenceHigh(2.0);
+  pending.setMeasuredDate(1700000001);
+  pending.setMeasuredBy("tester");
+  pending.setComment("skip");
+  pending.setStatus(TestResult::Status::ENTERED);
+  pending.setFlag(pending.evaluateFlag());
+  ASSERT_TRUE(db.createTestResult(pending));
+
+  std::string exportPath = "test_export_results.csv";
+  ASSERT_TRUE(db.exportValidatedResultsToCsv(exportPath, "tester",
+                                             std::nullopt));
+
+  std::ifstream input(exportPath);
+  ASSERT_TRUE(input.is_open());
+
+  std::string header;
+  std::getline(input, header);
+  ASSERT_EQ(header,
+            "result_id,order_id,test_parameter,value,unit,reference_low,"
+            "reference_high,status,flag,measured_date,measured_by,comment");
+
+  std::string row;
+  std::getline(input, row);
+  ASSERT_FALSE(row.empty());
+  ASSERT_NE(row.find("RES_EXP_1"), std::string::npos);
+  ASSERT_EQ(row.find("RES_EXP_2"), std::string::npos);
+
+  std::string extra;
+  ASSERT_FALSE(std::getline(input, extra));
+
+  input.close();
+  std::remove(exportPath.c_str());
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_database_ExportValidatedResults_LogsAudit() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  Sample sample("RES_EXP_AUD", "P306");
+  ASSERT_TRUE(db.createSample(sample));
+
+  Order order("ORD_RES_EXP_AUD", "RES_EXP_AUD", "PCR");
+  ASSERT_TRUE(db.createOrder(order));
+
+  auto storedOrder = db.getOrderByOrderId("ORD_RES_EXP_AUD");
+  ASSERT_NOT_NULL(storedOrder);
+  int orderDbId = storedOrder->getId();
+
+  TestResult r1("RES_EXP_AUD_1", orderDbId, "PCR");
+  r1.setValue("1.1");
+  r1.setUnit("mg/L");
+  r1.setReferenceLow(1.0);
+  r1.setReferenceHigh(2.0);
+  r1.setMeasuredDate(1700000000);
+  r1.setMeasuredBy("tester");
+  r1.setComment("ok");
+  r1.setStatus(TestResult::Status::VALIDATED);
+  r1.setFlag(r1.evaluateFlag());
+  ASSERT_TRUE(db.createTestResult(r1));
+
+  TestResult r2("RES_EXP_AUD_2", orderDbId, "PCR");
+  r2.setValue("1.2");
+  r2.setUnit("mg/L");
+  r2.setReferenceLow(1.0);
+  r2.setReferenceHigh(2.0);
+  r2.setMeasuredDate(1700000001);
+  r2.setMeasuredBy("tester");
+  r2.setComment("ok");
+  r2.setStatus(TestResult::Status::VALIDATED);
+  r2.setFlag(r2.evaluateFlag());
+  ASSERT_TRUE(db.createTestResult(r2));
+
+  std::string exportPath = "test_export_audit.csv";
+  ASSERT_TRUE(db.exportValidatedResultsToCsv(exportPath, "tester",
+                                             std::nullopt));
+
+  auto entries1 =
+      db.getAuditLogByEntity(AuditEntry::EntityType::RESULT, "RES_EXP_AUD_1");
+  ASSERT_FALSE(entries1.empty());
+  ASSERT_EQ(entries1[0]->getAction(), AuditEntry::ActionType::UPDATE);
+  ASSERT_EQ(entries1[0]->getDetails(),
+            "Export: test_export_audit.csv; Anzahl: 2");
+
+  auto entries2 =
+      db.getAuditLogByEntity(AuditEntry::EntityType::RESULT, "RES_EXP_AUD_2");
+  ASSERT_FALSE(entries2.empty());
+  ASSERT_EQ(entries2[0]->getAction(), AuditEntry::ActionType::UPDATE);
+  ASSERT_EQ(entries2[0]->getDetails(),
+            "Export: test_export_audit.csv; Anzahl: 2");
+
+  std::remove(exportPath.c_str());
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
 bool test_database_UpdateResultWithAudit_StoresUpdatedFields() {
   std::string dbPath = uniqueDbPath();
   Database db(dbPath);
@@ -772,6 +908,10 @@ void registerDatabaseTests() {
                test_database_CreateTestResult_MissingFieldsRejected);
   registerTest("Database::ValidateResultLogsAudit",
                test_database_ValidateResultLogsAudit);
+  registerTest("Database::ExportValidatedResults_CsvOutput",
+               test_database_ExportValidatedResults_CsvOutput);
+  registerTest("Database::ExportValidatedResults_LogsAudit",
+               test_database_ExportValidatedResults_LogsAudit);
   registerTest("Database::UpdateResultWithAudit_StoresUpdatedFields",
                test_database_UpdateResultWithAudit_StoresUpdatedFields);
   registerTest("Database::UpdateResultWithAudit_LogsChanges",

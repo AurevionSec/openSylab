@@ -103,6 +103,9 @@ public:
   [[nodiscard]] bool updateTestResult(const core::TestResult &result);
   [[nodiscard]] bool updateTestResultWithAudit(const core::TestResult &result,
                                                const std::string &user);
+  [[nodiscard]] bool exportValidatedResultsToCsv(
+      const std::string &filePath, const std::string &user,
+      std::optional<int> orderId = std::nullopt);
   [[nodiscard]] bool validateTestResult(const std::string &resultId,
                                         const std::string &user);
   [[nodiscard]] bool deleteTestResult(int id);

@@ -85,6 +85,7 @@ void CliInterface::showMainMenu() {
   std::cout << "  [24] Ergebnis validieren\n";
   std::cout << "  [25] Ergebnisse zu Auftrag anzeigen\n";
   std::cout << "  [26] Ergebnisse aus CSV importieren\n";
+  std::cout << "  [27] Ergebnisse exportieren\n";
   std::cout << "\n  === Audit-Trail ===\n";
   std::cout << "  [30] Audit-Log anzeigen\n";
   std::cout << "  [31] Audit für Entität anzeigen\n";
@@ -171,6 +172,9 @@ void CliInterface::showMainMenu() {
     break;
   case 26:
     handleImportResultsCsv();
+    break;
+  case 27:
+    handleExportResults();
     break;
   // Audit-Trail
   case 30:
@@ -1776,6 +1780,69 @@ void CliInterface::handleImportResultsCsv() {
     if (!importer.getLastError().empty()) {
       std::cout << "  Fehler: " << importer.getLastError() << "\n";
     }
+  }
+
+  waitForEnter();
+}
+
+void CliInterface::handleExportResults() {
+  clearScreen();
+  printSeparator();
+  std::cout << "        ERGEBNISSE EXPORTIEREN\n";
+  printSeparator();
+  std::cout << "\n";
+
+  std::string orderInput =
+      readInput("Auftrags-ID (optional, Enter = alle)");
+  if (!running_)
+    return;
+
+  std::optional<int> orderId;
+  orderInput = trim(orderInput);
+  if (!isEmpty(orderInput)) {
+    try {
+      int parsed = std::stoi(orderInput);
+      if (parsed <= 0) {
+        throw std::invalid_argument("invalid");
+      }
+      orderId = parsed;
+    } catch (const std::exception &) {
+      std::cout << "\n✗ Ungültige Auftrags-ID.\n";
+      waitForEnter();
+      return;
+    }
+  }
+
+  std::cout << "\nExportformat:\n";
+  std::cout << "  [1] CSV\n";
+
+  int format = readInteger("Ihre Wahl");
+  if (!running_)
+    return;
+  if (format != 1) {
+    std::cout << "\n✗ Ungültiges Format.\n";
+    waitForEnter();
+    return;
+  }
+
+  std::string filePath = readInput("Export-Dateipfad");
+  if (!running_)
+    return;
+  filePath = trim(filePath);
+  if (isEmpty(filePath)) {
+    std::cout << "\n✗ Bitte geben Sie einen Dateipfad an.\n";
+    waitForEnter();
+    return;
+  }
+
+  const std::string actor =
+      currentUser_ ? currentUser_->getUsername() : std::string("system");
+
+  if (database_->exportValidatedResultsToCsv(filePath, actor, orderId)) {
+    std::cout << "\n✓ Export erfolgreich!\n";
+  } else {
+    std::cout << "\n✗ Fehler beim Export:\n";
+    std::cout << "  " << database_->getLastError() << "\n";
   }
 
   waitForEnter();
