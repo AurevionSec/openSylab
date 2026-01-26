@@ -1922,6 +1922,23 @@ void Database::logResultAction(core::AuditEntry::ActionType action,
   (void)logAudit(entry);
 }
 
+void Database::logResultRetryImport(const std::vector<std::string> &resultIds,
+                                    const std::string &user,
+                                    const std::string &filePath) {
+  if (resultIds.empty()) {
+    return;
+  }
+
+  const std::string actor = user.empty() ? "system" : user;
+  const std::string details = "Retry-Import: " + filePath + "; Anzahl: " +
+                              std::to_string(resultIds.size());
+
+  for (const auto &resultId : resultIds) {
+    logResultAction(core::AuditEntry::ActionType::UPDATE, resultId, actor,
+                    details);
+  }
+}
+
 // ============================================================================
 // User-Operationen
 // ============================================================================

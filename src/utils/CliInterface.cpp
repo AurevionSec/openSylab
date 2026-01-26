@@ -1767,20 +1767,113 @@ void CliInterface::handleImportResultsCsv() {
     return;
   }
 
-  std::cout << "\nStarte Import von: " << filePath << "\n\n";
-
-  CsvResultImport importer(database_);
-  int stored = importer.importAndStore(filePath);
-
-  if (stored > 0) {
-    std::cout << "\n✓ " << stored << " Ergebnisse erfolgreich in Datenbank "
-              << "gespeichert.\n";
-  } else if (importer.getImportedCount() == 0) {
-    std::cout << "\n✗ Keine Ergebnisse importiert.\n";
-    if (!importer.getLastError().empty()) {
-      std::cout << "  Fehler: " << importer.getLastError() << "\n";
+  auto buildRetryPath = [](const std::string &path) {
+    std::string retryPath = path;
+    const std::string suffix = ".csv";
+    size_t pos = retryPath.rfind(suffix);
+    if (pos != std::string::npos && pos == retryPath.size() - suffix.size()) {
+      retryPath.insert(pos, "_retry");
+    } else {
+      retryPath += "_retry.csv";
     }
-  }
+    return retryPath;
+  };
+
+  std::string currentPath = filePath;
+  bool retryImport = false;
+
+  do {
+    std::cout << "\nStarte Import von: " << currentPath << "\n\n";
+
+    CsvResultImport importer(database_);
+    auto results = importer.importResults(currentPath);
+    std::vector<CsvResultImport::FailedRecord> dbFailedRecords;
+    const bool isRetryAttempt = (currentPath != filePath);
+
+    if (results.empty()) {
+      std::cout << "\n✗ Keine Ergebnisse importiert: "
+                << importer.getLastError() << "\n";
+    } else {
+      int stored = 0;
+      int failed = 0;
+      std::vector<std::string> storedResultIds;
+
+      for (const auto &result : results) {
+        if (database_->createTestResult(result)) {
+          stored++;
+          storedResultIds.push_back(result.getResultId());
+        } else {
+          failed++;
+          const std::string error = database_->getLastError();
+          dbFailedRecords.push_back({-1, result.getResultId() + "," +
+                                             std::to_string(result.getOrderId()) +
+                                             "," + result.getTestParameter() +
+                                             "," + result.getValue() + "," +
+                                             result.getUnit() + "," +
+                                             std::to_string(result.getReferenceLow()) +
+                                             "," +
+                                             std::to_string(result.getReferenceHigh()) +
+                                             "," + result.getMeasuredBy(),
+                                     error});
+        }
+      }
+
+      if (isRetryAttempt && !storedResultIds.empty()) {
+        const std::string actor =
+            currentUser_ ? currentUser_->getUsername() : std::string("system");
+        database_->logResultRetryImport(storedResultIds, actor, currentPath);
+      }
+
+      std::cout << "\n✓ " << stored << " Ergebnisse erfolgreich in Datenbank "
+                << "gespeichert.\n";
+
+      if (failed > 0) {
+        std::cout << "\n✗ " << failed
+                  << " Ergebnisse konnten nicht importiert werden.\n";
+      }
+    }
+
+    if (importer.getErrorCount() > 0 || !dbFailedRecords.empty()) {
+      if (importer.getErrorCount() > 0) {
+        std::cout << "\n✗ CSV-Fehler (" << importer.getErrorCount()
+                  << " Zeilen):\n";
+        for (const auto &failed : importer.getFailedRecords()) {
+          std::cout << "  - Zeile " << failed.recordNumber << ": "
+                    << failed.error << " (\"" << failed.record << "\")\n";
+        }
+      }
+
+      if (!dbFailedRecords.empty()) {
+        std::cout << "\n✗ DB-Fehler (" << dbFailedRecords.size()
+                  << " Zeilen):\n";
+        for (const auto &failed : dbFailedRecords) {
+          std::cout << "  - " << failed.error << " (\"" << failed.record
+                    << "\")\n";
+        }
+      }
+
+      std::string retryPath = buildRetryPath(currentPath);
+      if (importer.writeRetryCsv(retryPath, dbFailedRecords)) {
+        std::cout << "\n✓ Retry-Datei erstellt: " << retryPath << "\n";
+        std::cout << "  Tipp: Datei korrigieren und erneut importieren.\n";
+
+        std::string choice = readInput("Retry-Datei jetzt importieren? (y/n)");
+        if (!running_)
+          return;
+
+        if (!choice.empty() &&
+            (choice[0] == 'y' || choice[0] == 'Y')) {
+          currentPath = retryPath;
+          retryImport = true;
+          continue;
+        }
+      } else {
+        std::cout << "\n✗ Konnte Retry-Datei nicht schreiben.\n";
+      }
+    }
+
+    retryImport = false;
+  } while (retryImport);
 
   waitForEnter();
 }

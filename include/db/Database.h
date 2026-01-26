@@ -128,6 +128,9 @@ public:
   void logResultAction(core::AuditEntry::ActionType action,
                        const std::string &resultId, const std::string &user,
                        const std::string &details = "");
+  void logResultRetryImport(const std::vector<std::string> &resultIds,
+                            const std::string &user,
+                            const std::string &filePath);
 
   // User-Operationen (CRUD)
   [[nodiscard]] bool createUser(const core::User &user);

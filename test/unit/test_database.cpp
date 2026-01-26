@@ -533,6 +533,52 @@ bool test_database_ValidateResultLogsAudit() {
   return true;
 }
 
+bool test_database_LogResultRetryImportAudit() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  Sample sample("RES_RETRY", "P307");
+  ASSERT_TRUE(db.createSample(sample));
+
+  Order order("ORD_RES_RETRY", "RES_RETRY", "PCR");
+  ASSERT_TRUE(db.createOrder(order));
+
+  auto storedOrder = db.getOrderByOrderId("ORD_RES_RETRY");
+  ASSERT_NOT_NULL(storedOrder);
+  int orderDbId = storedOrder->getId();
+
+  TestResult r1("RES_RETRY_1", orderDbId, "PCR");
+  r1.setValue("1.0");
+  r1.setUnit("mg/L");
+  r1.setStatus(TestResult::Status::ENTERED);
+  r1.setFlag(r1.evaluateFlag());
+  ASSERT_TRUE(db.createTestResult(r1));
+
+  TestResult r2("RES_RETRY_2", orderDbId, "PCR");
+  r2.setValue("1.1");
+  r2.setUnit("mg/L");
+  r2.setStatus(TestResult::Status::ENTERED);
+  r2.setFlag(r2.evaluateFlag());
+  ASSERT_TRUE(db.createTestResult(r2));
+
+  std::vector<std::string> resultIds = {"RES_RETRY_1", "RES_RETRY_2"};
+  db.logResultRetryImport(resultIds, "tester", "retry_results.csv");
+
+  auto entries =
+      db.getAuditLogByEntity(AuditEntry::EntityType::RESULT, "RES_RETRY_1");
+  ASSERT_FALSE(entries.empty());
+  ASSERT_EQ(entries[0]->getAction(), AuditEntry::ActionType::UPDATE);
+  ASSERT_EQ(entries[0]->getUser(), "tester");
+  ASSERT_EQ(entries[0]->getDetails(),
+            "Retry-Import: retry_results.csv; Anzahl: 2");
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
 bool test_database_ExportValidatedResults_CsvOutput() {
   std::string dbPath = uniqueDbPath();
   Database db(dbPath);
@@ -908,6 +954,8 @@ void registerDatabaseTests() {
                test_database_CreateTestResult_MissingFieldsRejected);
   registerTest("Database::ValidateResultLogsAudit",
                test_database_ValidateResultLogsAudit);
+  registerTest("Database::LogResultRetryImportAudit",
+               test_database_LogResultRetryImportAudit);
   registerTest("Database::ExportValidatedResults_CsvOutput",
                test_database_ExportValidatedResults_CsvOutput);
   registerTest("Database::ExportValidatedResults_LogsAudit",

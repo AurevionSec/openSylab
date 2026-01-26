@@ -254,6 +254,41 @@ bool test_csvresultimport_ImportEmptyFile() {
   return true;
 }
 
+bool test_csvresultimport_WriteRetryCsvForFailedRows() {
+  auto db = createTestDatabase();
+
+  std::string csvContent = "result_id,order_id,test_parameter,value\n"
+                           "R_BAD,abc,Glucose,95\n";
+
+  std::string filename = createTempCsv(csvContent);
+
+  CsvResultImport importer(db);
+  auto results = importer.importResults(filename);
+
+  ASSERT_EQ(results.size(), 0);
+  ASSERT_EQ(importer.getErrorCount(), 1);
+
+  std::string retryFile = "test_results_retry.csv";
+  ASSERT_TRUE(importer.writeRetryCsv(retryFile));
+
+  std::ifstream input(retryFile);
+  ASSERT_TRUE(input.is_open());
+  std::string header;
+  std::getline(input, header);
+  ASSERT_EQ(header,
+            "result_id,order_id,test_parameter,value,unit,ref_low,ref_high,"
+            "measured_by");
+
+  std::string row;
+  std::getline(input, row);
+  ASSERT_EQ(row, "R_BAD,abc,Glucose,95");
+
+  input.close();
+  deleteTempFile(filename);
+  deleteTempFile(retryFile);
+  return true;
+}
+
 void registerCsvResultImportTests() {
   registerTest("CsvResultImport::ImportValidCsv",
                test_csvresultimport_ImportValidCsv);
@@ -275,4 +310,6 @@ void registerCsvResultImportTests() {
                test_csvresultimport_ImportAndStore);
   registerTest("CsvResultImport::ImportEmptyFile",
                test_csvresultimport_ImportEmptyFile);
+  registerTest("CsvResultImport::WriteRetryCsvForFailedRows",
+               test_csvresultimport_WriteRetryCsvForFailedRows);
 }
