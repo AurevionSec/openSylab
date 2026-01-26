@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.15)
 
 # Projektdefinition
 project(OpenSylab
-    VERSION 0.1.0
+    VERSION 0.2.0
     DESCRIPTION "Open Source Laboratory Information Management System (LIMS)"
     LANGUAGES CXX
 )
@@ -54,6 +54,10 @@ endif()
 # Quellcode-Dateien sammeln
 set(CORE_SOURCES
     src/core/Sample.cpp
+    src/core/Order.cpp
+    src/core/TestResult.cpp
+    src/core/AuditEntry.cpp
+    src/core/User.cpp
 )
 
 set(DB_SOURCES
@@ -62,6 +66,7 @@ set(DB_SOURCES
 
 set(UTILS_SOURCES
     src/utils/CsvImport.cpp
+    src/utils/CsvResultImport.cpp
     src/utils/CliInterface.cpp
 )
 

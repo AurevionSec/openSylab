@@ -2,6 +2,86 @@
 
 Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert.
 
+## [0.2.0] - 2026-01-02
+
+### Neue Features
+
+#### 🆕 Auftragsverwaltung (Order-Modul)
+- **Order-Datenmodell** mit Status-Workflow:
+  - Status: REQUESTED → IN_PROGRESS → COMPLETED → VALIDATED → CANCELLED
+  - Priorität: NORMAL, URGENT, EMERGENCY
+  - Verknüpfung zu Proben via sampleId
+- **CRUD-Operationen** für Orders in Database
+- **CLI-Integration**: Menüpunkte 20-26 für Order-Verwaltung
+- **Dateien**:
+  - `include/core/Order.h` - Order-Datenmodell
+  - `src/core/Order.cpp` - Implementierung
+  - `test/unit/test_order.cpp` - Unit-Tests (8 Tests)
+
+#### 🆕 Ergebniseingabe (TestResult-Modul)
+- **TestResult-Datenmodell** mit Validierungs-Workflow:
+  - Status: PENDING → REVIEWED → VALIDATED → REJECTED → AMENDED
+  - Flags: NORMAL, ABNORMAL, CRITICAL, INCONCLUSIVE
+  - Referenzbereiche (minValue, maxValue) mit automatischer Flag-Berechnung
+- **CRUD-Operationen** für TestResults in Database
+- **CLI-Integration**: Menüpunkte 30-36 für Ergebnis-Verwaltung
+- **Dateien**:
+  - `include/core/TestResult.h` - TestResult-Datenmodell
+  - `src/core/TestResult.cpp` - Implementierung
+  - `test/unit/test_testresult.cpp` - Unit-Tests (10 Tests)
+
+#### 🆕 Gerätedatenschnittstelle (CSV-Ergebnisimport)
+- **CsvResultImport-Klasse** für Laborgerätedaten:
+  - Import von Analysegeräte-Ergebnissen im CSV-Format
+  - Automatische Flag-Berechnung basierend auf Referenzbereichen
+  - Verknüpfung mit bestehenden Orders
+- **Format**: `order_id,parameter,value,unit,min_value,max_value`
+- **Fehlertolerantes Parsing** mit detaillierter Statistik
+- **Dateien**:
+  - `include/utils/CsvResultImport.h` - Header
+  - `src/utils/CsvResultImport.cpp` - Implementierung
+  - `test/unit/test_csvresultimport.cpp` - Unit-Tests (5 Tests)
+
+#### 🆕 Audit-Trail (rudimentär)
+- **AuditEntry-Datenmodell** für lückenlose Protokollierung:
+  - EntityType: SAMPLE, ORDER, RESULT, USER, SYSTEM
+  - ActionType: CREATE, UPDATE, DELETE, VIEW, VALIDATE, LOGIN, LOGOUT
+  - Zeitstempel, Benutzer, Details
+- **Automatisches Logging** bei allen CRUD-Operationen
+- **CLI-Integration**: Menüpunkte 50-51 für Audit-Anzeige
+- **Dateien**:
+  - `include/core/AuditEntry.h` - AuditEntry-Datenmodell
+  - `src/core/AuditEntry.cpp` - Implementierung
+
+#### 🆕 Benutzer-Authentifizierung
+- **User-Datenmodell** mit Rollen-System:
+  - Rollen: ADMIN, OPERATOR, VIEWER
+  - Aktiv/Inaktiv-Status
+  - Passwort-Hashing (DJB2 mit Salt)
+- **Authentifizierung** mit Login/Logout
+- **Berechtigungsprüfung** im CLI:
+  - Admin: Vollzugriff inkl. Benutzerverwaltung
+  - Operator: Erstellen, Bearbeiten, Löschen
+  - Viewer: Nur Lesezugriff
+- **CLI-Integration**: Menüpunkte 40-46 für Benutzerverwaltung
+- **Dateien**:
+  - `include/core/User.h` - User-Datenmodell
+  - `src/core/User.cpp` - Implementierung
+
+### Kritische Bugfixes
+
+#### 🔴 HIGH - SQLite Foreign Key Enforcement
+- **Problem**: SQLite Foreign Keys waren definiert aber nicht aktiviert
+- **Lösung**: `PRAGMA foreign_keys = ON` nach Datenbankverbindung
+- **Datei**: `src/db/Database.cpp`
+
+### Verbesserungen
+
+- **Test-Suite erweitert**: Von 18 auf 62 Tests
+- **CLI um 26 neue Menüpunkte** erweitert
+- **Datenbank-Schema** um 4 neue Tabellen erweitert (orders, test_results, audit_log, users)
+- **Namespace-Struktur** beibehalten (opensylab::core, opensylab::db, opensylab::utils)
+
 ## [0.1.1] - 2025-11-25
 
 ### Kritische Bugfixes

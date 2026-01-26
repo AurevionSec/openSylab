@@ -1,10 +1,13 @@
-# Tests für OpenSylab v0.1
+# Tests für OpenSylab v0.2
 
 # Sammle alle Test-Quellen
 set(TEST_SOURCES
     unit/test_sample.cpp
+    unit/test_order.cpp
+    unit/test_testresult.cpp
     unit/test_database.cpp
     unit/test_csvimport.cpp
+    unit/test_csvresultimport.cpp
     unit/test_runner.cpp
 )
 
@@ -22,8 +25,13 @@ target_link_libraries(opensylab_tests PRIVATE SQLite::SQLite3)
 # Quellcode-Dateien die getestet werden sollen
 target_sources(opensylab_tests PRIVATE
     ${PROJECT_SOURCE_DIR}/src/core/Sample.cpp
+    ${PROJECT_SOURCE_DIR}/src/core/Order.cpp
+    ${PROJECT_SOURCE_DIR}/src/core/TestResult.cpp
+    ${PROJECT_SOURCE_DIR}/src/core/AuditEntry.cpp
+    ${PROJECT_SOURCE_DIR}/src/core/User.cpp
     ${PROJECT_SOURCE_DIR}/src/db/Database.cpp
     ${PROJECT_SOURCE_DIR}/src/utils/CsvImport.cpp
+    ${PROJECT_SOURCE_DIR}/src/utils/CsvResultImport.cpp
 )
 
 # Test hinzufügen

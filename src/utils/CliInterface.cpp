@@ -1,514 +1,2429 @@
 #include "utils/CliInterface.h"
 #include "utils/CsvImport.h"
-#include <iostream>
+#include "utils/CsvResultImport.h"
+#include <ctime>
 #include <iomanip>
+#include <iostream>
 #include <limits>
+#include <optional>
+#include <sstream>
 #include <vector>
 
 namespace opensylab {
 namespace utils {
 
 CliInterface::CliInterface(std::shared_ptr<db::Database> database)
-    : database_(database)
-    , running_(false)
-{
-}
+    : database_(database), running_(false), currentUser_(nullptr) {}
 
 void CliInterface::run() {
-    running_ = true;
-    showWelcome();
+  running_ = true;
+  showWelcome();
 
-    while (running_) {
-        showMainMenu();
-    }
+  while (running_) {
+    showMainMenu();
+  }
 }
 
 void CliInterface::showWelcome() {
-    clearScreen();
-    printSeparator();
-    std::cout << "\n";
-    std::cout << "  ██████╗ ██████╗ ███████╗███╗   ██╗███████╗██╗   ██╗██╗      █████╗ ██████╗ \n";
-    std::cout << " ██╔═══██╗██╔══██╗██╔════╝████╗  ██║██╔════╝╚██╗ ██╔╝██║     ██╔══██╗██╔══██╗\n";
-    std::cout << " ██║   ██║██████╔╝█████╗  ██╔██╗ ██║███████╗ ╚████╔╝ ██║     ███████║██████╔╝\n";
-    std::cout << " ██║   ██║██╔═══╝ ██╔══╝  ██║╚██╗██║╚════██║  ╚██╔╝  ██║     ██╔══██║██╔══██╗\n";
-    std::cout << " ╚██████╔╝██║     ███████╗██║ ╚████║███████║   ██║   ███████╗██║  ██║██████╔╝\n";
-    std::cout << "  ╚═════╝ ╚═╝     ╚══════╝╚═╝  ╚═══╝╚══════╝   ╚═╝   ╚══════╝╚═╝  ╚═╝╚═════╝ \n";
-    std::cout << "\n";
-    std::cout << "                     Labor Information Management System\n";
-    std::cout << "                              Version 0.1.1\n";
-    std::cout << "\n";
-    printSeparator();
-    std::cout << "\nWillkommen bei OpenSylab - Ihr Open Source LIMS\n";
-    std::cout << "Entwickelt für kleine medizinische Diagnostiklabore\n";
-    printSeparator();
-    waitForEnter();
+  clearScreen();
+  printSeparator();
+  std::cout << "\n";
+  std::cout << "  ██████╗ ██████╗ ███████╗███╗   ██╗███████╗██╗   ██╗██╗      "
+               "█████╗ ██████╗ \n";
+  std::cout << " ██╔═══██╗██╔══██╗██╔════╝████╗  ██║██╔════╝╚██╗ ██╔╝██║     "
+               "██╔══██╗██╔══██╗\n";
+  std::cout << " ██║   ██║██████╔╝█████╗  ██╔██╗ ██║███████╗ ╚████╔╝ ██║     "
+               "███████║██████╔╝\n";
+  std::cout << " ██║   ██║██╔═══╝ ██╔══╝  ██║╚██╗██║╚════██║  ╚██╔╝  ██║     "
+               "██╔══██║██╔══██╗\n";
+  std::cout << " ╚██████╔╝██║     ███████╗██║ ╚████║███████║   ██║   "
+               "███████╗██║  ██║██████╔╝\n";
+  std::cout << "  ╚═════╝ ╚═╝     ╚══════╝╚═╝  ╚═══╝╚══════╝   ╚═╝   "
+               "╚══════╝╚═╝  ╚═╝╚═════╝ \n";
+  std::cout << "\n";
+  std::cout << "                     Labor Information Management System\n";
+  std::cout << "                              Version 0.2.0\n";
+  std::cout << "\n";
+  printSeparator();
+  std::cout << "\nWillkommen bei OpenSylab - Ihr Open Source LIMS\n";
+  std::cout << "Entwickelt für kleine medizinische Diagnostiklabore\n";
+  printSeparator();
+  waitForEnter();
 }
 
 void CliInterface::showMainMenu() {
-    clearScreen();
-    printSeparator();
-    std::cout << "                        HAUPTMENÜ\n";
-    printSeparator();
-    std::cout << "\n";
-    std::cout << "  [1] Neue Probe erfassen\n";
-    std::cout << "  [2] Alle Proben anzeigen\n";
-    std::cout << "  [3] Probe suchen\n";
-    std::cout << "  [4] Probe aktualisieren\n";
-    std::cout << "  [5] Probe löschen\n";
-    std::cout << "  [6] CSV-Import\n";
-    std::cout << "  [7] Statistiken\n";
-    std::cout << "  [0] Beenden\n";
-    std::cout << "\n";
-    printSeparator();
-
-    int choice = readInteger("Ihre Wahl");
-    if (!running_) return;  // EOF - Programm beenden
-
-    switch (choice) {
-        case 1: handleNewSample(); break;
-        case 2: handleListSamples(); break;
-        case 3: handleSearchSample(); break;
-        case 4: handleUpdateSample(); break;
-        case 5: handleDeleteSample(); break;
-        case 6: handleImportCsv(); break;
-        case 7: handleStatistics(); break;
-        case 0: handleExit(); break;
-        default:
-            std::cout << "\nUngültige Auswahl. Bitte versuchen Sie es erneut.\n";
-            waitForEnter();
+  clearScreen();
+  printSeparator();
+  std::cout << "                        HAUPTMENÜ\n";
+  printSeparator();
+  std::cout << "  Angemeldet als: " << getCurrentUsername();
+  if (isLoggedIn()) {
+    std::cout << " (" << currentUser_->getRoleString() << ")";
+  }
+  std::cout << "\n";
+  printSeparator();
+  std::cout << "\n";
+  std::cout << "  === Probenverwaltung ===\n";
+  std::cout << "  [1] Neue Probe erfassen\n";
+  std::cout << "  [2] Alle Proben anzeigen\n";
+  std::cout << "  [3] Probe suchen\n";
+  std::cout << "  [4] Probe aktualisieren\n";
+  std::cout << "  [5] Probe löschen\n";
+  std::cout << "  [6] CSV-Import\n";
+  std::cout << "\n  === Auftragsverwaltung ===\n";
+  std::cout << "  [10] Neuer Auftrag\n";
+  std::cout << "  [11] Alle Aufträge anzeigen\n";
+  std::cout << "  [12] Auftrag suchen\n";
+  std::cout << "  [13] Auftrag aktualisieren\n";
+  std::cout << "  [14] Auftrag löschen\n";
+  std::cout << "  [15] Aufträge zu Probe anzeigen\n";
+  std::cout << "\n  === Ergebnisverwaltung ===\n";
+  std::cout << "  [20] Neues Ergebnis erfassen\n";
+  std::cout << "  [21] Alle Ergebnisse anzeigen\n";
+  std::cout << "  [22] Ergebnis suchen\n";
+  std::cout << "  [23] Ergebnis aktualisieren\n";
+  std::cout << "  [24] Ergebnis validieren\n";
+  std::cout << "  [25] Ergebnisse zu Auftrag anzeigen\n";
+  std::cout << "  [26] Ergebnisse aus CSV importieren\n";
+  std::cout << "\n  === Audit-Trail ===\n";
+  std::cout << "  [30] Audit-Log anzeigen\n";
+  std::cout << "  [31] Audit für Entität anzeigen\n";
+  std::cout << "\n  === Benutzerverwaltung ===\n";
+  if (!isLoggedIn()) {
+    std::cout << "  [40] Anmelden\n";
+  } else {
+    std::cout << "  [41] Abmelden\n";
+    std::cout << "  [42] Passwort ändern\n";
+    if (isAdmin()) {
+      std::cout << "  [43] Benutzer anlegen\n";
+      std::cout << "  [44] Benutzer anzeigen\n";
+      std::cout << "  [45] Benutzer bearbeiten\n";
+      std::cout << "  [46] Benutzer löschen\n";
     }
+  }
+  std::cout << "\n  === System ===\n";
+  std::cout << "  [7] Statistiken\n";
+  std::cout << "  [0] Beenden\n";
+  std::cout << "\n";
+  printSeparator();
+
+  int choice = readInteger("Ihre Wahl");
+  if (!running_)
+    return; // EOF - Programm beenden
+
+  switch (choice) {
+  // Probenverwaltung
+  case 1:
+    handleNewSample();
+    break;
+  case 2:
+    handleListSamples();
+    break;
+  case 3:
+    handleSearchSample();
+    break;
+  case 4:
+    handleUpdateSample();
+    break;
+  case 5:
+    handleDeleteSample();
+    break;
+  case 6:
+    handleImportCsv();
+    break;
+  // Auftragsverwaltung
+  case 10:
+    handleNewOrder();
+    break;
+  case 11:
+    handleListOrders();
+    break;
+  case 12:
+    handleSearchOrder();
+    break;
+  case 13:
+    handleUpdateOrder();
+    break;
+  case 14:
+    handleDeleteOrder();
+    break;
+  case 15:
+    handleOrdersForSample();
+    break;
+  // Ergebnisverwaltung
+  case 20:
+    handleNewResult();
+    break;
+  case 21:
+    handleListResults();
+    break;
+  case 22:
+    handleSearchResult();
+    break;
+  case 23:
+    handleUpdateResult();
+    break;
+  case 24:
+    handleValidateResult();
+    break;
+  case 25:
+    handleResultsForOrder();
+    break;
+  case 26:
+    handleImportResultsCsv();
+    break;
+  // Audit-Trail
+  case 30:
+    handleShowAuditLog();
+    break;
+  case 31:
+    handleAuditForEntity();
+    break;
+  // Benutzerverwaltung
+  case 40:
+    handleLogin();
+    break;
+  case 41:
+    handleLogout();
+    break;
+  case 42:
+    handleChangePassword();
+    break;
+  case 43:
+    handleCreateUser();
+    break;
+  case 44:
+    handleListUsers();
+    break;
+  case 45:
+    handleUpdateUser();
+    break;
+  case 46:
+    handleDeleteUser();
+    break;
+  // System
+  case 7:
+    handleStatistics();
+    break;
+  case 0:
+    handleExit();
+    break;
+  default:
+    std::cout << "\nUngültige Auswahl. Bitte versuchen Sie es erneut.\n";
+    waitForEnter();
+  }
 }
 
 void CliInterface::handleNewSample() {
-    clearScreen();
-    printSeparator();
-    std::cout << "               NEUE PROBE ERFASSEN\n";
-    printSeparator();
-    std::cout << "\n";
+  clearScreen();
+  printSeparator();
+  std::cout << "               NEUE PROBE ERFASSEN\n";
+  printSeparator();
+  std::cout << "\n";
 
-    // Pflichtfelder mit Validierung einlesen
-    std::string sampleId = readValidatedInput("Proben-ID (Barcode)", "Proben-ID");
-    if (!running_) return;  // EOF
+  // Pflichtfelder mit Validierung einlesen
+  std::string sampleId = readValidatedInput("Proben-ID (Barcode)", "Proben-ID");
+  if (!running_)
+    return; // EOF
 
-    std::string patientId = readValidatedInput("Patienten-ID", "Patienten-ID");
-    if (!running_) return;  // EOF
+  std::string patientId = readValidatedInput("Patienten-ID", "Patienten-ID");
+  if (!running_)
+    return; // EOF
 
-    // Optionale Felder
-    std::string patientName = readInput("Patientenname (optional)");
-    if (!running_) return;  // EOF
-    patientName = trim(patientName);
+  // Optionale Felder
+  std::string patientName = readInput("Patientenname (optional)");
+  if (!running_)
+    return; // EOF
+  patientName = trim(patientName);
 
-    std::string description = readInput("Beschreibung (optional)");
-    if (!running_) return;  // EOF
-    description = trim(description);
+  std::string description = readInput("Beschreibung (optional)");
+  if (!running_)
+    return; // EOF
+  description = trim(description);
 
-    core::Sample sample(sampleId, patientId);
-    sample.setPatientName(patientName);
-    sample.setDescription(description);
+  core::Sample sample(sampleId, patientId);
+  sample.setPatientName(patientName);
+  sample.setDescription(description);
 
-    if (database_->createSample(sample)) {
-        std::cout << "\n✓ Probe erfolgreich erfasst!\n";
-    } else {
-        std::cout << "\n✗ Fehler beim Erfassen der Probe: "
-                 << database_->getLastError() << "\n";
-    }
+  if (database_->createSample(sample)) {
+    std::cout << "\n✓ Probe erfolgreich erfasst!\n";
+  } else {
+    std::cout << "\n✗ Fehler beim Erfassen der Probe: "
+              << database_->getLastError() << "\n";
+  }
 
-    waitForEnter();
+  waitForEnter();
 }
 
 void CliInterface::handleListSamples() {
-    clearScreen();
-    printSeparator();
-    std::cout << "                ALLE PROBEN\n";
-    printSeparator();
-    std::cout << "\n";
+  clearScreen();
+  printSeparator();
+  std::cout << "                ALLE PROBEN\n";
+  printSeparator();
+  std::cout << "\n";
 
-    auto samples = database_->getAllSamples();
+  db::Database::SampleFilter filter;
+  bool useFilter = false;
 
-    // Fehlerprüfung ZUERST
-    if (database_->hasError()) {
-        std::cout << "✗ Fehler beim Abrufen der Proben:\n";
-        std::cout << "  " << database_->getLastError() << "\n";
-    } else if (samples.empty()) {
-        std::cout << "ℹ Keine Proben in der Datenbank.\n";
-    } else {
-        std::cout << std::left
-                 << std::setw(5) << "ID"
-                 << std::setw(15) << "Proben-ID"
-                 << std::setw(15) << "Patienten-ID"
-                 << std::setw(25) << "Name"
-                 << std::setw(15) << "Status" << "\n";
-        printSeparator();
+  std::string useFilterInput = readInput("Filter anwenden? (j/n)");
+  if (!running_)
+    return;
+  useFilterInput = trim(useFilterInput);
+  if (!useFilterInput.empty() &&
+      (useFilterInput == "j" || useFilterInput == "ja" ||
+       useFilterInput == "y" || useFilterInput == "yes")) {
+    useFilter = true;
+  }
 
-        for (const auto& sample : samples) {
-            std::cout << std::left
-                     << std::setw(5) << sample->getId()
-                     << std::setw(15) << sample->getSampleId()
-                     << std::setw(15) << sample->getPatientId()
-                     << std::setw(25) << sample->getPatientName()
-                     << std::setw(15) << sample->getStatusString() << "\n";
-        }
+  if (useFilter) {
+    std::string query =
+        readInput("Suchbegriff (Proben-/Patienten-ID oder Name, optional)");
+    if (!running_)
+      return;
+    query = trim(query);
+    filter.query = query;
 
-        std::cout << "\nGesamt: " << samples.size() << " Proben\n";
-    }
-
-    waitForEnter();
-}
-
-void CliInterface::handleSearchSample() {
-    clearScreen();
-    printSeparator();
-    std::cout << "              PROBE SUCHEN\n";
-    printSeparator();
-    std::cout << "\n";
-
-    std::string sampleId = readInput("Proben-ID (Barcode)");
-    if (!running_) return;  // EOF
-    sampleId = trim(sampleId);
-
-    // Validierung: Leere Eingabe abfangen
-    if (isEmpty(sampleId)) {
-        std::cout << "\n✗ Bitte geben Sie eine Proben-ID ein.\n";
-        waitForEnter();
-        return;
-    }
-
-    auto sample = database_->getSampleByBarcode(sampleId);
-
-    if (sample) {
-        printSeparator();
-        std::cout << "\nProbe gefunden:\n\n";
-        std::cout << "  ID:                " << sample->getId() << "\n";
-        std::cout << "  Proben-ID:         " << sample->getSampleId() << "\n";
-        std::cout << "  Patienten-ID:      " << sample->getPatientId() << "\n";
-        std::cout << "  Patientenname:     " << sample->getPatientName() << "\n";
-        std::cout << "  Beschreibung:      " << sample->getDescription() << "\n";
-        std::cout << "  Status:            " << sample->getStatusString() << "\n";
-
-        std::time_t regDate = sample->getRegistrationDate();
-        std::cout << "  Registriert am:    " << std::ctime(&regDate);
-
-        printSeparator();
-    } else {
-        std::cout << "\n✗ Probe nicht gefunden: " << database_->getLastError() << "\n";
-    }
-
-    waitForEnter();
-}
-
-void CliInterface::handleUpdateSample() {
-    clearScreen();
-    printSeparator();
-    std::cout << "            PROBE AKTUALISIEREN\n";
-    printSeparator();
-    std::cout << "\n";
-
-    int id = readInteger("Proben-ID (numerisch)");
-    if (!running_) return;  // EOF
-
-    auto sample = database_->getSample(id);
-
-    if (!sample) {
-        std::cout << "\n✗ Probe nicht gefunden: " << database_->getLastError() << "\n";
-        waitForEnter();
-        return;
-    }
-
-    std::cout << "\nAktuelle Werte:\n";
-    std::cout << "  Status: " << sample->getStatusString() << "\n";
-    std::cout << "  Beschreibung: " << sample->getDescription() << "\n\n";
-
-    std::cout << "Status-Optionen:\n";
+    std::cout << "\nStatus-Filter:\n";
+    std::cout << "  [0] Alle\n";
     std::cout << "  [1] Erfasst\n";
     std::cout << "  [2] In Analyse\n";
     std::cout << "  [3] Analysiert\n";
     std::cout << "  [4] Validiert\n";
-    std::cout << "  [5] Archiviert\n\n";
-
-    int statusChoice = readInteger("Neuer Status (1-5)");
-    if (!running_) return;  // EOF
-
-    core::Sample::Status newStatus;
-    switch (statusChoice) {
-        case 1: newStatus = core::Sample::Status::REGISTERED; break;
-        case 2: newStatus = core::Sample::Status::IN_ANALYSIS; break;
-        case 3: newStatus = core::Sample::Status::ANALYZED; break;
-        case 4: newStatus = core::Sample::Status::VALIDATED; break;
-        case 5: newStatus = core::Sample::Status::ARCHIVED; break;
-        default:
-            std::cout << "\nUngültige Auswahl.\n";
-            waitForEnter();
-            return;
-    }
-
-    sample->setStatus(newStatus);
-
-    if (database_->updateSample(*sample)) {
-        std::cout << "\n✓ Probe erfolgreich aktualisiert!\n";
+    std::cout << "  [5] Archiviert\n";
+    std::string statusChoice = readInput("Status-Auswahl (0-5, optional)");
+    if (!running_)
+      return;
+    statusChoice = trim(statusChoice);
+    if (!statusChoice.empty() && statusChoice != "0") {
+      if (statusChoice == "1") {
+        filter.status = "Erfasst";
+      } else if (statusChoice == "2") {
+        filter.status = "In Analyse";
+      } else if (statusChoice == "3") {
+        filter.status = "Analysiert";
+      } else if (statusChoice == "4") {
+        filter.status = "Validiert";
+      } else if (statusChoice == "5") {
+        filter.status = "Archiviert";
+      } else {
+        std::cout << "\n✗ Ungültige Status-Auswahl.\n";
+        waitForEnter();
+        return;
+      }
     } else {
-        std::cout << "\n✗ Fehler beim Aktualisieren: "
-                 << database_->getLastError() << "\n";
+      filter.excludeArchived = true;
     }
 
+    std::string fromDateInput =
+        readInput("Von-Datum (YYYY-MM-DD, optional)");
+    if (!running_)
+      return;
+    fromDateInput = trim(fromDateInput);
+    if (!fromDateInput.empty()) {
+      std::time_t fromDate;
+      if (!parseDate(fromDateInput, fromDate)) {
+        std::cout << "\n✗ Ungültiges Von-Datum.\n";
+        waitForEnter();
+        return;
+      }
+      filter.fromDate = fromDate;
+    }
+
+    std::string toDateInput = readInput("Bis-Datum (YYYY-MM-DD, optional)");
+    if (!running_)
+      return;
+    toDateInput = trim(toDateInput);
+    if (!toDateInput.empty()) {
+      std::time_t toDate;
+      if (!parseDate(toDateInput, toDate)) {
+        std::cout << "\n✗ Ungültiges Bis-Datum.\n";
+        waitForEnter();
+        return;
+      }
+      filter.toDate = toDate + (24 * 60 * 60 - 1);
+    }
+
+    if (filter.fromDate.has_value() && filter.toDate.has_value() &&
+        filter.fromDate.value() > filter.toDate.value()) {
+      std::cout << "\n✗ Von-Datum darf nicht nach dem Bis-Datum liegen.\n";
+      waitForEnter();
+      return;
+    }
+  }
+
+  auto printSamples = [&](const std::string &title,
+                          const std::vector<std::unique_ptr<core::Sample>>
+                              &samplesToPrint) {
+    std::cout << "\n" << title << "\n";
+    printSeparator();
+    if (database_->hasError()) {
+      std::cout << "✗ Fehler beim Abrufen der Proben:\n";
+      std::cout << "  " << database_->getLastError() << "\n";
+      return;
+    }
+    if (samplesToPrint.empty()) {
+      std::cout << "ℹ Keine Proben in der Datenbank.\n";
+      return;
+    }
+
+    std::cout << std::left << std::setw(5) << "ID" << std::setw(15)
+              << "Proben-ID" << std::setw(15) << "Patienten-ID" << std::setw(25)
+              << "Name" << std::setw(15) << "Status" << "\n";
+    printSeparator();
+
+    for (const auto &sample : samplesToPrint) {
+      std::cout << std::left << std::setw(5) << sample->getId() << std::setw(15)
+                << sample->getSampleId() << std::setw(15)
+                << sample->getPatientId() << std::setw(25)
+                << sample->getPatientName() << std::setw(15)
+                << sample->getStatusString() << "\n";
+    }
+
+    std::cout << "\nGesamt: " << samplesToPrint.size() << " Proben\n";
+  };
+
+  if (!useFilter) {
+    filter.excludeArchived = true;
+  }
+
+  bool hasCriteria = !filter.query.empty() || !filter.status.empty() ||
+                     filter.fromDate.has_value() || filter.toDate.has_value();
+  auto samples = database_->getSamplesByFilter(filter);
+
+  printSamples(hasCriteria ? "Suchergebnisse" : "Alle Proben", samples);
+
+  if (useFilter && hasCriteria) {
+    std::string resetInput =
+        readInput("\nFilter zuruecksetzen und alle Proben anzeigen? (j/n)");
+    if (!running_)
+      return;
+    resetInput = trim(resetInput);
+    if (!resetInput.empty() &&
+        (resetInput == "j" || resetInput == "ja" || resetInput == "y" ||
+         resetInput == "yes")) {
+      database_->clearError();
+      db::Database::SampleFilter resetFilter;
+      resetFilter.excludeArchived = true;
+      auto allSamples = database_->getSamplesByFilter(resetFilter);
+      printSamples("Alle Proben", allSamples);
+    }
+  }
+
+  waitForEnter();
+}
+
+void CliInterface::handleSearchSample() {
+  clearScreen();
+  printSeparator();
+  std::cout << "              PROBE SUCHEN\n";
+  printSeparator();
+  std::cout << "\n";
+
+  std::string sampleId = readInput("Proben-ID (Barcode)");
+  if (!running_)
+    return; // EOF
+  sampleId = trim(sampleId);
+
+  // Validierung: Leere Eingabe abfangen
+  if (isEmpty(sampleId)) {
+    std::cout << "\n✗ Bitte geben Sie eine Proben-ID ein.\n";
     waitForEnter();
+    return;
+  }
+
+  auto sample = database_->getSampleByBarcode(sampleId);
+
+  if (sample) {
+    printSeparator();
+    std::cout << "\nProbe gefunden:\n\n";
+    std::cout << "  ID:                " << sample->getId() << "\n";
+    std::cout << "  Proben-ID:         " << sample->getSampleId() << "\n";
+    std::cout << "  Patienten-ID:      " << sample->getPatientId() << "\n";
+    std::cout << "  Patientenname:     " << sample->getPatientName() << "\n";
+    std::cout << "  Beschreibung:      " << sample->getDescription() << "\n";
+    std::cout << "  Status:            " << sample->getStatusString() << "\n";
+
+    std::time_t regDate = sample->getRegistrationDate();
+    std::cout << "  Registriert am:    " << std::ctime(&regDate);
+
+    printSeparator();
+  } else {
+    std::cout << "\n✗ Probe nicht gefunden: " << database_->getLastError()
+              << "\n";
+  }
+
+  waitForEnter();
+}
+
+void CliInterface::handleUpdateSample() {
+  clearScreen();
+  printSeparator();
+  std::cout << "            PROBE AKTUALISIEREN\n";
+  printSeparator();
+  std::cout << "\n";
+
+  if (!canEdit()) {
+    std::cout << "✗ Keine Berechtigung. Bitte anmelden.\n";
+    waitForEnter();
+    return;
+  }
+
+  int id = readInteger("Proben-ID (numerisch)");
+  if (!running_)
+    return; // EOF
+
+  auto sample = database_->getSample(id);
+
+  if (!sample) {
+    std::cout << "\n✗ Probe nicht gefunden: " << database_->getLastError()
+              << "\n";
+    waitForEnter();
+    return;
+  }
+
+  std::cout << "\nAktuelle Werte:\n";
+  core::Sample::Status oldStatusEnum = sample->getStatus();
+  std::string oldStatus = sample->getStatusString();
+  std::cout << "  Status: " << oldStatus << "\n";
+  std::cout << "  Beschreibung: " << sample->getDescription() << "\n\n";
+
+  std::cout << "Status-Optionen:\n";
+  std::cout << "  [1] Erfasst\n";
+  std::cout << "  [2] In Analyse\n";
+  std::cout << "  [3] Analysiert\n";
+  std::cout << "  [4] Validiert\n";
+  std::cout << "  [5] Archiviert\n\n";
+
+  int statusChoice = readInteger("Neuer Status (1-5)");
+  if (!running_)
+    return; // EOF
+
+  core::Sample::Status newStatus;
+  switch (statusChoice) {
+  case 1:
+    newStatus = core::Sample::Status::REGISTERED;
+    break;
+  case 2:
+    newStatus = core::Sample::Status::IN_ANALYSIS;
+    break;
+  case 3:
+    newStatus = core::Sample::Status::ANALYZED;
+    break;
+  case 4:
+    newStatus = core::Sample::Status::VALIDATED;
+    break;
+  case 5:
+    newStatus = core::Sample::Status::ARCHIVED;
+    break;
+  default:
+    std::cout << "\nUngültige Auswahl.\n";
+    waitForEnter();
+    return;
+  }
+
+  if (newStatus == oldStatusEnum) {
+    std::cout << "\nℹ Status bleibt unverändert.\n";
+    waitForEnter();
+    return;
+  }
+
+  sample->setStatus(newStatus);
+
+  if (database_->updateSample(*sample)) {
+    std::cout << "\n✓ Probe erfolgreich aktualisiert!\n";
+    database_->logSampleAction(core::AuditEntry::ActionType::UPDATE,
+                               sample->getSampleId(), getCurrentUsername(),
+                               "Status: " + oldStatus + " -> " +
+                                   sample->getStatusString());
+    if (database_->hasError()) {
+      std::cout << "\n✗ Audit-Log konnte nicht geschrieben werden: "
+                << database_->getLastError() << "\n";
+      database_->clearError();
+    }
+  } else {
+    std::cout << "\n✗ Fehler beim Aktualisieren: " << database_->getLastError()
+              << "\n";
+  }
+
+  waitForEnter();
 }
 
 void CliInterface::handleDeleteSample() {
-    clearScreen();
-    printSeparator();
-    std::cout << "              PROBE LÖSCHEN\n";
-    printSeparator();
-    std::cout << "\n";
+  clearScreen();
+  printSeparator();
+  std::cout << "              PROBE LÖSCHEN\n";
+  printSeparator();
+  std::cout << "\n";
 
-    int id = readInteger("Proben-ID (numerisch)");
-    if (!running_) return;  // EOF
+  int id = readInteger("Proben-ID (numerisch)");
+  if (!running_)
+    return; // EOF
 
-    auto sample = database_->getSample(id);
+  auto sample = database_->getSample(id);
 
-    if (!sample) {
-        std::cout << "\n✗ Probe nicht gefunden: " << database_->getLastError() << "\n";
-        waitForEnter();
-        return;
-    }
-
-    std::cout << "\nProbe:\n";
-    std::cout << "  Proben-ID: " << sample->getSampleId() << "\n";
-    std::cout << "  Patient: " << sample->getPatientName() << "\n\n";
-
-    std::string confirm = readInput("Wirklich löschen? (ja/nein)");
-    if (!running_) return;  // EOF
-
-    // Case-insensitive Prüfung
-    std::string confirmLower = confirm;
-    for (char& c : confirmLower) {
-        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    }
-
-    if (confirmLower == "ja" || confirmLower == "j" || confirmLower == "yes" || confirmLower == "y") {
-        if (database_->deleteSample(id)) {
-            std::cout << "\n✓ Probe erfolgreich gelöscht!\n";
-        } else {
-            std::cout << "\n✗ Fehler beim Löschen: "
-                     << database_->getLastError() << "\n";
-        }
-    } else {
-        std::cout << "\nLöschen abgebrochen.\n";
-    }
-
+  if (!sample) {
+    std::cout << "\n✗ Probe nicht gefunden: " << database_->getLastError()
+              << "\n";
     waitForEnter();
+    return;
+  }
+
+  std::cout << "\nProbe:\n";
+  std::cout << "  Proben-ID: " << sample->getSampleId() << "\n";
+  std::cout << "  Patient: " << sample->getPatientName() << "\n\n";
+
+  std::cout << "Aktion wählen:\n";
+  std::cout << "  [1] Archivieren\n";
+  std::cout << "  [2] Löschen\n";
+  std::cout << "  [0] Abbrechen\n\n";
+
+  int actionChoice = readInteger("Ihre Wahl");
+  if (!running_)
+    return; // EOF
+
+  if (actionChoice == 0) {
+    std::cout << "\nAbgebrochen.\n";
+    waitForEnter();
+    return;
+  }
+
+  std::string confirmPrompt =
+      actionChoice == 1 ? "Wirklich archivieren? (ja/nein)"
+                        : "Wirklich löschen? (ja/nein)";
+  std::string confirm = readInput(confirmPrompt);
+  if (!running_)
+    return; // EOF
+
+  std::string confirmLower = confirm;
+  for (char &c : confirmLower) {
+    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  }
+
+  if (confirmLower != "ja" && confirmLower != "j" && confirmLower != "yes" &&
+      confirmLower != "y") {
+    std::cout << "\nAktion abgebrochen.\n";
+    waitForEnter();
+    return;
+  }
+
+  std::string sampleId = sample->getSampleId();
+  std::string oldStatus = sample->getStatusString();
+
+  if (actionChoice == 1) {
+    sample->setStatus(core::Sample::Status::ARCHIVED);
+    if (database_->updateSample(*sample)) {
+      std::cout << "\n✓ Probe erfolgreich archiviert!\n";
+      database_->logSampleAction(
+          core::AuditEntry::ActionType::UPDATE, sampleId,
+          getCurrentUsername(),
+          "Status: " + oldStatus + " -> " + sample->getStatusString());
+      if (database_->hasError()) {
+        std::cout << "\n✗ Audit-Log konnte nicht geschrieben werden: "
+                  << database_->getLastError() << "\n";
+        database_->clearError();
+      }
+    } else {
+      std::cout << "\n✗ Fehler beim Archivieren: " << database_->getLastError()
+                << "\n";
+    }
+  } else if (actionChoice == 2) {
+    if (database_->deleteSample(id)) {
+      std::cout << "\n✓ Probe erfolgreich gelöscht!\n";
+      database_->logSampleAction(core::AuditEntry::ActionType::DELETE, sampleId,
+                                 getCurrentUsername(), "Sample gelöscht");
+      if (database_->hasError()) {
+        std::cout << "\n✗ Audit-Log konnte nicht geschrieben werden: "
+                  << database_->getLastError() << "\n";
+        database_->clearError();
+      }
+    } else {
+      std::cout << "\n✗ Fehler beim Löschen: " << database_->getLastError()
+                << "\n";
+    }
+  } else {
+    std::cout << "\nUngültige Auswahl.\n";
+  }
+
+  waitForEnter();
 }
 
 void CliInterface::handleImportCsv() {
-    clearScreen();
-    printSeparator();
-    std::cout << "                CSV-IMPORT\n";
-    printSeparator();
-    std::cout << "\n";
+  clearScreen();
+  printSeparator();
+  std::cout << "                CSV-IMPORT\n";
+  printSeparator();
+  std::cout << "\n";
 
-    std::string filePath = readInput("CSV-Datei Pfad");
-    if (!running_) return;  // EOF
+  std::string filePath = readInput("CSV-Datei Pfad");
+  if (!running_)
+    return; // EOF
 
+  auto buildRetryPath = [](const std::string &path) {
+    std::string retryPath = path;
+    const std::string suffix = ".csv";
+    size_t pos = retryPath.rfind(suffix);
+    if (pos != std::string::npos && pos == retryPath.size() - suffix.size()) {
+      retryPath.insert(pos, "_retry");
+    } else {
+      retryPath += "_retry.csv";
+    }
+    return retryPath;
+  };
+
+  std::string currentPath = filePath;
+  bool retryImport = false;
+
+  do {
     CsvImport importer;
-    auto samples = importer.importSamples(filePath);
+    auto samples = importer.importSamples(currentPath);
+    const auto &importedRecords = importer.getImportedRecords();
+    std::vector<CsvImport::FailedRecord> dbFailedRecords;
 
     if (samples.empty()) {
-        std::cout << "\n✗ Keine Proben importiert: "
-                 << importer.getLastError() << "\n";
+      std::cout << "\n✗ Keine Proben importiert: " << importer.getLastError()
+                << "\n";
     } else {
-        size_t imported = 0;
-        size_t failed = 0;
-        std::vector<std::string> failedSamples;
+      size_t imported = 0;
+      size_t failed = 0;
+      std::vector<std::string> failedSamples;
 
-        for (const auto& sample : samples) {
-            if (database_->createSample(sample)) {
-                imported++;
-            } else {
-                failed++;
-                failedSamples.push_back(sample.getSampleId() + ": " + database_->getLastError());
-            }
+      for (const auto &record : importedRecords) {
+        if (database_->createSample(record.sample)) {
+          imported++;
+        } else {
+          failed++;
+          const std::string error = database_->getLastError();
+          failedSamples.push_back("Zeile " + std::to_string(record.recordNumber) +
+                                  " (" + record.sample.getSampleId() + "): " +
+                                  error);
+          dbFailedRecords.push_back(
+              {record.recordNumber, record.record, error});
         }
+      }
 
-        std::cout << "\n✓ " << imported << " von " << samples.size()
-                 << " Proben erfolgreich importiert!\n";
+      std::cout << "\n✓ " << imported << " von " << importedRecords.size()
+                << " Proben erfolgreich importiert!\n";
 
-        // Fehlgeschlagene Importe anzeigen
-        if (failed > 0) {
-            std::cout << "\n✗ " << failed << " Proben konnten nicht importiert werden:\n";
-            for (const auto& msg : failedSamples) {
-                std::cout << "  - " << msg << "\n";
-            }
+      // Fehlgeschlagene Importe anzeigen
+      if (failed > 0) {
+        std::cout << "\n✗ " << failed
+                  << " Proben konnten nicht importiert werden:\n";
+        for (const auto &msg : failedSamples) {
+          std::cout << "  - " << msg << "\n";
         }
+      }
     }
 
-    waitForEnter();
+    if (importer.getFailedCount() > 0 || !dbFailedRecords.empty()) {
+      if (importer.getFailedCount() > 0) {
+        std::cout << "\n✗ CSV-Fehler (" << importer.getFailedCount()
+                  << " Zeilen):\n";
+        for (const auto &failed : importer.getFailedRecords()) {
+          std::cout << "  - Zeile " << failed.recordNumber << ": "
+                    << failed.error << " (\"" << failed.record << "\")\n";
+        }
+      }
+
+      if (!dbFailedRecords.empty()) {
+        std::cout << "\n✗ DB-Fehler (" << dbFailedRecords.size()
+                  << " Zeilen):\n";
+        for (const auto &failed : dbFailedRecords) {
+          std::cout << "  - Zeile " << failed.recordNumber << ": "
+                    << failed.error << " (\"" << failed.record << "\")\n";
+        }
+      }
+
+      std::string retryPath = buildRetryPath(currentPath);
+      if (importer.writeRetryCsv(retryPath, dbFailedRecords)) {
+        std::cout << "\n✓ Retry-Datei erstellt: " << retryPath << "\n";
+        std::cout << "  Tipp: Datei korrigieren und erneut importieren.\n";
+
+        std::string choice = readInput("Retry-Datei jetzt importieren? (y/n)");
+        if (!running_)
+          return;
+
+        if (!choice.empty() &&
+            (choice[0] == 'y' || choice[0] == 'Y')) {
+          currentPath = retryPath;
+          retryImport = true;
+          continue;
+        }
+      } else {
+        std::cout << "\n✗ Konnte Retry-Datei nicht schreiben.\n";
+      }
+    }
+
+    retryImport = false;
+  } while (retryImport);
+
+  waitForEnter();
 }
 
 void CliInterface::handleStatistics() {
-    clearScreen();
-    printSeparator();
-    std::cout << "               STATISTIKEN\n";
-    printSeparator();
-    std::cout << "\n";
+  clearScreen();
+  printSeparator();
+  std::cout << "               STATISTIKEN\n";
+  printSeparator();
+  std::cout << "\n";
 
-    auto samples = database_->getAllSamples();
+  auto samples = database_->getAllSamples();
 
-    // Fehlerprüfung
-    if (database_->hasError()) {
-        std::cout << "✗ Fehler beim Abrufen der Statistiken:\n";
-        std::cout << "  " << database_->getLastError() << "\n";
-        waitForEnter();
-        return;
-    }
-
-    size_t total = samples.size();
-    size_t registered = 0, inAnalysis = 0, analyzed = 0, validated = 0, archived = 0;
-
-    for (const auto& sample : samples) {
-        switch (sample->getStatus()) {
-            case core::Sample::Status::REGISTERED: registered++; break;
-            case core::Sample::Status::IN_ANALYSIS: inAnalysis++; break;
-            case core::Sample::Status::ANALYZED: analyzed++; break;
-            case core::Sample::Status::VALIDATED: validated++; break;
-            case core::Sample::Status::ARCHIVED: archived++; break;
-        }
-    }
-
-    std::cout << "Gesamtanzahl Proben:     " << total << "\n\n";
-    std::cout << "Nach Status:\n";
-    std::cout << "  Erfasst:               " << registered << "\n";
-    std::cout << "  In Analyse:            " << inAnalysis << "\n";
-    std::cout << "  Analysiert:            " << analyzed << "\n";
-    std::cout << "  Validiert:             " << validated << "\n";
-    std::cout << "  Archiviert:            " << archived << "\n";
-
-    printSeparator();
+  // Fehlerprüfung
+  if (database_->hasError()) {
+    std::cout << "✗ Fehler beim Abrufen der Statistiken:\n";
+    std::cout << "  " << database_->getLastError() << "\n";
     waitForEnter();
+    return;
+  }
+
+  size_t total = samples.size();
+  size_t registered = 0, inAnalysis = 0, analyzed = 0, validated = 0,
+         archived = 0;
+
+  for (const auto &sample : samples) {
+    switch (sample->getStatus()) {
+    case core::Sample::Status::REGISTERED:
+      registered++;
+      break;
+    case core::Sample::Status::IN_ANALYSIS:
+      inAnalysis++;
+      break;
+    case core::Sample::Status::ANALYZED:
+      analyzed++;
+      break;
+    case core::Sample::Status::VALIDATED:
+      validated++;
+      break;
+    case core::Sample::Status::ARCHIVED:
+      archived++;
+      break;
+    }
+  }
+
+  std::cout << "Gesamtanzahl Proben:     " << total << "\n\n";
+  std::cout << "Nach Status:\n";
+  std::cout << "  Erfasst:               " << registered << "\n";
+  std::cout << "  In Analyse:            " << inAnalysis << "\n";
+  std::cout << "  Analysiert:            " << analyzed << "\n";
+  std::cout << "  Validiert:             " << validated << "\n";
+  std::cout << "  Archiviert:            " << archived << "\n";
+
+  printSeparator();
+  waitForEnter();
 }
 
 void CliInterface::handleExit() {
-    clearScreen();
-    printSeparator();
-    std::cout << "\nVielen Dank für die Nutzung von OpenSylab!\n";
-    std::cout << "Auf Wiedersehen.\n\n";
-    printSeparator();
-    running_ = false;
+  clearScreen();
+  printSeparator();
+  std::cout << "\nVielen Dank für die Nutzung von OpenSylab!\n";
+  std::cout << "Auf Wiedersehen.\n\n";
+  printSeparator();
+  running_ = false;
 }
 
-std::string CliInterface::readInput(const std::string& prompt) {
-    std::string input;
+std::string CliInterface::readInput(const std::string &prompt) {
+  std::string input;
+  std::cout << prompt << ": ";
+  std::getline(std::cin, input);
+
+  // EOF-Prüfung: Bei Ctrl+D/Ctrl+Z Programm beenden
+  if (std::cin.eof()) {
+    std::cout << "\n\nEingabe beendet (EOF). Programm wird beendet.\n";
+    running_ = false;
+  }
+
+  return input;
+}
+
+std::string CliInterface::readValidatedInput(const std::string &prompt,
+                                             const std::string &fieldName) {
+  std::string input;
+
+  while (true) {
     std::cout << prompt << ": ";
     std::getline(std::cin, input);
 
     // EOF-Prüfung: Bei Ctrl+D/Ctrl+Z Programm beenden
     if (std::cin.eof()) {
-        std::cout << "\n\nEingabe beendet (EOF). Programm wird beendet.\n";
-        running_ = false;
+      std::cout << "\n\nEingabe beendet (EOF). Programm wird beendet.\n";
+      running_ = false;
+      return "";
     }
 
-    return input;
+    // Whitespace trimmen
+    input = trim(input);
+
+    // Validierung
+    if (isEmpty(input)) {
+      std::cout << "✗ " << fieldName << " darf nicht leer sein!\n";
+      continue;
+    }
+
+    if (!isValidId(input)) {
+      std::cout << "✗ " << fieldName << " enthält ungültige Zeichen!\n";
+      std::cout << "  Erlaubt: Buchstaben, Zahlen, Bindestrich, Unterstrich\n";
+      continue;
+    }
+
+    break;
+  }
+
+  return input;
 }
 
-std::string CliInterface::readValidatedInput(const std::string& prompt, const std::string& fieldName) {
-    std::string input;
+int CliInterface::readInteger(const std::string &prompt) {
+  int value;
+  std::cout << prompt << ": ";
 
-    while (true) {
-        std::cout << prompt << ": ";
-        std::getline(std::cin, input);
-
-        // EOF-Prüfung: Bei Ctrl+D/Ctrl+Z Programm beenden
-        if (std::cin.eof()) {
-            std::cout << "\n\nEingabe beendet (EOF). Programm wird beendet.\n";
-            running_ = false;
-            return "";
-        }
-
-        // Whitespace trimmen
-        input = trim(input);
-
-        // Validierung
-        if (isEmpty(input)) {
-            std::cout << "✗ " << fieldName << " darf nicht leer sein!\n";
-            continue;
-        }
-
-        if (!isValidId(input)) {
-            std::cout << "✗ " << fieldName << " enthält ungültige Zeichen!\n";
-            std::cout << "  Erlaubt: Buchstaben, Zahlen, Bindestrich, Unterstrich\n";
-            continue;
-        }
-
-        break;
+  while (!(std::cin >> value)) {
+    // EOF-Prüfung: Bei Ctrl+D/Ctrl+Z Programm beenden
+    if (std::cin.eof()) {
+      std::cout << "\n\nEingabe beendet (EOF). Programm wird beendet.\n";
+      running_ = false;
+      return -1;
     }
 
-    return input;
-}
-
-int CliInterface::readInteger(const std::string& prompt) {
-    int value;
-    std::cout << prompt << ": ";
-
-    while (!(std::cin >> value)) {
-        // EOF-Prüfung: Bei Ctrl+D/Ctrl+Z Programm beenden
-        if (std::cin.eof()) {
-            std::cout << "\n\nEingabe beendet (EOF). Programm wird beendet.\n";
-            running_ = false;
-            return -1;
-        }
-
-        std::cin.clear();
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        std::cout << "Ungültige Eingabe. Bitte geben Sie eine Zahl ein.\n";
-        std::cout << prompt << ": ";
-    }
-
+    std::cin.clear();
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-    return value;
+    std::cout << "Ungültige Eingabe. Bitte geben Sie eine Zahl ein.\n";
+    std::cout << prompt << ": ";
+  }
+
+  std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+  return value;
 }
 
 void CliInterface::clearScreen() {
-    // ANSI Escape Codes - sicherer als system()
-    // \033[2J = Clear entire screen
-    // \033[H  = Move cursor to home position (0,0)
-    std::cout << "\033[2J\033[H" << std::flush;
+  // ANSI Escape Codes - sicherer als system()
+  // \033[2J = Clear entire screen
+  // \033[H  = Move cursor to home position (0,0)
+  std::cout << "\033[2J\033[H" << std::flush;
 }
 
 void CliInterface::waitForEnter() {
-    std::cout << "\nDrücken Sie Enter zum Fortfahren...";
-    std::cin.get();
+  std::cout << "\nDrücken Sie Enter zum Fortfahren...";
+  std::cin.get();
 }
 
 void CliInterface::printSeparator() {
-    std::cout << std::string(80, '=') << "\n";
+  std::cout << std::string(80, '=') << "\n";
+}
+
+// ============================================================================
+// Order-Handler
+// ============================================================================
+
+void CliInterface::handleNewOrder() {
+  clearScreen();
+  printSeparator();
+  std::cout << "              NEUER AUFTRAG\n";
+  printSeparator();
+  std::cout << "\n";
+
+  // Auftrags-ID
+  std::string orderId = readValidatedInput("Auftrags-ID", "Auftrags-ID");
+  if (!running_)
+    return;
+
+  // Proben-ID (muss existieren)
+  std::string sampleId = readValidatedInput("Proben-ID (Barcode)", "Proben-ID");
+  if (!running_)
+    return;
+
+  // Prüfen ob Probe existiert
+  auto sample = database_->getSampleByBarcode(sampleId);
+  if (!sample) {
+    std::cout << "\n✗ Probe nicht gefunden. Bitte zuerst Probe erfassen.\n";
+    waitForEnter();
+    return;
+  }
+
+  // Testtyp
+  std::string testType =
+      readValidatedInput("Testtyp (z.B. Blutbild)", "Testtyp");
+  if (!running_)
+    return;
+
+  // Gewünschtes Datum (YYYY-MM-DD)
+  std::time_t requestedDate = 0;
+  while (true) {
+    std::string dateInput = readInput("Gewünschtes Datum (YYYY-MM-DD)");
+    if (!running_)
+      return;
+    dateInput = trim(dateInput);
+    if (isEmpty(dateInput)) {
+      std::cout << "✗ Datum darf nicht leer sein!\n";
+      continue;
+    }
+    if (!parseDate(dateInput, requestedDate)) {
+      std::cout << "✗ Ungültiges Datum. Format: YYYY-MM-DD\n";
+      continue;
+    }
+    break;
+  }
+
+  // Priorität
+  std::cout << "\nPriorität:\n";
+  std::cout << "  [1] Normal\n";
+  std::cout << "  [2] Dringend\n";
+  std::cout << "  [3] Notfall\n\n";
+
+  int priorityChoice = readInteger("Priorität (1-3)");
+  if (!running_)
+    return;
+
+  core::Order::Priority priority;
+  switch (priorityChoice) {
+  case 1:
+    priority = core::Order::Priority::NORMAL;
+    break;
+  case 2:
+    priority = core::Order::Priority::URGENT;
+    break;
+  case 3:
+    priority = core::Order::Priority::EMERGENCY;
+    break;
+  default:
+    std::cout << "\nUngültige Auswahl. Verwende 'Normal'.\n";
+    priority = core::Order::Priority::NORMAL;
+  }
+
+  // Notizen (optional)
+  std::string notes = readInput("Notizen (optional)");
+  if (!running_)
+    return;
+  notes = trim(notes);
+
+  core::Order order(orderId, sampleId, testType);
+  order.setRequestedDate(requestedDate);
+  order.setPriority(priority);
+  order.setNotes(notes);
+
+  if (database_->createOrder(order)) {
+    std::cout << "\n✓ Auftrag erfolgreich erstellt!\n";
+  } else {
+    std::cout << "\n✗ Fehler beim Erstellen: " << database_->getLastError()
+              << "\n";
+  }
+
+  waitForEnter();
+}
+
+void CliInterface::handleListOrders() {
+  clearScreen();
+  printSeparator();
+  std::cout << "              ALLE AUFTRÄGE\n";
+  printSeparator();
+  std::cout << "\n";
+
+  std::cout << "Filter (optional):\n";
+  std::cout << "  Status:    (z.B. Angefordert, In Bearbeitung, Abgeschlossen,\n";
+  std::cout << "              Validiert, Storniert)\n";
+  std::cout << "  Proben-ID: (z.B. S001)\n";
+  std::cout << "  Priorität: (Normal, Dringend, Notfall)\n";
+  std::cout << "  [Enter] leer lassen = kein Filter\n\n";
+
+  std::string statusFilter = trim(readInput("Status-Filter"));
+  if (!running_)
+    return;
+  std::string sampleFilter = trim(readInput("Proben-ID-Filter"));
+  if (!running_)
+    return;
+  std::string priorityFilter = trim(readInput("Priorität-Filter"));
+  if (!running_)
+    return;
+
+  db::Database::OrderFilter filter;
+  filter.status = statusFilter;
+  filter.sampleId = sampleFilter;
+  filter.priority = priorityFilter;
+
+  auto orders = (statusFilter.empty() && sampleFilter.empty() &&
+                 priorityFilter.empty())
+                    ? database_->getAllOrders()
+                    : database_->getOrdersByFilter(filter);
+
+  if (database_->hasError()) {
+    std::cout << "✗ Fehler beim Abrufen der Aufträge:\n";
+    std::cout << "  " << database_->getLastError() << "\n";
+  } else if (orders.empty() &&
+             !(statusFilter.empty() && sampleFilter.empty() &&
+               priorityFilter.empty())) {
+    std::cout << "ℹ Keine passenden Aufträge für die Filter.\n";
+    std::string reset = readInput("Filter zurücksetzen? (y/n)");
+    if (!running_)
+      return;
+    if (!reset.empty() && (reset[0] == 'y' || reset[0] == 'Y')) {
+      orders = database_->getAllOrders();
+    }
+  } else if (orders.empty()) {
+    std::cout << "ℹ Keine Aufträge in der Datenbank.\n";
+  } else {
+    std::cout << std::left << std::setw(5) << "ID" << std::setw(12)
+              << "Auftrags-ID" << std::setw(12) << "Proben-ID" << std::setw(15)
+              << "Testtyp" << std::setw(14) << "Status" << std::setw(10)
+              << "Priorität" << "\n";
+    printSeparator();
+
+    for (const auto &order : orders) {
+      std::cout << std::left << std::setw(5) << order->getId() << std::setw(12)
+                << order->getOrderId() << std::setw(12) << order->getSampleId()
+                << std::setw(15) << order->getTestType() << std::setw(14)
+                << order->getStatusString() << std::setw(10)
+                << order->getPriorityString() << "\n";
+    }
+
+    std::cout << "\nGesamt: " << orders.size() << " Aufträge\n";
+  }
+
+  waitForEnter();
+}
+
+void CliInterface::handleSearchOrder() {
+  clearScreen();
+  printSeparator();
+  std::cout << "            AUFTRAG SUCHEN\n";
+  printSeparator();
+  std::cout << "\n";
+
+  std::string orderId = readInput("Auftrags-ID");
+  if (!running_)
+    return;
+  orderId = trim(orderId);
+
+  if (isEmpty(orderId)) {
+    std::cout << "\n✗ Bitte geben Sie eine Auftrags-ID ein.\n";
+    waitForEnter();
+    return;
+  }
+
+  auto order = database_->getOrderByOrderId(orderId);
+
+  if (order) {
+    printSeparator();
+    std::cout << "\nAuftrag gefunden:\n\n";
+    std::cout << "  ID:              " << order->getId() << "\n";
+    std::cout << "  Auftrags-ID:     " << order->getOrderId() << "\n";
+    std::cout << "  Proben-ID:       " << order->getSampleId() << "\n";
+    std::cout << "  Testtyp:         " << order->getTestType() << "\n";
+    std::cout << "  Status:          " << order->getStatusString() << "\n";
+    std::cout << "  Priorität:       " << order->getPriorityString() << "\n";
+    std::cout << "  Notizen:         " << order->getNotes() << "\n";
+
+    std::time_t reqDate = order->getRequestedDate();
+    std::cout << "  Angefordert am:  " << std::ctime(&reqDate);
+
+    if (order->getCompletedDate() > 0) {
+      std::time_t compDate = order->getCompletedDate();
+      std::cout << "  Abgeschlossen:   " << std::ctime(&compDate);
+    }
+
+    printSeparator();
+  } else {
+    std::cout << "\n✗ Auftrag nicht gefunden: " << database_->getLastError()
+              << "\n";
+  }
+
+  waitForEnter();
+}
+
+void CliInterface::handleUpdateOrder() {
+  clearScreen();
+  printSeparator();
+  std::cout << "          AUFTRAG AKTUALISIEREN\n";
+  printSeparator();
+  std::cout << "\n";
+
+  int id = readInteger("Auftrags-ID (numerisch)");
+  if (!running_)
+    return;
+
+  auto order = database_->getOrder(id);
+
+  if (!order) {
+    std::cout << "\n✗ Auftrag nicht gefunden: " << database_->getLastError()
+              << "\n";
+    waitForEnter();
+    return;
+  }
+
+  std::cout << "\nAktuelle Werte:\n";
+  std::cout << "  Testtyp:   " << order->getTestType() << "\n";
+  std::cout << "  Status:    " << order->getStatusString() << "\n";
+  std::cout << "  Priorität: " << order->getPriorityString() << "\n\n";
+
+  std::cout << "Status-Optionen:\n";
+  std::cout << "  [1] Angefordert\n";
+  std::cout << "  [2] In Bearbeitung\n";
+  std::cout << "  [3] Abgeschlossen\n";
+  std::cout << "  [4] Validiert\n";
+  std::cout << "  [5] Storniert\n\n";
+
+  int statusChoice = readInteger("Neuer Status (1-5)");
+  if (!running_)
+    return;
+
+  std::string oldStatus = order->getStatusString();
+  core::Order::Status newStatus;
+  switch (statusChoice) {
+  case 1:
+    newStatus = core::Order::Status::REQUESTED;
+    break;
+  case 2:
+    newStatus = core::Order::Status::IN_PROGRESS;
+    break;
+  case 3:
+    newStatus = core::Order::Status::COMPLETED;
+    order->setCompletedDate(std::time(nullptr));
+    break;
+  case 4:
+    newStatus = core::Order::Status::VALIDATED;
+    break;
+  case 5:
+    newStatus = core::Order::Status::CANCELLED;
+    break;
+  default:
+    std::cout << "\nUngültige Auswahl.\n";
+    waitForEnter();
+    return;
+  }
+
+  order->setStatus(newStatus);
+
+  if (database_->updateOrder(*order)) {
+    std::cout << "\n✓ Auftrag erfolgreich aktualisiert!\n";
+    std::string details =
+        "Status: " + oldStatus + " -> " + order->getStatusString();
+    database_->logOrderAction(core::AuditEntry::ActionType::UPDATE,
+                              order->getOrderId(), getCurrentUsername(),
+                              details);
+    if (database_->hasError()) {
+      std::cout << "\n✗ Audit-Log konnte nicht geschrieben werden: "
+                << database_->getLastError() << "\n";
+      database_->clearError();
+    }
+  } else {
+    std::cout << "\n✗ Fehler beim Aktualisieren: " << database_->getLastError()
+              << "\n";
+  }
+
+  waitForEnter();
+}
+
+void CliInterface::handleDeleteOrder() {
+  clearScreen();
+  printSeparator();
+  std::cout << "            AUFTRAG LÖSCHEN\n";
+  printSeparator();
+  std::cout << "\n";
+
+  int id = readInteger("Auftrags-ID (numerisch)");
+  if (!running_)
+    return;
+
+  auto order = database_->getOrder(id);
+
+  if (!order) {
+    std::cout << "\n✗ Auftrag nicht gefunden: " << database_->getLastError()
+              << "\n";
+    waitForEnter();
+    return;
+  }
+
+  std::cout << "\nAuftrag:\n";
+  std::cout << "  Auftrags-ID: " << order->getOrderId() << "\n";
+  std::cout << "  Testtyp: " << order->getTestType() << "\n";
+  std::cout << "  Status: " << order->getStatusString() << "\n\n";
+
+  std::string confirm = readInput("Auftrag wirklich stornieren? (ja/nein)");
+  if (!running_)
+    return;
+
+  std::string confirmLower = confirm;
+  for (char &c : confirmLower) {
+    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  }
+
+  if (confirmLower == "ja" || confirmLower == "j" || confirmLower == "yes" ||
+      confirmLower == "y") {
+    std::string oldStatus = order->getStatusString();
+    order->setStatus(core::Order::Status::CANCELLED);
+    if (database_->updateOrder(*order)) {
+      std::cout << "\n✓ Auftrag erfolgreich storniert!\n";
+      std::string details =
+          "Status: " + oldStatus + " -> " + order->getStatusString();
+      database_->logOrderAction(core::AuditEntry::ActionType::UPDATE,
+                                order->getOrderId(), getCurrentUsername(),
+                                details);
+      if (database_->hasError()) {
+        std::cout << "\n✗ Audit-Log konnte nicht geschrieben werden: "
+                  << database_->getLastError() << "\n";
+        database_->clearError();
+      }
+    } else {
+      std::cout << "\n✗ Fehler beim Stornieren: " << database_->getLastError()
+                << "\n";
+    }
+  } else {
+    std::cout << "\nStornieren abgebrochen.\n";
+  }
+
+  waitForEnter();
+}
+
+void CliInterface::handleOrdersForSample() {
+  clearScreen();
+  printSeparator();
+  std::cout << "        AUFTRÄGE ZU PROBE ANZEIGEN\n";
+  printSeparator();
+  std::cout << "\n";
+
+  std::string sampleId = readInput("Proben-ID (Barcode)");
+  if (!running_)
+    return;
+  sampleId = trim(sampleId);
+
+  if (isEmpty(sampleId)) {
+    std::cout << "\n✗ Bitte geben Sie eine Proben-ID ein.\n";
+    waitForEnter();
+    return;
+  }
+
+  // Prüfen ob Probe existiert
+  auto sample = database_->getSampleByBarcode(sampleId);
+  if (!sample) {
+    std::cout << "\n✗ Probe nicht gefunden.\n";
+    waitForEnter();
+    return;
+  }
+
+  auto orders = database_->getOrdersBySampleId(sampleId);
+
+  if (database_->hasError()) {
+    std::cout << "✗ Fehler beim Abrufen der Aufträge:\n";
+    std::cout << "  " << database_->getLastError() << "\n";
+  } else if (orders.empty()) {
+    std::cout << "\nℹ Keine Aufträge für diese Probe vorhanden.\n";
+  } else {
+    std::cout << "\nAufträge für Probe " << sampleId << ":\n\n";
+    std::cout << std::left << std::setw(5) << "ID" << std::setw(12)
+              << "Auftrags-ID" << std::setw(15) << "Testtyp" << std::setw(14)
+              << "Status" << std::setw(10) << "Priorität" << "\n";
+    printSeparator();
+
+    for (const auto &order : orders) {
+      std::cout << std::left << std::setw(5) << order->getId() << std::setw(12)
+                << order->getOrderId() << std::setw(15) << order->getTestType()
+                << std::setw(14) << order->getStatusString() << std::setw(10)
+                << order->getPriorityString() << "\n";
+    }
+
+    std::cout << "\nGesamt: " << orders.size() << " Aufträge\n";
+  }
+
+  waitForEnter();
+}
+
+// ============================================================================
+// TestResult-Menü-Aktionen
+// ============================================================================
+
+void CliInterface::handleNewResult() {
+  clearScreen();
+  printSeparator();
+  std::cout << "         NEUES ERGEBNIS ERFASSEN\n";
+  printSeparator();
+  std::cout << "\n";
+
+  // Auftrag-ID als Referenz
+  int orderId = readInteger("Auftrags-ID (Datenbank-ID)");
+  if (!running_)
+    return;
+
+  // Prüfen ob Auftrag existiert
+  auto order = database_->getOrder(orderId);
+  if (!order) {
+    std::cout << "\n✗ Auftrag mit ID " << orderId << " nicht gefunden.\n";
+    waitForEnter();
+    return;
+  }
+
+  std::cout << "Auftrag gefunden: " << order->getOrderId() << " - "
+            << order->getTestType() << "\n\n";
+
+  std::string resultId = readValidatedInput("Ergebnis-ID", "Ergebnis-ID");
+  if (!running_)
+    return;
+
+  std::string testParameter =
+      readValidatedInput("Testparameter (z.B. Glucose)", "Testparameter");
+  if (!running_)
+    return;
+
+  std::string value;
+  while (true) {
+    value = trim(readInput("Messwert"));
+    if (!running_)
+      return;
+    if (isEmpty(value)) {
+      std::cout << "✗ Messwert darf nicht leer sein!\n";
+      continue;
+    }
+    break;
+  }
+
+  std::string unit;
+  while (true) {
+    unit = trim(readInput("Einheit (z.B. mg/dL)"));
+    if (!running_)
+      return;
+    if (isEmpty(unit)) {
+      std::cout << "✗ Einheit darf nicht leer sein!\n";
+      continue;
+    }
+    break;
+  }
+
+  std::string referenceRange = readInput("Referenzbereich (z.B. 70-100)");
+  if (!running_)
+    return;
+  referenceRange = trim(referenceRange);
+
+  double referenceLow = 0.0;
+  double referenceHigh = 0.0;
+
+  while (true) {
+    std::string refLowStr =
+        trim(readInput("Unterer Referenzwert (numerisch, optional)"));
+    if (!running_)
+      return;
+    if (isEmpty(refLowStr)) {
+      referenceLow = 0.0;
+      break;
+    }
+    try {
+      referenceLow = std::stod(refLowStr);
+      break;
+    } catch (...) {
+      std::cout << "✗ Unterer Referenzwert muss numerisch sein!\n";
+    }
+  }
+
+  while (true) {
+    std::string refHighStr =
+        trim(readInput("Oberer Referenzwert (numerisch, optional)"));
+    if (!running_)
+      return;
+    if (isEmpty(refHighStr)) {
+      referenceHigh = 0.0;
+      break;
+    }
+    try {
+      referenceHigh = std::stod(refHighStr);
+      break;
+    } catch (...) {
+      std::cout << "✗ Oberer Referenzwert muss numerisch sein!\n";
+    }
+  }
+
+  std::string measuredBy = readInput("Gemessen von (Benutzer)");
+  if (!running_)
+    return;
+  measuredBy = trim(measuredBy);
+
+  std::string comment = readInput("Kommentar (optional)");
+  if (!running_)
+    return;
+  comment = trim(comment);
+
+  // TestResult erstellen
+  core::TestResult result(resultId, orderId, testParameter);
+  result.setValue(value);
+  result.setUnit(unit);
+  result.setReferenceRange(referenceRange);
+  result.setReferenceLow(referenceLow);
+  result.setReferenceHigh(referenceHigh);
+  result.setStatus(core::TestResult::Status::ENTERED);
+  result.setMeasuredDate(std::time(nullptr));
+  result.setMeasuredBy(measuredBy);
+  result.setComment(comment);
+
+  // Flag automatisch berechnen
+  result.setFlag(result.evaluateFlag());
+
+  if (database_->createTestResult(result)) {
+    std::cout << "\n✓ Ergebnis erfolgreich erfasst!\n";
+    std::cout << "  Flag: " << result.getFlagString() << "\n";
+  } else {
+    std::cout << "\n✗ Fehler beim Erfassen des Ergebnisses:\n";
+    std::cout << "  " << database_->getLastError() << "\n";
+  }
+
+  waitForEnter();
+}
+
+void CliInterface::handleListResults() {
+  clearScreen();
+  printSeparator();
+  std::cout << "            ALLE ERGEBNISSE\n";
+  printSeparator();
+  std::cout << "\n";
+
+  auto results = database_->getAllTestResults();
+
+  if (database_->hasError()) {
+    std::cout << "✗ Fehler beim Abrufen der Ergebnisse:\n";
+    std::cout << "  " << database_->getLastError() << "\n";
+  } else if (results.empty()) {
+    std::cout << "ℹ Keine Ergebnisse in der Datenbank vorhanden.\n";
+  } else {
+    std::cout << std::left << std::setw(5) << "ID" << std::setw(12)
+              << "Ergebnis-ID" << std::setw(10) << "Auftrag" << std::setw(15)
+              << "Parameter" << std::setw(10) << "Wert" << std::setw(8)
+              << "Einheit" << std::setw(12) << "Status" << std::setw(10)
+              << "Flag" << "\n";
+    printSeparator();
+
+    for (const auto &result : results) {
+      std::cout << std::left << std::setw(5) << result->getId() << std::setw(12)
+                << result->getResultId() << std::setw(10)
+                << result->getOrderId() << std::setw(15)
+                << result->getTestParameter() << std::setw(10)
+                << result->getValue() << std::setw(8) << result->getUnit()
+                << std::setw(12) << result->getStatusString() << std::setw(10)
+                << result->getFlagString() << "\n";
+    }
+
+    std::cout << "\nGesamt: " << results.size() << " Ergebnisse\n";
+  }
+
+  waitForEnter();
+}
+
+void CliInterface::handleSearchResult() {
+  clearScreen();
+  printSeparator();
+  std::cout << "           ERGEBNIS SUCHEN\n";
+  printSeparator();
+  std::cout << "\n";
+
+  std::string resultId = readInput("Ergebnis-ID");
+  if (!running_)
+    return;
+  resultId = trim(resultId);
+
+  if (isEmpty(resultId)) {
+    std::cout << "\n✗ Bitte geben Sie eine Ergebnis-ID ein.\n";
+    waitForEnter();
+    return;
+  }
+
+  auto result = database_->getTestResultByResultId(resultId);
+
+  if (database_->hasError() || !result) {
+    std::cout << "\n✗ Ergebnis nicht gefunden.\n";
+  } else {
+    std::cout << "\n✓ Ergebnis gefunden:\n";
+    printSeparator();
+    std::cout << "  ID:              " << result->getId() << "\n";
+    std::cout << "  Ergebnis-ID:     " << result->getResultId() << "\n";
+    std::cout << "  Auftrags-ID:     " << result->getOrderId() << "\n";
+    std::cout << "  Testparameter:   " << result->getTestParameter() << "\n";
+    std::cout << "  Messwert:        " << result->getValue() << " "
+              << result->getUnit() << "\n";
+    std::cout << "  Referenzbereich: " << result->getReferenceRange() << "\n";
+    std::cout << "  Ref. niedrig:    " << result->getReferenceLow() << "\n";
+    std::cout << "  Ref. hoch:       " << result->getReferenceHigh() << "\n";
+    std::cout << "  Status:          " << result->getStatusString() << "\n";
+    std::cout << "  Flag:            " << result->getFlagString() << "\n";
+    std::cout << "  Gemessen von:    " << result->getMeasuredBy() << "\n";
+    std::cout << "  Kommentar:       " << result->getComment() << "\n";
+  }
+
+  waitForEnter();
+}
+
+void CliInterface::handleUpdateResult() {
+  clearScreen();
+  printSeparator();
+  std::cout << "        ERGEBNIS AKTUALISIEREN\n";
+  printSeparator();
+  std::cout << "\n";
+
+  int id = readInteger("Ergebnis-ID (Datenbank-ID)");
+  if (!running_)
+    return;
+
+  auto result = database_->getTestResult(id);
+
+  if (!result) {
+    std::cout << "\n✗ Ergebnis nicht gefunden.\n";
+    waitForEnter();
+    return;
+  }
+
+  std::cout << "\nAktuelles Ergebnis: " << result->getResultId() << " - "
+            << result->getTestParameter() << "\n";
+  std::cout << "Aktueller Wert: " << result->getValue() << " "
+            << result->getUnit() << "\n";
+  std::cout << "\nNeue Werte eingeben (Enter = keine Änderung):\n\n";
+
+  std::string value = readInput("Neuer Messwert [" + result->getValue() + "]");
+  if (!running_)
+    return;
+  if (!isEmpty(value)) {
+    result->setValue(trim(value));
+  }
+
+  std::string unit = readInput("Neue Einheit [" + result->getUnit() + "]");
+  if (!running_)
+    return;
+  if (!isEmpty(unit)) {
+    result->setUnit(trim(unit));
+  }
+
+  std::string comment =
+      readInput("Neuer Kommentar [" + result->getComment() + "]");
+  if (!running_)
+    return;
+  if (!isEmpty(comment)) {
+    result->setComment(trim(comment));
+  }
+
+  // Flag neu berechnen
+  result->setFlag(result->evaluateFlag());
+
+  const std::string actor =
+      currentUser_ ? currentUser_->getUsername() : std::string("system");
+
+  if (database_->updateTestResultWithAudit(*result, actor)) {
+    std::cout << "\n✓ Ergebnis erfolgreich aktualisiert!\n";
+    std::cout << "  Neuer Flag: " << result->getFlagString() << "\n";
+  } else {
+    std::cout << "\n✗ Fehler beim Aktualisieren:\n";
+    std::cout << "  " << database_->getLastError() << "\n";
+  }
+
+  waitForEnter();
+}
+
+void CliInterface::handleValidateResult() {
+  clearScreen();
+  printSeparator();
+  std::cout << "        ERGEBNIS VALIDIEREN\n";
+  printSeparator();
+  std::cout << "\n";
+
+  int id = readInteger("Ergebnis-ID (Datenbank-ID)");
+  if (!running_)
+    return;
+
+  auto result = database_->getTestResult(id);
+
+  if (!result) {
+    std::cout << "\n✗ Ergebnis nicht gefunden.\n";
+    waitForEnter();
+    return;
+  }
+
+  std::cout << "\nErgebnis: " << result->getResultId() << "\n";
+  std::cout << "Parameter: " << result->getTestParameter() << "\n";
+  std::cout << "Wert: " << result->getValue() << " " << result->getUnit()
+            << "\n";
+  std::cout << "Flag: " << result->getFlagString() << "\n";
+  std::cout << "Aktueller Status: " << result->getStatusString() << "\n";
+
+  std::cout << "\nValidierungsoptionen:\n";
+  std::cout << "  [1] Validieren (Freigeben)\n";
+  std::cout << "  [2] Ablehnen\n";
+  std::cout << "  [3] Wiederholung anfordern\n";
+  std::cout << "  [0] Abbrechen\n";
+
+  int choice = readInteger("Ihre Wahl");
+  if (!running_)
+    return;
+
+  core::TestResult::Status newStatus = result->getStatus();
+  const std::string actor =
+      currentUser_ ? currentUser_->getUsername() : std::string("system");
+
+  switch (choice) {
+  case 1:
+    newStatus = core::TestResult::Status::VALIDATED;
+    break;
+  case 2:
+    newStatus = core::TestResult::Status::REJECTED;
+    break;
+  case 3:
+    newStatus = core::TestResult::Status::REPEATED;
+    break;
+  case 0:
+    std::cout << "\nAbgebrochen.\n";
+    waitForEnter();
+    return;
+  default:
+    std::cout << "\nUngültige Auswahl.\n";
+    waitForEnter();
+    return;
+  }
+
+  if (choice == 1) {
+    if (database_->validateTestResult(result->getResultId(), actor)) {
+      result->setStatus(core::TestResult::Status::VALIDATED);
+      std::cout << "\n✓ Status erfolgreich geändert auf: "
+                << result->getStatusString() << "\n";
+    } else {
+      std::cout << "\n✗ Fehler beim Aktualisieren:\n";
+      std::cout << "  " << database_->getLastError() << "\n";
+    }
+  } else {
+    result->setStatus(newStatus);
+    if (database_->updateTestResult(*result)) {
+      std::cout << "\n✓ Status erfolgreich geändert auf: "
+                << result->getStatusString() << "\n";
+    } else {
+      std::cout << "\n✗ Fehler beim Aktualisieren:\n";
+      std::cout << "  " << database_->getLastError() << "\n";
+    }
+  }
+
+  waitForEnter();
+}
+
+void CliInterface::handleResultsForOrder() {
+  clearScreen();
+  printSeparator();
+  std::cout << "      ERGEBNISSE ZU AUFTRAG ANZEIGEN\n";
+  printSeparator();
+  std::cout << "\n";
+
+  int orderId = readInteger("Auftrags-ID (Datenbank-ID)");
+  if (!running_)
+    return;
+
+  // Prüfen ob Auftrag existiert
+  auto order = database_->getOrder(orderId);
+  if (!order) {
+    std::cout << "\n✗ Auftrag nicht gefunden.\n";
+    waitForEnter();
+    return;
+  }
+
+  std::cout << "Auftrag: " << order->getOrderId() << " - "
+            << order->getTestType() << "\n\n";
+
+  auto results = database_->getTestResultsByOrderId(orderId);
+
+  if (database_->hasError()) {
+    std::cout << "✗ Fehler beim Abrufen der Ergebnisse:\n";
+    std::cout << "  " << database_->getLastError() << "\n";
+  } else if (results.empty()) {
+    std::cout << "ℹ Keine Ergebnisse für diesen Auftrag vorhanden.\n";
+  } else {
+    std::cout << std::left << std::setw(5) << "ID" << std::setw(12)
+              << "Ergebnis-ID" << std::setw(15) << "Parameter" << std::setw(10)
+              << "Wert" << std::setw(8) << "Einheit" << std::setw(12)
+              << "Status" << std::setw(10) << "Flag" << "\n";
+    printSeparator();
+
+    for (const auto &result : results) {
+      std::cout << std::left << std::setw(5) << result->getId() << std::setw(12)
+                << result->getResultId() << std::setw(15)
+                << result->getTestParameter() << std::setw(10)
+                << result->getValue() << std::setw(8) << result->getUnit()
+                << std::setw(12) << result->getStatusString() << std::setw(10)
+                << result->getFlagString() << "\n";
+    }
+
+    std::cout << "\nGesamt: " << results.size() << " Ergebnisse\n";
+  }
+
+  waitForEnter();
+}
+
+void CliInterface::handleImportResultsCsv() {
+  clearScreen();
+  printSeparator();
+  std::cout << "      CSV-ERGEBNISIMPORT\n";
+  printSeparator();
+  std::cout << "\n";
+
+  std::cout << "Erwartetes CSV-Format:\n";
+  std::cout << "result_id,order_id,test_parameter,value,unit,ref_low,ref_high,"
+               "measured_by\n\n";
+
+  std::string filePath = readInput("Pfad zur CSV-Datei");
+  if (!running_)
+    return;
+  filePath = trim(filePath);
+
+  if (isEmpty(filePath)) {
+    std::cout << "\n✗ Bitte geben Sie einen Dateipfad ein.\n";
+    waitForEnter();
+    return;
+  }
+
+  std::cout << "\nStarte Import von: " << filePath << "\n\n";
+
+  CsvResultImport importer(database_);
+  int stored = importer.importAndStore(filePath);
+
+  if (stored > 0) {
+    std::cout << "\n✓ " << stored << " Ergebnisse erfolgreich in Datenbank "
+              << "gespeichert.\n";
+  } else if (importer.getImportedCount() == 0) {
+    std::cout << "\n✗ Keine Ergebnisse importiert.\n";
+    if (!importer.getLastError().empty()) {
+      std::cout << "  Fehler: " << importer.getLastError() << "\n";
+    }
+  }
+
+  waitForEnter();
+}
+
+// ============================================================================
+// Audit-Trail-Handler
+// ============================================================================
+
+void CliInterface::handleShowAuditLog() {
+  clearScreen();
+  printSeparator();
+  std::cout << "              AUDIT-LOG\n";
+  printSeparator();
+  std::cout << "\n";
+
+  std::cout << "Anzahl der anzuzeigenden Einträge (Standard: 50): ";
+  std::string limitStr;
+  std::getline(std::cin, limitStr);
+
+  if (std::cin.eof()) {
+    running_ = false;
+    return;
+  }
+
+  int limit = 50;
+  if (!isEmpty(limitStr)) {
+    try {
+      limit = std::stoi(trim(limitStr));
+      if (limit <= 0)
+        limit = 50;
+    } catch (...) {
+      limit = 50;
+    }
+  }
+
+  auto entries = database_->getAuditLog(limit);
+
+  if (database_->hasError()) {
+    std::cout << "✗ Fehler beim Abrufen des Audit-Logs:\n";
+    std::cout << "  " << database_->getLastError() << "\n";
+  } else if (entries.empty()) {
+    std::cout << "ℹ Keine Audit-Einträge vorhanden.\n";
+  } else {
+    std::cout << std::left << std::setw(5) << "ID" << std::setw(20)
+              << "Zeitstempel" << std::setw(14) << "Aktion" << std::setw(12)
+              << "Entität" << std::setw(12) << "Entität-ID" << std::setw(15)
+              << "Benutzer" << "\n";
+    printSeparator();
+
+    for (const auto &entry : entries) {
+      std::cout << std::left << std::setw(5) << entry->getId() << std::setw(20)
+                << entry->getTimestampString() << std::setw(14)
+                << entry->getActionString() << std::setw(12)
+                << entry->getEntityString() << std::setw(12)
+                << entry->getEntityId() << std::setw(15) << entry->getUser()
+                << "\n";
+
+      // Details anzeigen falls vorhanden
+      if (!entry->getDetails().empty()) {
+        std::cout << "      Details: " << entry->getDetails() << "\n";
+      }
+    }
+
+    std::cout << "\nAngezeigt: " << entries.size() << " Einträge\n";
+  }
+
+  waitForEnter();
+}
+
+void CliInterface::handleAuditForEntity() {
+  clearScreen();
+  printSeparator();
+  std::cout << "        AUDIT FÜR ENTITÄT ANZEIGEN\n";
+  printSeparator();
+  std::cout << "\n";
+
+  std::cout << "Entitätstyp auswählen:\n";
+  std::cout << "  [1] Probe\n";
+  std::cout << "  [2] Auftrag\n";
+  std::cout << "  [3] Ergebnis\n";
+  std::cout << "  [0] Abbrechen\n\n";
+
+  int choice = readInteger("Ihre Wahl");
+  if (!running_)
+    return;
+
+  core::AuditEntry::EntityType entityType;
+  std::string entityTypeName;
+
+  switch (choice) {
+  case 1:
+    entityType = core::AuditEntry::EntityType::SAMPLE;
+    entityTypeName = "Proben";
+    break;
+  case 2:
+    entityType = core::AuditEntry::EntityType::ORDER;
+    entityTypeName = "Auftrags";
+    break;
+  case 3:
+    entityType = core::AuditEntry::EntityType::RESULT;
+    entityTypeName = "Ergebnis";
+    break;
+  case 0:
+    std::cout << "\nAbgebrochen.\n";
+    waitForEnter();
+    return;
+  default:
+    std::cout << "\nUngültige Auswahl.\n";
+    waitForEnter();
+    return;
+  }
+
+  std::string entityId = readInput(entityTypeName + "-ID");
+  if (!running_)
+    return;
+  entityId = trim(entityId);
+
+  if (isEmpty(entityId)) {
+    std::cout << "\n✗ Bitte geben Sie eine ID ein.\n";
+    waitForEnter();
+    return;
+  }
+
+  auto entries = database_->getAuditLogByEntity(entityType, entityId);
+
+  if (database_->hasError()) {
+    std::cout << "✗ Fehler beim Abrufen der Audit-Einträge:\n";
+    std::cout << "  " << database_->getLastError() << "\n";
+  } else if (entries.empty()) {
+    std::cout << "\nℹ Keine Audit-Einträge für " << entityTypeName << "-ID '"
+              << entityId << "' gefunden.\n";
+  } else {
+    std::cout << "\nAudit-Historie für " << entityTypeName << "-ID '"
+              << entityId << "':\n\n";
+    std::cout << std::left << std::setw(5) << "ID" << std::setw(20)
+              << "Zeitstempel" << std::setw(14) << "Aktion" << std::setw(15)
+              << "Benutzer" << "\n";
+    printSeparator();
+
+    for (const auto &entry : entries) {
+      std::cout << std::left << std::setw(5) << entry->getId() << std::setw(20)
+                << entry->getTimestampString() << std::setw(14)
+                << entry->getActionString() << std::setw(15) << entry->getUser()
+                << "\n";
+
+      if (!entry->getDetails().empty()) {
+        std::cout << "      Details: " << entry->getDetails() << "\n";
+      }
+    }
+
+    std::cout << "\nGesamt: " << entries.size() << " Einträge\n";
+  }
+
+  waitForEnter();
+}
+
+// ============================================================================
+// Benutzer-Handler (Authentifizierung)
+// ============================================================================
+
+void CliInterface::handleLogin() {
+  clearScreen();
+  printSeparator();
+  std::cout << "               ANMELDEN\n";
+  printSeparator();
+  std::cout << "\n";
+
+  if (isLoggedIn()) {
+    std::cout << "Sie sind bereits angemeldet als: "
+              << currentUser_->getUsername() << "\n";
+    std::cout << "Bitte zuerst abmelden.\n";
+    waitForEnter();
+    return;
+  }
+
+  std::string username = readInput("Benutzername");
+  if (!running_)
+    return;
+  username = trim(username);
+
+  if (isEmpty(username)) {
+    std::cout << "\n✗ Bitte geben Sie einen Benutzernamen ein.\n";
+    waitForEnter();
+    return;
+  }
+
+  std::string password = readInput("Passwort");
+  if (!running_)
+    return;
+
+  auto user = database_->authenticateUser(username, password);
+
+  if (user) {
+    currentUser_ = std::move(user);
+    std::cout << "\n✓ Erfolgreich angemeldet als: "
+              << currentUser_->getUsername() << " ("
+              << currentUser_->getRoleString() << ")\n";
+  } else {
+    std::cout << "\n✗ Anmeldung fehlgeschlagen: " << database_->getLastError()
+              << "\n";
+  }
+
+  waitForEnter();
+}
+
+void CliInterface::handleLogout() {
+  clearScreen();
+  printSeparator();
+  std::cout << "               ABMELDEN\n";
+  printSeparator();
+  std::cout << "\n";
+
+  if (!isLoggedIn()) {
+    std::cout << "Sie sind nicht angemeldet.\n";
+    waitForEnter();
+    return;
+  }
+
+  std::string username = currentUser_->getUsername();
+  currentUser_.reset();
+  std::cout << "✓ Benutzer '" << username << "' erfolgreich abgemeldet.\n";
+
+  waitForEnter();
+}
+
+void CliInterface::handleChangePassword() {
+  clearScreen();
+  printSeparator();
+  std::cout << "          PASSWORT ÄNDERN\n";
+  printSeparator();
+  std::cout << "\n";
+
+  if (!isLoggedIn()) {
+    std::cout << "✗ Bitte zuerst anmelden.\n";
+    waitForEnter();
+    return;
+  }
+
+  std::string oldPassword = readInput("Aktuelles Passwort");
+  if (!running_)
+    return;
+
+  if (!currentUser_->verifyPassword(oldPassword)) {
+    std::cout << "\n✗ Aktuelles Passwort ist falsch.\n";
+    waitForEnter();
+    return;
+  }
+
+  std::string newPassword = readInput("Neues Passwort");
+  if (!running_)
+    return;
+
+  if (newPassword.length() < 4) {
+    std::cout << "\n✗ Passwort muss mindestens 4 Zeichen haben.\n";
+    waitForEnter();
+    return;
+  }
+
+  std::string confirmPassword = readInput("Neues Passwort bestätigen");
+  if (!running_)
+    return;
+
+  if (newPassword != confirmPassword) {
+    std::cout << "\n✗ Passwörter stimmen nicht überein.\n";
+    waitForEnter();
+    return;
+  }
+
+  currentUser_->setPassword(newPassword);
+
+  if (database_->updateUser(*currentUser_)) {
+    std::cout << "\n✓ Passwort erfolgreich geändert.\n";
+  } else {
+    std::cout << "\n✗ Fehler beim Ändern des Passworts: "
+              << database_->getLastError() << "\n";
+  }
+
+  waitForEnter();
+}
+
+void CliInterface::handleCreateUser() {
+  clearScreen();
+  printSeparator();
+  std::cout << "          BENUTZER ANLEGEN\n";
+  printSeparator();
+  std::cout << "\n";
+
+  if (!isAdmin()) {
+    std::cout << "✗ Nur Administratoren können Benutzer anlegen.\n";
+    waitForEnter();
+    return;
+  }
+
+  std::string username = readValidatedInput("Benutzername", "Benutzername");
+  if (!running_)
+    return;
+
+  // Prüfen ob Benutzer existiert
+  auto existing = database_->getUserByUsername(username);
+  if (existing) {
+    std::cout << "\n✗ Benutzer '" << username << "' existiert bereits.\n";
+    waitForEnter();
+    return;
+  }
+  database_->clearError();
+
+  std::string password = readInput("Passwort");
+  if (!running_)
+    return;
+
+  if (password.length() < 4) {
+    std::cout << "\n✗ Passwort muss mindestens 4 Zeichen haben.\n";
+    waitForEnter();
+    return;
+  }
+
+  std::cout << "\nRolle:\n";
+  std::cout << "  [1] Administrator\n";
+  std::cout << "  [2] Operator\n";
+  std::cout << "  [3] Betrachter\n\n";
+
+  int roleChoice = readInteger("Rolle (1-3)");
+  if (!running_)
+    return;
+
+  core::User::Role role;
+  switch (roleChoice) {
+  case 1:
+    role = core::User::Role::ADMIN;
+    break;
+  case 2:
+    role = core::User::Role::OPERATOR;
+    break;
+  case 3:
+    role = core::User::Role::VIEWER;
+    break;
+  default:
+    std::cout << "\nUngültige Auswahl. Verwende 'Operator'.\n";
+    role = core::User::Role::OPERATOR;
+  }
+
+  std::string fullName = readInput("Vollständiger Name (optional)");
+  if (!running_)
+    return;
+  fullName = trim(fullName);
+
+  std::string email = readInput("E-Mail (optional)");
+  if (!running_)
+    return;
+  email = trim(email);
+
+  core::User newUser(username, core::User::hashPassword(password), role);
+  newUser.setFullName(fullName);
+  newUser.setEmail(email);
+
+  if (database_->createUser(newUser)) {
+    std::cout << "\n✓ Benutzer '" << username << "' erfolgreich angelegt.\n";
+  } else {
+    std::cout << "\n✗ Fehler beim Anlegen: " << database_->getLastError()
+              << "\n";
+  }
+
+  waitForEnter();
+}
+
+void CliInterface::handleListUsers() {
+  clearScreen();
+  printSeparator();
+  std::cout << "          ALLE BENUTZER\n";
+  printSeparator();
+  std::cout << "\n";
+
+  if (!isAdmin()) {
+    std::cout << "✗ Nur Administratoren können Benutzer anzeigen.\n";
+    waitForEnter();
+    return;
+  }
+
+  auto users = database_->getAllUsers();
+
+  if (database_->hasError()) {
+    std::cout << "✗ Fehler beim Abrufen der Benutzer:\n";
+    std::cout << "  " << database_->getLastError() << "\n";
+  } else if (users.empty()) {
+    std::cout << "ℹ Keine Benutzer in der Datenbank.\n";
+  } else {
+    std::cout << std::left << std::setw(5) << "ID" << std::setw(15)
+              << "Benutzer" << std::setw(15) << "Rolle" << std::setw(8)
+              << "Aktiv" << std::setw(25) << "Name" << std::setw(25) << "E-Mail"
+              << "\n";
+    printSeparator();
+
+    for (const auto &user : users) {
+      std::cout << std::left << std::setw(5) << user->getId() << std::setw(15)
+                << user->getUsername() << std::setw(15) << user->getRoleString()
+                << std::setw(8) << (user->isActive() ? "Ja" : "Nein")
+                << std::setw(25) << user->getFullName() << std::setw(25)
+                << user->getEmail() << "\n";
+    }
+
+    std::cout << "\nGesamt: " << users.size() << " Benutzer\n";
+  }
+
+  waitForEnter();
+}
+
+void CliInterface::handleUpdateUser() {
+  clearScreen();
+  printSeparator();
+  std::cout << "        BENUTZER BEARBEITEN\n";
+  printSeparator();
+  std::cout << "\n";
+
+  if (!isAdmin()) {
+    std::cout << "✗ Nur Administratoren können Benutzer bearbeiten.\n";
+    waitForEnter();
+    return;
+  }
+
+  int id = readInteger("Benutzer-ID (numerisch)");
+  if (!running_)
+    return;
+
+  auto user = database_->getUser(id);
+
+  if (!user) {
+    std::cout << "\n✗ Benutzer nicht gefunden: " << database_->getLastError()
+              << "\n";
+    waitForEnter();
+    return;
+  }
+
+  std::cout << "\nAktueller Benutzer:\n";
+  std::cout << "  Benutzername: " << user->getUsername() << "\n";
+  std::cout << "  Rolle:        " << user->getRoleString() << "\n";
+  std::cout << "  Aktiv:        " << (user->isActive() ? "Ja" : "Nein") << "\n";
+  std::cout << "  Name:         " << user->getFullName() << "\n";
+  std::cout << "  E-Mail:       " << user->getEmail() << "\n\n";
+
+  std::cout << "Was möchten Sie ändern?\n";
+  std::cout << "  [1] Rolle ändern\n";
+  std::cout << "  [2] Aktivstatus ändern\n";
+  std::cout << "  [3] Name/E-Mail ändern\n";
+  std::cout << "  [4] Passwort zurücksetzen\n";
+  std::cout << "  [0] Abbrechen\n\n";
+
+  int choice = readInteger("Ihre Wahl");
+  if (!running_)
+    return;
+
+  switch (choice) {
+  case 1: {
+    std::cout << "\nNeue Rolle:\n";
+    std::cout << "  [1] Administrator\n";
+    std::cout << "  [2] Operator\n";
+    std::cout << "  [3] Betrachter\n\n";
+    int roleChoice = readInteger("Rolle (1-3)");
+    if (!running_)
+      return;
+
+    core::User::Role newRole;
+    switch (roleChoice) {
+    case 1:
+      newRole = core::User::Role::ADMIN;
+      break;
+    case 2:
+      newRole = core::User::Role::OPERATOR;
+      break;
+    case 3:
+      newRole = core::User::Role::VIEWER;
+      break;
+    default:
+      std::cout << "\nUngültige Auswahl.\n";
+      waitForEnter();
+      return;
+    }
+    user->setRole(newRole);
+    break;
+  }
+  case 2: {
+    user->setActive(!user->isActive());
+    std::cout << "\nNeuer Status: " << (user->isActive() ? "Aktiv" : "Inaktiv")
+              << "\n";
+    break;
+  }
+  case 3: {
+    std::string newName = readInput("Neuer Name [" + user->getFullName() + "]");
+    if (!running_)
+      return;
+    if (!isEmpty(newName)) {
+      user->setFullName(trim(newName));
+    }
+    std::string newEmail = readInput("Neue E-Mail [" + user->getEmail() + "]");
+    if (!running_)
+      return;
+    if (!isEmpty(newEmail)) {
+      user->setEmail(trim(newEmail));
+    }
+    break;
+  }
+  case 4: {
+    std::string newPassword = readInput("Neues Passwort");
+    if (!running_)
+      return;
+    if (newPassword.length() < 4) {
+      std::cout << "\n✗ Passwort muss mindestens 4 Zeichen haben.\n";
+      waitForEnter();
+      return;
+    }
+    user->setPassword(newPassword);
+    break;
+  }
+  case 0:
+    std::cout << "\nAbgebrochen.\n";
+    waitForEnter();
+    return;
+  default:
+    std::cout << "\nUngültige Auswahl.\n";
+    waitForEnter();
+    return;
+  }
+
+  if (database_->updateUser(*user)) {
+    std::cout << "\n✓ Benutzer erfolgreich aktualisiert.\n";
+  } else {
+    std::cout << "\n✗ Fehler beim Aktualisieren: " << database_->getLastError()
+              << "\n";
+  }
+
+  waitForEnter();
+}
+
+void CliInterface::handleDeleteUser() {
+  clearScreen();
+  printSeparator();
+  std::cout << "          BENUTZER LÖSCHEN\n";
+  printSeparator();
+  std::cout << "\n";
+
+  if (!isAdmin()) {
+    std::cout << "✗ Nur Administratoren können Benutzer löschen.\n";
+    waitForEnter();
+    return;
+  }
+
+  int id = readInteger("Benutzer-ID (numerisch)");
+  if (!running_)
+    return;
+
+  // Prüfen dass man sich nicht selbst löscht
+  if (currentUser_ && currentUser_->getId() == id) {
+    std::cout << "\n✗ Sie können sich nicht selbst löschen.\n";
+    waitForEnter();
+    return;
+  }
+
+  auto user = database_->getUser(id);
+
+  if (!user) {
+    std::cout << "\n✗ Benutzer nicht gefunden: " << database_->getLastError()
+              << "\n";
+    waitForEnter();
+    return;
+  }
+
+  std::cout << "\nBenutzer:\n";
+  std::cout << "  Benutzername: " << user->getUsername() << "\n";
+  std::cout << "  Rolle:        " << user->getRoleString() << "\n\n";
+
+  std::string confirm = readInput("Wirklich löschen? (ja/nein)");
+  if (!running_)
+    return;
+
+  std::string confirmLower = confirm;
+  for (char &c : confirmLower) {
+    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  }
+
+  if (confirmLower == "ja" || confirmLower == "j" || confirmLower == "yes" ||
+      confirmLower == "y") {
+    if (database_->deleteUser(id)) {
+      std::cout << "\n✓ Benutzer erfolgreich gelöscht.\n";
+    } else {
+      std::cout << "\n✗ Fehler beim Löschen: " << database_->getLastError()
+                << "\n";
+    }
+  } else {
+    std::cout << "\nLöschen abgebrochen.\n";
+  }
+
+  waitForEnter();
 }
 
 // Validierungsfunktionen
-std::string CliInterface::trim(const std::string& str) {
-    size_t start = str.find_first_not_of(" \t\r\n");
-    if (start == std::string::npos) {
-        return "";  // String besteht nur aus Whitespace
-    }
+std::string CliInterface::trim(const std::string &str) {
+  size_t start = str.find_first_not_of(" \t\r\n");
+  if (start == std::string::npos) {
+    return ""; // String besteht nur aus Whitespace
+  }
 
-    size_t end = str.find_last_not_of(" \t\r\n");
-    return str.substr(start, end - start + 1);
+  size_t end = str.find_last_not_of(" \t\r\n");
+  return str.substr(start, end - start + 1);
 }
 
-bool CliInterface::isValidId(const std::string& id) {
-    if (id.empty()) {
-        return false;
-    }
+bool CliInterface::isValidId(const std::string &id) {
+  if (id.empty()) {
+    return false;
+  }
 
-    // Erlaubt: Buchstaben, Zahlen, Bindestrich, Unterstrich
-    for (char c : id) {
-        if (!std::isalnum(static_cast<unsigned char>(c)) && c != '-' && c != '_') {
-            return false;
-        }
+  // Erlaubt: Buchstaben, Zahlen, Bindestrich, Unterstrich
+  for (char c : id) {
+    if (!std::isalnum(static_cast<unsigned char>(c)) && c != '-' && c != '_') {
+      return false;
     }
+  }
 
-    return true;
+  return true;
 }
 
-bool CliInterface::isEmpty(const std::string& str) {
-    return str.empty() || str.find_first_not_of(" \t\r\n") == std::string::npos;
+bool CliInterface::isEmpty(const std::string &str) {
+  return str.empty() || str.find_first_not_of(" \t\r\n") == std::string::npos;
+}
+
+bool CliInterface::parseDate(const std::string &input, std::time_t &out) {
+  std::tm tm = {};
+  std::istringstream ss(input);
+  ss >> std::get_time(&tm, "%Y-%m-%d");
+  if (ss.fail()) {
+    return false;
+  }
+  tm.tm_hour = 0;
+  tm.tm_min = 0;
+  tm.tm_sec = 0;
+
+  std::tm normalized = tm;
+  std::time_t parsed = std::mktime(&normalized);
+  if (parsed == static_cast<std::time_t>(-1)) {
+    return false;
+  }
+
+  if (normalized.tm_year != tm.tm_year || normalized.tm_mon != tm.tm_mon ||
+      normalized.tm_mday != tm.tm_mday) {
+    return false;
+  }
+
+  out = parsed;
+  return true;
 }
 
 } // namespace utils
