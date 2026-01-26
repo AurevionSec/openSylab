@@ -579,6 +579,53 @@ bool test_database_LogResultRetryImportAudit() {
   return true;
 }
 
+bool test_database_LogUserAction() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  User user("admin1", User::hashPassword("secret"),
+            User::Role::ADMIN);
+  ASSERT_TRUE(db.createUser(user));
+
+  db.logUserAction(AuditEntry::ActionType::UPDATE, "admin1", "system",
+                   "Benutzer aktualisiert");
+
+  auto entries =
+      db.getAuditLogByEntity(AuditEntry::EntityType::USER, "admin1");
+  ASSERT_FALSE(entries.empty());
+  ASSERT_EQ(entries[0]->getAction(), AuditEntry::ActionType::UPDATE);
+  ASSERT_EQ(entries[0]->getEntity(), AuditEntry::EntityType::USER);
+  ASSERT_EQ(entries[0]->getEntityId(), "admin1");
+  ASSERT_EQ(entries[0]->getUser(), "system");
+  ASSERT_EQ(entries[0]->getDetails(), "Benutzer aktualisiert");
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_database_AuthenticateUserRejectsInactive() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  User user("inactive1", User::hashPassword("secret"),
+            User::Role::OPERATOR);
+  user.setActive(false);
+  ASSERT_TRUE(db.createUser(user));
+
+  auto auth = db.authenticateUser("inactive1", "secret");
+  ASSERT_TRUE(auth == nullptr);
+  ASSERT_FALSE(db.getLastError().empty());
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
 bool test_database_ExportValidatedResults_CsvOutput() {
   std::string dbPath = uniqueDbPath();
   Database db(dbPath);
@@ -956,6 +1003,9 @@ void registerDatabaseTests() {
                test_database_ValidateResultLogsAudit);
   registerTest("Database::LogResultRetryImportAudit",
                test_database_LogResultRetryImportAudit);
+  registerTest("Database::LogUserAction", test_database_LogUserAction);
+  registerTest("Database::AuthenticateUserRejectsInactive",
+               test_database_AuthenticateUserRejectsInactive);
   registerTest("Database::ExportValidatedResults_CsvOutput",
                test_database_ExportValidatedResults_CsvOutput);
   registerTest("Database::ExportValidatedResults_LogsAudit",

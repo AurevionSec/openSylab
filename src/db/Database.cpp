@@ -1922,6 +1922,15 @@ void Database::logResultAction(core::AuditEntry::ActionType action,
   (void)logAudit(entry);
 }
 
+void Database::logUserAction(core::AuditEntry::ActionType action,
+                             const std::string &username,
+                             const std::string &user,
+                             const std::string &details) {
+  core::AuditEntry entry(action, core::AuditEntry::EntityType::USER, username,
+                         user, details);
+  (void)logAudit(entry);
+}
+
 void Database::logResultRetryImport(const std::vector<std::string> &resultIds,
                                     const std::string &user,
                                     const std::string &filePath) {

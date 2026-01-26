@@ -99,7 +99,7 @@ void CliInterface::showMainMenu() {
       std::cout << "  [43] Benutzer anlegen\n";
       std::cout << "  [44] Benutzer anzeigen\n";
       std::cout << "  [45] Benutzer bearbeiten\n";
-      std::cout << "  [46] Benutzer löschen\n";
+      std::cout << "  [46] Benutzer deaktivieren\n";
     }
   }
   std::cout << "\n  === System ===\n";
@@ -2294,6 +2294,10 @@ void CliInterface::handleCreateUser() {
 
   if (database_->createUser(newUser)) {
     std::cout << "\n✓ Benutzer '" << username << "' erfolgreich angelegt.\n";
+    const std::string actor =
+        currentUser_ ? currentUser_->getUsername() : std::string("system");
+    database_->logUserAction(core::AuditEntry::ActionType::CREATE, username,
+                             actor, "Benutzer angelegt");
   } else {
     std::cout << "\n✗ Fehler beim Anlegen: " << database_->getLastError()
               << "\n";
@@ -2387,6 +2391,8 @@ void CliInterface::handleUpdateUser() {
   if (!running_)
     return;
 
+  const bool wasActive = user->isActive();
+
   switch (choice) {
   case 1: {
     std::cout << "\nNeue Rolle:\n";
@@ -2461,6 +2467,13 @@ void CliInterface::handleUpdateUser() {
 
   if (database_->updateUser(*user)) {
     std::cout << "\n✓ Benutzer erfolgreich aktualisiert.\n";
+    const std::string actor =
+        currentUser_ ? currentUser_->getUsername() : std::string("system");
+    const std::string details =
+        (wasActive && !user->isActive()) ? "Benutzer deaktiviert"
+                                         : "Benutzer aktualisiert";
+    database_->logUserAction(core::AuditEntry::ActionType::UPDATE,
+                             user->getUsername(), actor, details);
   } else {
     std::cout << "\n✗ Fehler beim Aktualisieren: " << database_->getLastError()
               << "\n";
@@ -2472,12 +2485,12 @@ void CliInterface::handleUpdateUser() {
 void CliInterface::handleDeleteUser() {
   clearScreen();
   printSeparator();
-  std::cout << "          BENUTZER LÖSCHEN\n";
+  std::cout << "        BENUTZER DEAKTIVIEREN\n";
   printSeparator();
   std::cout << "\n";
 
   if (!isAdmin()) {
-    std::cout << "✗ Nur Administratoren können Benutzer löschen.\n";
+    std::cout << "✗ Nur Administratoren können Benutzer deaktivieren.\n";
     waitForEnter();
     return;
   }
@@ -2486,9 +2499,9 @@ void CliInterface::handleDeleteUser() {
   if (!running_)
     return;
 
-  // Prüfen dass man sich nicht selbst löscht
+  // Prüfen dass man sich nicht selbst deaktiviert
   if (currentUser_ && currentUser_->getId() == id) {
-    std::cout << "\n✗ Sie können sich nicht selbst löschen.\n";
+    std::cout << "\n✗ Sie können sich nicht selbst deaktivieren.\n";
     waitForEnter();
     return;
   }
@@ -2506,7 +2519,13 @@ void CliInterface::handleDeleteUser() {
   std::cout << "  Benutzername: " << user->getUsername() << "\n";
   std::cout << "  Rolle:        " << user->getRoleString() << "\n\n";
 
-  std::string confirm = readInput("Wirklich löschen? (ja/nein)");
+  if (!user->isActive()) {
+    std::cout << "\n✗ Benutzer ist bereits deaktiviert.\n";
+    waitForEnter();
+    return;
+  }
+
+  std::string confirm = readInput("Wirklich deaktivieren? (ja/nein)");
   if (!running_)
     return;
 
@@ -2517,14 +2536,20 @@ void CliInterface::handleDeleteUser() {
 
   if (confirmLower == "ja" || confirmLower == "j" || confirmLower == "yes" ||
       confirmLower == "y") {
-    if (database_->deleteUser(id)) {
-      std::cout << "\n✓ Benutzer erfolgreich gelöscht.\n";
+    user->setActive(false);
+    if (database_->updateUser(*user)) {
+      std::cout << "\n✓ Benutzer erfolgreich deaktiviert.\n";
+      const std::string actor =
+          currentUser_ ? currentUser_->getUsername() : std::string("system");
+      database_->logUserAction(core::AuditEntry::ActionType::UPDATE,
+                               user->getUsername(), actor,
+                               "Benutzer deaktiviert");
     } else {
-      std::cout << "\n✗ Fehler beim Löschen: " << database_->getLastError()
-                << "\n";
+      std::cout << "\n✗ Fehler beim Deaktivieren: "
+                << database_->getLastError() << "\n";
     }
   } else {
-    std::cout << "\nLöschen abgebrochen.\n";
+    std::cout << "\nDeaktivieren abgebrochen.\n";
   }
 
   waitForEnter();
