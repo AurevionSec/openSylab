@@ -532,6 +532,100 @@ bool test_database_ValidateResultLogsAudit() {
   return true;
 }
 
+bool test_database_UpdateResultWithAudit_StoresUpdatedFields() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  Sample sample("RES_EDIT", "P303");
+  ASSERT_TRUE(db.createSample(sample));
+
+  Order order("ORD_RES_EDIT", "RES_EDIT", "PCR");
+  ASSERT_TRUE(db.createOrder(order));
+
+  auto storedOrder = db.getOrderByOrderId("ORD_RES_EDIT");
+  ASSERT_NOT_NULL(storedOrder);
+  int orderDbId = storedOrder->getId();
+
+  TestResult result("RES_EDIT_1", orderDbId, "PCR");
+  result.setValue("1.0");
+  result.setUnit("mg/L");
+  result.setComment("initial");
+  result.setFlag(result.evaluateFlag());
+  ASSERT_TRUE(db.createTestResult(result));
+
+  auto storedResult = db.getTestResultByResultId("RES_EDIT_1");
+  ASSERT_NOT_NULL(storedResult);
+
+  storedResult->setValue("2.0");
+  storedResult->setUnit("g/L");
+  storedResult->setComment("updated");
+  storedResult->setFlag(storedResult->evaluateFlag());
+
+  ASSERT_TRUE(db.updateTestResultWithAudit(*storedResult, "tester"));
+
+  auto updated = db.getTestResultByResultId("RES_EDIT_1");
+  ASSERT_NOT_NULL(updated);
+  ASSERT_EQ(updated->getValue(), "2.0");
+  ASSERT_EQ(updated->getUnit(), "g/L");
+  ASSERT_EQ(updated->getComment(), "updated");
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_database_UpdateResultWithAudit_LogsChanges() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  Sample sample("RES_EDIT_AUDIT", "P304");
+  ASSERT_TRUE(db.createSample(sample));
+
+  Order order("ORD_RES_EDIT_AUDIT", "RES_EDIT_AUDIT", "PCR");
+  ASSERT_TRUE(db.createOrder(order));
+
+  auto storedOrder = db.getOrderByOrderId("ORD_RES_EDIT_AUDIT");
+  ASSERT_NOT_NULL(storedOrder);
+  int orderDbId = storedOrder->getId();
+
+  TestResult result("RES_EDIT_AUDIT_1", orderDbId, "PCR");
+  result.setValue("1.0");
+  result.setUnit("mg/L");
+  result.setComment("initial");
+  result.setFlag(result.evaluateFlag());
+  ASSERT_TRUE(db.createTestResult(result));
+
+  auto storedResult = db.getTestResultByResultId("RES_EDIT_AUDIT_1");
+  ASSERT_NOT_NULL(storedResult);
+
+  storedResult->setValue("2.0");
+  storedResult->setUnit("g/L");
+  storedResult->setComment("updated");
+  storedResult->setFlag(storedResult->evaluateFlag());
+
+  ASSERT_TRUE(db.updateTestResultWithAudit(*storedResult, "tester"));
+
+  auto entries =
+      db.getAuditLogByEntity(AuditEntry::EntityType::RESULT, "RES_EDIT_AUDIT_1");
+  ASSERT_FALSE(db.hasError());
+  ASSERT_FALSE(entries.empty());
+  ASSERT_EQ(entries[0]->getAction(), AuditEntry::ActionType::UPDATE);
+  ASSERT_EQ(entries[0]->getEntity(), AuditEntry::EntityType::RESULT);
+  ASSERT_EQ(entries[0]->getEntityId(), "RES_EDIT_AUDIT_1");
+  ASSERT_EQ(entries[0]->getUser(), "tester");
+  ASSERT_EQ(entries[0]->getDetails(),
+            "Wert: 1.0 -> 2.0; Einheit: mg/L -> g/L; Kommentar: initial -> "
+            "updated");
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
 bool test_database_GetOrdersByFilter() {
   std::string dbPath = uniqueDbPath();
   Database db(dbPath);
@@ -678,6 +772,10 @@ void registerDatabaseTests() {
                test_database_CreateTestResult_MissingFieldsRejected);
   registerTest("Database::ValidateResultLogsAudit",
                test_database_ValidateResultLogsAudit);
+  registerTest("Database::UpdateResultWithAudit_StoresUpdatedFields",
+               test_database_UpdateResultWithAudit_StoresUpdatedFields);
+  registerTest("Database::UpdateResultWithAudit_LogsChanges",
+               test_database_UpdateResultWithAudit_LogsChanges);
   registerTest("Database::GetOrdersByFilter",
                test_database_GetOrdersByFilter);
   registerTest("Database::UpdateSample_NoChangesStillSuccess",

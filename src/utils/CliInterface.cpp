@@ -1593,7 +1593,10 @@ void CliInterface::handleUpdateResult() {
   // Flag neu berechnen
   result->setFlag(result->evaluateFlag());
 
-  if (database_->updateTestResult(*result)) {
+  const std::string actor =
+      currentUser_ ? currentUser_->getUsername() : std::string("system");
+
+  if (database_->updateTestResultWithAudit(*result, actor)) {
     std::cout << "\n✓ Ergebnis erfolgreich aktualisiert!\n";
     std::cout << "  Neuer Flag: " << result->getFlagString() << "\n";
   } else {

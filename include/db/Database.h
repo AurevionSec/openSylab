@@ -101,6 +101,8 @@ public:
   [[nodiscard]] std::vector<std::unique_ptr<core::TestResult>>
   getAllTestResults();
   [[nodiscard]] bool updateTestResult(const core::TestResult &result);
+  [[nodiscard]] bool updateTestResultWithAudit(const core::TestResult &result,
+                                               const std::string &user);
   [[nodiscard]] bool validateTestResult(const std::string &resultId,
                                         const std::string &user);
   [[nodiscard]] bool deleteTestResult(int id);
