@@ -75,6 +75,8 @@ std::string AuditEntry::entityToString(EntityType entity) {
     return "Ergebnis";
   case EntityType::USER:
     return "Benutzer";
+  case EntityType::ROLE:
+    return "Rolle";
   case EntityType::SYSTEM:
     return "System";
   default:
@@ -88,6 +90,7 @@ AuditEntry::EntityType AuditEntry::stringToEntity(const std::string &str) {
       {"Auftrag", EntityType::ORDER},   {"ORDER", EntityType::ORDER},
       {"Ergebnis", EntityType::RESULT}, {"RESULT", EntityType::RESULT},
       {"Benutzer", EntityType::USER},   {"USER", EntityType::USER},
+      {"Rolle", EntityType::ROLE},      {"ROLE", EntityType::ROLE},
       {"System", EntityType::SYSTEM},   {"SYSTEM", EntityType::SYSTEM},
   };
 

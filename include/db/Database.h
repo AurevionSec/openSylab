@@ -131,6 +131,9 @@ public:
   void logUserAction(core::AuditEntry::ActionType action,
                      const std::string &username, const std::string &user,
                      const std::string &details = "");
+  void logRoleAction(core::AuditEntry::ActionType action,
+                     const std::string &roleName, const std::string &user,
+                     const std::string &details = "");
   void logResultRetryImport(const std::vector<std::string> &resultIds,
                             const std::string &user,
                             const std::string &filePath);
@@ -143,6 +146,16 @@ public:
   [[nodiscard]] std::vector<std::unique_ptr<core::User>> getAllUsers();
   [[nodiscard]] bool updateUser(const core::User &user);
   [[nodiscard]] bool deleteUser(int id);
+
+  // Rollen & Berechtigungen
+  [[nodiscard]] bool createRole(const std::string &name,
+                                const std::vector<std::string> &permissions);
+  [[nodiscard]] bool updateRole(const std::string &name,
+                                const std::vector<std::string> &permissions);
+  [[nodiscard]] std::vector<std::string>
+  getRolePermissions(const std::string &name);
+  [[nodiscard]] std::vector<std::string> getAllRoles();
+  [[nodiscard]] bool assignUserRole(int userId, const std::string &roleName);
 
   // Authentifizierung
   [[nodiscard]] std::unique_ptr<core::User>

@@ -5,6 +5,7 @@
 
 #include "db/Database.h"
 #include "test_macros.h"
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
@@ -606,6 +607,110 @@ bool test_database_LogUserAction() {
   return true;
 }
 
+bool test_database_CreateRoleAndPermissions() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  const std::string roleName = "QA";
+  const std::vector<std::string> perms = {"results.validate", "samples.read"};
+  ASSERT_TRUE(db.createRole(roleName, perms));
+
+  auto storedPerms = db.getRolePermissions(roleName);
+  ASSERT_FALSE(db.hasError());
+  std::sort(storedPerms.begin(), storedPerms.end());
+
+  auto expected = perms;
+  std::sort(expected.begin(), expected.end());
+
+  ASSERT_EQ(storedPerms.size(), expected.size());
+  ASSERT_EQ(storedPerms[0], expected[0]);
+  ASSERT_EQ(storedPerms[1], expected[1]);
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_database_UpdateRolePermissions() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  const std::string roleName = "Supervisor";
+  ASSERT_TRUE(db.createRole(roleName, {"samples.read"}));
+
+  const std::vector<std::string> updated = {"orders.update", "results.read"};
+  ASSERT_TRUE(db.updateRole(roleName, updated));
+
+  auto storedPerms = db.getRolePermissions(roleName);
+  std::sort(storedPerms.begin(), storedPerms.end());
+  auto expected = updated;
+  std::sort(expected.begin(), expected.end());
+
+  ASSERT_EQ(storedPerms.size(), expected.size());
+  ASSERT_EQ(storedPerms[0], expected[0]);
+  ASSERT_EQ(storedPerms[1], expected[1]);
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_database_AssignUserRoleCustom() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  const std::string roleName = "QA";
+  ASSERT_TRUE(db.createRole(roleName, {"results.validate"}));
+
+  User user("qa_user", User::hashPassword("secret"), User::Role::OPERATOR);
+  ASSERT_TRUE(db.createUser(user));
+
+  auto stored = db.getUserByUsername("qa_user");
+  ASSERT_NOT_NULL(stored);
+
+  ASSERT_TRUE(db.assignUserRole(stored->getId(), roleName));
+
+  auto updated = db.getUser(stored->getId());
+  ASSERT_NOT_NULL(updated);
+  ASSERT_EQ(updated->getRoleString(), roleName);
+  ASSERT_EQ(updated->getRole(), User::Role::CUSTOM);
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_database_LogRoleAction() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  const std::string roleName = "QA";
+  ASSERT_TRUE(db.createRole(roleName, {"results.validate"}));
+
+  db.logRoleAction(AuditEntry::ActionType::UPDATE, roleName, "admin",
+                   "Rolle aktualisiert");
+
+  auto entries = db.getAuditLogByEntity(AuditEntry::EntityType::ROLE, roleName);
+  ASSERT_FALSE(entries.empty());
+  ASSERT_EQ(entries[0]->getAction(), AuditEntry::ActionType::UPDATE);
+  ASSERT_EQ(entries[0]->getEntity(), AuditEntry::EntityType::ROLE);
+  ASSERT_EQ(entries[0]->getEntityId(), roleName);
+  ASSERT_EQ(entries[0]->getUser(), "admin");
+  ASSERT_EQ(entries[0]->getDetails(), "Rolle aktualisiert");
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
 bool test_database_AuthenticateUserRejectsInactive() {
   std::string dbPath = uniqueDbPath();
   Database db(dbPath);
@@ -1004,6 +1109,13 @@ void registerDatabaseTests() {
   registerTest("Database::LogResultRetryImportAudit",
                test_database_LogResultRetryImportAudit);
   registerTest("Database::LogUserAction", test_database_LogUserAction);
+  registerTest("Database::CreateRoleAndPermissions",
+               test_database_CreateRoleAndPermissions);
+  registerTest("Database::UpdateRolePermissions",
+               test_database_UpdateRolePermissions);
+  registerTest("Database::AssignUserRoleCustom",
+               test_database_AssignUserRoleCustom);
+  registerTest("Database::LogRoleAction", test_database_LogRoleAction);
   registerTest("Database::AuthenticateUserRejectsInactive",
                test_database_AuthenticateUserRejectsInactive);
   registerTest("Database::ExportValidatedResults_CsvOutput",

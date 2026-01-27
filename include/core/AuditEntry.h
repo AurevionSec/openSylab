@@ -30,7 +30,7 @@ public:
   /**
    * @brief Betroffene Entität
    */
-  enum class EntityType { SAMPLE, ORDER, RESULT, USER, SYSTEM };
+  enum class EntityType { SAMPLE, ORDER, RESULT, USER, ROLE, SYSTEM };
 
   // Konstruktoren
   AuditEntry();

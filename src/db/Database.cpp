@@ -110,7 +110,7 @@ std::unique_ptr<opensylab::core::User> userFromRow(sqlite3_stmt *stmt) {
   user->setId(sqlite3_column_int(stmt, 0));
   user->setUsername(columnText(stmt, 1));
   user->setPasswordHash(columnText(stmt, 2));
-  user->setRole(opensylab::core::User::stringToRole(columnText(stmt, 3)));
+  user->setRoleName(columnText(stmt, 3));
   user->setActive(sqlite3_column_int(stmt, 4) != 0);
   user->setLastLogin(static_cast<std::time_t>(sqlite3_column_int64(stmt, 5)));
   user->setCreatedDate(static_cast<std::time_t>(sqlite3_column_int64(stmt, 6)));
@@ -272,6 +272,18 @@ bool Database::initializeSchema() {
         CREATE INDEX IF NOT EXISTS idx_user_username ON users(username);
         CREATE INDEX IF NOT EXISTS idx_user_role ON users(role);
         CREATE INDEX IF NOT EXISTS idx_user_active ON users(active);
+
+        CREATE TABLE IF NOT EXISTS roles (
+            name TEXT PRIMARY KEY,
+            description TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS role_permissions (
+            role_name TEXT NOT NULL,
+            permission TEXT NOT NULL,
+            PRIMARY KEY (role_name, permission),
+            FOREIGN KEY(role_name) REFERENCES roles(name) ON DELETE CASCADE
+        );
     )";
 
   char *errMsg = nullptr;
@@ -280,6 +292,21 @@ bool Database::initializeSchema() {
   if (rc != SQLITE_OK) {
     std::string error =
         "SQL-Fehler beim Erstellen des Schemas: " + std::string(errMsg);
+    sqlite3_free(errMsg);
+    setError(error);
+    return false;
+  }
+
+  const char *seedRolesSQL = R"(
+        INSERT OR IGNORE INTO roles (name, description)
+        VALUES ('Administrator', 'Vollzugriff'),
+               ('Operator', 'Standardzugriff'),
+               ('Betrachter', 'Lesezugriff');
+    )";
+  rc = sqlite3_exec(db_, seedRolesSQL, nullptr, nullptr, &errMsg);
+  if (rc != SQLITE_OK) {
+    std::string error =
+        "SQL-Fehler beim Initialisieren der Rollen: " + std::string(errMsg);
     sqlite3_free(errMsg);
     setError(error);
     return false;
@@ -1931,6 +1958,15 @@ void Database::logUserAction(core::AuditEntry::ActionType action,
   (void)logAudit(entry);
 }
 
+void Database::logRoleAction(core::AuditEntry::ActionType action,
+                             const std::string &roleName,
+                             const std::string &user,
+                             const std::string &details) {
+  core::AuditEntry entry(action, core::AuditEntry::EntityType::ROLE, roleName,
+                         user, details);
+  (void)logAudit(entry);
+}
+
 void Database::logResultRetryImport(const std::vector<std::string> &resultIds,
                                     const std::string &user,
                                     const std::string &filePath) {
@@ -2259,6 +2295,354 @@ bool Database::deleteUser(int id) {
   int changes = sqlite3_changes(db_);
   if (changes == 0) {
     setError("Benutzer mit ID " + std::to_string(id) + " nicht gefunden");
+    return false;
+  }
+
+  return true;
+}
+
+// ============================================================================
+// Rollen & Berechtigungen
+// ============================================================================
+
+bool Database::createRole(const std::string &name,
+                          const std::vector<std::string> &permissions) {
+  clearError();
+
+  if (!isOpen_) {
+    setError("Datenbank ist nicht geöffnet");
+    return false;
+  }
+
+  if (name.empty()) {
+    setError("Rollenname darf nicht leer sein");
+    return false;
+  }
+
+  char *errMsg = nullptr;
+  int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
+                        &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Starten der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    return false;
+  }
+
+  const char *insertRoleSQL = R"(
+        INSERT INTO roles (name, description) VALUES (?, ?);
+    )";
+  sqlite3_stmt *roleStmtRaw = nullptr;
+  rc = sqlite3_prepare_v2(db_, insertRoleSQL, -1, &roleStmtRaw, nullptr);
+  if (rc != SQLITE_OK) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    setError("Fehler beim Vorbereiten des Rollen-INSERT: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+  auto roleStmt = makeStatement(roleStmtRaw);
+
+  sqlite3_bind_text(roleStmt.get(), 1, name.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(roleStmt.get(), 2, "", -1, SQLITE_TRANSIENT);
+
+  rc = sqlite3_step(roleStmt.get());
+  if (rc != SQLITE_DONE) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    setError("Fehler beim Einfügen der Rolle: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+
+  const char *insertPermSQL = R"(
+        INSERT OR IGNORE INTO role_permissions (role_name, permission)
+        VALUES (?, ?);
+    )";
+  sqlite3_stmt *permStmtRaw = nullptr;
+  rc = sqlite3_prepare_v2(db_, insertPermSQL, -1, &permStmtRaw, nullptr);
+  if (rc != SQLITE_OK) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    setError("Fehler beim Vorbereiten des Berechtigungs-INSERT: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+  auto permStmt = makeStatement(permStmtRaw);
+
+  for (const auto &perm : permissions) {
+    if (perm.empty()) {
+      continue;
+    }
+    sqlite3_reset(permStmt.get());
+    sqlite3_clear_bindings(permStmt.get());
+    sqlite3_bind_text(permStmt.get(), 1, name.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(permStmt.get(), 2, perm.c_str(), -1, SQLITE_TRANSIENT);
+
+    rc = sqlite3_step(permStmt.get());
+    if (rc != SQLITE_DONE) {
+      sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+      setError("Fehler beim Einfügen der Berechtigung: " +
+               std::string(sqlite3_errmsg(db_)));
+      return false;
+    }
+  }
+
+  rc = sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Commit der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
+
+  return true;
+}
+
+bool Database::updateRole(const std::string &name,
+                          const std::vector<std::string> &permissions) {
+  clearError();
+
+  if (!isOpen_) {
+    setError("Datenbank ist nicht geöffnet");
+    return false;
+  }
+
+  if (name.empty()) {
+    setError("Rollenname darf nicht leer sein");
+    return false;
+  }
+
+  const char *existsSQL = "SELECT 1 FROM roles WHERE name = ? LIMIT 1;";
+  sqlite3_stmt *existsStmtRaw = nullptr;
+  int rc = sqlite3_prepare_v2(db_, existsSQL, -1, &existsStmtRaw, nullptr);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Prüfen der Rolle: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+  auto existsStmt = makeStatement(existsStmtRaw);
+  sqlite3_bind_text(existsStmt.get(), 1, name.c_str(), -1, SQLITE_TRANSIENT);
+  rc = sqlite3_step(existsStmt.get());
+  if (rc == SQLITE_DONE) {
+    setError("Rolle '" + name + "' nicht gefunden");
+    return false;
+  }
+  if (rc != SQLITE_ROW) {
+    setError("Fehler beim Prüfen der Rolle: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+
+  char *errMsg = nullptr;
+  rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
+                    &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Starten der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    return false;
+  }
+
+  const char *deletePermSQL =
+      "DELETE FROM role_permissions WHERE role_name = ?;";
+  sqlite3_stmt *deleteStmtRaw = nullptr;
+  rc = sqlite3_prepare_v2(db_, deletePermSQL, -1, &deleteStmtRaw, nullptr);
+  if (rc != SQLITE_OK) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    setError("Fehler beim Vorbereiten des DELETE: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+  auto deleteStmt = makeStatement(deleteStmtRaw);
+  sqlite3_bind_text(deleteStmt.get(), 1, name.c_str(), -1, SQLITE_TRANSIENT);
+  rc = sqlite3_step(deleteStmt.get());
+  if (rc != SQLITE_DONE) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    setError("Fehler beim Löschen der Berechtigungen: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+
+  const char *insertPermSQL = R"(
+        INSERT OR IGNORE INTO role_permissions (role_name, permission)
+        VALUES (?, ?);
+    )";
+  sqlite3_stmt *permStmtRaw = nullptr;
+  rc = sqlite3_prepare_v2(db_, insertPermSQL, -1, &permStmtRaw, nullptr);
+  if (rc != SQLITE_OK) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    setError("Fehler beim Vorbereiten des Berechtigungs-INSERT: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+  auto permStmt = makeStatement(permStmtRaw);
+
+  for (const auto &perm : permissions) {
+    if (perm.empty()) {
+      continue;
+    }
+    sqlite3_reset(permStmt.get());
+    sqlite3_clear_bindings(permStmt.get());
+    sqlite3_bind_text(permStmt.get(), 1, name.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(permStmt.get(), 2, perm.c_str(), -1, SQLITE_TRANSIENT);
+
+    rc = sqlite3_step(permStmt.get());
+    if (rc != SQLITE_DONE) {
+      sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+      setError("Fehler beim Einfügen der Berechtigung: " +
+               std::string(sqlite3_errmsg(db_)));
+      return false;
+    }
+  }
+
+  rc = sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Commit der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
+
+  return true;
+}
+
+std::vector<std::string> Database::getRolePermissions(const std::string &name) {
+  std::vector<std::string> permissions;
+
+  clearError();
+
+  if (!isOpen_) {
+    setError("Datenbank ist nicht geöffnet");
+    return permissions;
+  }
+
+  const char *selectSQL = R"(
+        SELECT permission
+        FROM role_permissions
+        WHERE role_name = ?
+        ORDER BY permission;
+    )";
+
+  sqlite3_stmt *rawStmt = nullptr;
+  int rc = sqlite3_prepare_v2(db_, selectSQL, -1, &rawStmt, nullptr);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Vorbereiten des SELECT: " +
+             std::string(sqlite3_errmsg(db_)));
+    return permissions;
+  }
+
+  auto stmt = makeStatement(rawStmt);
+  sqlite3_bind_text(stmt.get(), 1, name.c_str(), -1, SQLITE_TRANSIENT);
+
+  while ((rc = sqlite3_step(stmt.get())) == SQLITE_ROW) {
+    const char *perm = reinterpret_cast<const char *>(sqlite3_column_text(
+        stmt.get(), 0));
+    permissions.emplace_back(perm ? perm : "");
+  }
+
+  if (rc != SQLITE_DONE) {
+    setError("Fehler beim Abrufen der Berechtigungen: " +
+             std::string(sqlite3_errmsg(db_)));
+  }
+
+  return permissions;
+}
+
+std::vector<std::string> Database::getAllRoles() {
+  std::vector<std::string> roles;
+
+  clearError();
+
+  if (!isOpen_) {
+    setError("Datenbank ist nicht geöffnet");
+    return roles;
+  }
+
+  const char *selectSQL = R"(
+        SELECT name FROM roles ORDER BY name;
+    )";
+
+  sqlite3_stmt *rawStmt = nullptr;
+  int rc = sqlite3_prepare_v2(db_, selectSQL, -1, &rawStmt, nullptr);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Vorbereiten des SELECT: " +
+             std::string(sqlite3_errmsg(db_)));
+    return roles;
+  }
+
+  auto stmt = makeStatement(rawStmt);
+  while ((rc = sqlite3_step(stmt.get())) == SQLITE_ROW) {
+    const char *name =
+        reinterpret_cast<const char *>(sqlite3_column_text(stmt.get(), 0));
+    roles.emplace_back(name ? name : "");
+  }
+
+  if (rc != SQLITE_DONE) {
+    setError("Fehler beim Abrufen der Rollen: " +
+             std::string(sqlite3_errmsg(db_)));
+  }
+
+  return roles;
+}
+
+bool Database::assignUserRole(int userId, const std::string &roleName) {
+  clearError();
+
+  if (!isOpen_) {
+    setError("Datenbank ist nicht geöffnet");
+    return false;
+  }
+
+  if (roleName.empty()) {
+    setError("Rollenname darf nicht leer sein");
+    return false;
+  }
+
+  const char *existsSQL = "SELECT 1 FROM roles WHERE name = ? LIMIT 1;";
+  sqlite3_stmt *existsStmtRaw = nullptr;
+  int rc = sqlite3_prepare_v2(db_, existsSQL, -1, &existsStmtRaw, nullptr);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Prüfen der Rolle: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+  auto existsStmt = makeStatement(existsStmtRaw);
+  sqlite3_bind_text(existsStmt.get(), 1, roleName.c_str(), -1,
+                    SQLITE_TRANSIENT);
+  rc = sqlite3_step(existsStmt.get());
+  if (rc == SQLITE_DONE) {
+    setError("Rolle '" + roleName + "' nicht gefunden");
+    return false;
+  }
+  if (rc != SQLITE_ROW) {
+    setError("Fehler beim Prüfen der Rolle: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+
+  const char *updateSQL = "UPDATE users SET role = ? WHERE id = ?;";
+  sqlite3_stmt *updateStmtRaw = nullptr;
+  rc = sqlite3_prepare_v2(db_, updateSQL, -1, &updateStmtRaw, nullptr);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Vorbereiten des UPDATE: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+  auto updateStmt = makeStatement(updateStmtRaw);
+
+  sqlite3_bind_text(updateStmt.get(), 1, roleName.c_str(), -1,
+                    SQLITE_TRANSIENT);
+  sqlite3_bind_int(updateStmt.get(), 2, userId);
+
+  rc = sqlite3_step(updateStmt.get());
+  if (rc != SQLITE_DONE) {
+    setError("Fehler beim Zuweisen der Rolle: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+
+  if (sqlite3_changes(db_) == 0) {
+    setError("Benutzer mit ID " + std::to_string(userId) + " nicht gefunden");
     return false;
   }
 

@@ -1,6 +1,7 @@
 #include "utils/CliInterface.h"
 #include "utils/CsvImport.h"
 #include "utils/CsvResultImport.h"
+#include <algorithm>
 #include <ctime>
 #include <iomanip>
 #include <iostream>
@@ -100,6 +101,7 @@ void CliInterface::showMainMenu() {
       std::cout << "  [44] Benutzer anzeigen\n";
       std::cout << "  [45] Benutzer bearbeiten\n";
       std::cout << "  [46] Benutzer deaktivieren\n";
+      std::cout << "  [47] Rollen verwalten\n";
     }
   }
   std::cout << "\n  === System ===\n";
@@ -204,6 +206,9 @@ void CliInterface::showMainMenu() {
     break;
   case 46:
     handleDeleteUser();
+    break;
+  case 47:
+    handleManageRoles();
     break;
   // System
   case 7:
@@ -2253,30 +2258,30 @@ void CliInterface::handleCreateUser() {
     return;
   }
 
-  std::cout << "\nRolle:\n";
-  std::cout << "  [1] Administrator\n";
-  std::cout << "  [2] Operator\n";
-  std::cout << "  [3] Betrachter\n\n";
+  auto roles = database_->getAllRoles();
+  if (database_->hasError() || roles.empty()) {
+    database_->clearError();
+    roles = {"Administrator", "Operator", "Betrachter"};
+  }
 
-  int roleChoice = readInteger("Rolle (1-3)");
+  std::cout << "\nRolle:\n";
+  for (size_t i = 0; i < roles.size(); ++i) {
+    std::cout << "  [" << (i + 1) << "] " << roles[i] << "\n";
+  }
+  std::cout << "\n";
+
+  const std::string prompt =
+      "Rolle (1-" + std::to_string(roles.size()) + ")";
+  int roleChoice = readInteger(prompt);
   if (!running_)
     return;
 
-  core::User::Role role;
-  switch (roleChoice) {
-  case 1:
-    role = core::User::Role::ADMIN;
-    break;
-  case 2:
-    role = core::User::Role::OPERATOR;
-    break;
-  case 3:
-    role = core::User::Role::VIEWER;
-    break;
-  default:
-    std::cout << "\nUngültige Auswahl. Verwende 'Operator'.\n";
-    role = core::User::Role::OPERATOR;
+  if (roleChoice < 1 || static_cast<size_t>(roleChoice) > roles.size()) {
+    std::cout << "\nUngültige Auswahl. Verwende '" << roles.front() << "'.\n";
+    roleChoice = 1;
   }
+
+  const std::string selectedRole = roles[static_cast<size_t>(roleChoice - 1)];
 
   std::string fullName = readInput("Vollständiger Name (optional)");
   if (!running_)
@@ -2288,7 +2293,9 @@ void CliInterface::handleCreateUser() {
     return;
   email = trim(email);
 
-  core::User newUser(username, core::User::hashPassword(password), role);
+  core::User newUser(username, core::User::hashPassword(password),
+                     core::User::Role::OPERATOR);
+  newUser.setRoleName(selectedRole);
   newUser.setFullName(fullName);
   newUser.setEmail(email);
 
@@ -2392,34 +2399,37 @@ void CliInterface::handleUpdateUser() {
     return;
 
   const bool wasActive = user->isActive();
+  bool roleChanged = false;
+  std::string selectedRoleName;
 
   switch (choice) {
   case 1: {
+    auto roles = database_->getAllRoles();
+    if (database_->hasError() || roles.empty()) {
+      database_->clearError();
+      roles = {"Administrator", "Operator", "Betrachter"};
+    }
+
     std::cout << "\nNeue Rolle:\n";
-    std::cout << "  [1] Administrator\n";
-    std::cout << "  [2] Operator\n";
-    std::cout << "  [3] Betrachter\n\n";
-    int roleChoice = readInteger("Rolle (1-3)");
+    for (size_t i = 0; i < roles.size(); ++i) {
+      std::cout << "  [" << (i + 1) << "] " << roles[i] << "\n";
+    }
+    std::cout << "\n";
+
+    const std::string prompt =
+        "Rolle (1-" + std::to_string(roles.size()) + ")";
+    int roleChoice = readInteger(prompt);
     if (!running_)
       return;
 
-    core::User::Role newRole;
-    switch (roleChoice) {
-    case 1:
-      newRole = core::User::Role::ADMIN;
-      break;
-    case 2:
-      newRole = core::User::Role::OPERATOR;
-      break;
-    case 3:
-      newRole = core::User::Role::VIEWER;
-      break;
-    default:
+    if (roleChoice < 1 || static_cast<size_t>(roleChoice) > roles.size()) {
       std::cout << "\nUngültige Auswahl.\n";
       waitForEnter();
       return;
     }
-    user->setRole(newRole);
+
+    selectedRoleName = roles[static_cast<size_t>(roleChoice - 1)];
+    roleChanged = true;
     break;
   }
   case 2: {
@@ -2465,18 +2475,30 @@ void CliInterface::handleUpdateUser() {
     return;
   }
 
-  if (database_->updateUser(*user)) {
+  const std::string actor =
+      currentUser_ ? currentUser_->getUsername() : std::string("system");
+
+  if (roleChanged) {
+    if (database_->assignUserRole(user->getId(), selectedRoleName)) {
+      user->setRoleName(selectedRoleName);
+      std::cout << "\n✓ Rolle erfolgreich zugewiesen.\n";
+      database_->logUserAction(core::AuditEntry::ActionType::UPDATE,
+                               user->getUsername(), actor,
+                               "Rolle zugewiesen: " + selectedRoleName);
+    } else {
+      std::cout << "\n✗ Fehler beim Zuweisen der Rolle: "
+                << database_->getLastError() << "\n";
+    }
+  } else if (database_->updateUser(*user)) {
     std::cout << "\n✓ Benutzer erfolgreich aktualisiert.\n";
-    const std::string actor =
-        currentUser_ ? currentUser_->getUsername() : std::string("system");
     const std::string details =
         (wasActive && !user->isActive()) ? "Benutzer deaktiviert"
                                          : "Benutzer aktualisiert";
     database_->logUserAction(core::AuditEntry::ActionType::UPDATE,
                              user->getUsername(), actor, details);
   } else {
-    std::cout << "\n✗ Fehler beim Aktualisieren: " << database_->getLastError()
-              << "\n";
+    std::cout << "\n✗ Fehler beim Aktualisieren: "
+              << database_->getLastError() << "\n";
   }
 
   waitForEnter();
@@ -2555,6 +2577,142 @@ void CliInterface::handleDeleteUser() {
   waitForEnter();
 }
 
+void CliInterface::handleManageRoles() {
+  clearScreen();
+  printSeparator();
+  std::cout << "        ROLLEN VERWALTEN\n";
+  printSeparator();
+  std::cout << "\n";
+
+  if (!isAdmin()) {
+    std::cout << "✗ Nur Administratoren können Rollen verwalten.\n";
+    waitForEnter();
+    return;
+  }
+
+  auto roles = database_->getAllRoles();
+  if (database_->hasError()) {
+    std::cout << "✗ Fehler beim Laden der Rollen: " << database_->getLastError()
+              << "\n";
+    waitForEnter();
+    return;
+  }
+
+  if (roles.empty()) {
+    std::cout << "ℹ Keine Rollen gefunden.\n";
+  } else {
+    std::cout << "Verfügbare Rollen:\n";
+    for (size_t i = 0; i < roles.size(); ++i) {
+      std::cout << "  [" << (i + 1) << "] " << roles[i] << "\n";
+    }
+  }
+
+  std::cout << "\nOptionen:\n";
+  std::cout << "  [1] Neue Rolle erstellen\n";
+  std::cout << "  [2] Rolle aktualisieren\n";
+  std::cout << "  [0] Zurück\n\n";
+
+  int choice = readInteger("Ihre Wahl");
+  if (!running_)
+    return;
+
+  const std::string actor =
+      currentUser_ ? currentUser_->getUsername() : std::string("system");
+
+  switch (choice) {
+  case 1: {
+    std::string roleName = readValidatedInput("Rollenname", "Rollenname");
+    if (!running_)
+      return;
+
+    std::string permInput =
+        readInput("Berechtigungen (kommagetrennt, optional)");
+    if (!running_)
+      return;
+
+    auto permissions = splitCommaList(permInput);
+
+    if (database_->createRole(roleName, permissions)) {
+      std::cout << "\n✓ Rolle '" << roleName << "' erstellt.\n";
+      database_->logRoleAction(core::AuditEntry::ActionType::CREATE, roleName,
+                               actor,
+                               "Rolle erstellt; Rechte: " +
+                                   std::to_string(permissions.size()));
+    } else {
+      std::cout << "\n✗ Fehler beim Erstellen: " << database_->getLastError()
+                << "\n";
+    }
+    waitForEnter();
+    return;
+  }
+  case 2: {
+    if (roles.empty()) {
+      std::cout << "\n✗ Keine Rollen verfügbar.\n";
+      waitForEnter();
+      return;
+    }
+
+    const std::string prompt =
+        "Rolle wählen (1-" + std::to_string(roles.size()) + ")";
+    int roleChoice = readInteger(prompt);
+    if (!running_)
+      return;
+
+    if (roleChoice < 1 || static_cast<size_t>(roleChoice) > roles.size()) {
+      std::cout << "\nUngültige Auswahl.\n";
+      waitForEnter();
+      return;
+    }
+
+    const std::string roleName = roles[static_cast<size_t>(roleChoice - 1)];
+    auto currentPerms = database_->getRolePermissions(roleName);
+    if (database_->hasError()) {
+      std::cout << "\n✗ Fehler beim Laden der Berechtigungen: "
+                << database_->getLastError() << "\n";
+      waitForEnter();
+      return;
+    }
+
+    std::cout << "\nAktuelle Berechtigungen:";
+    if (currentPerms.empty()) {
+      std::cout << " (keine)";
+    }
+    std::cout << "\n";
+    for (const auto &perm : currentPerms) {
+      std::cout << "  - " << perm << "\n";
+    }
+
+    std::string permInput = readInput(
+        "Neue Berechtigungen (kommagetrennt, leer=beibehalten)");
+    if (!running_)
+      return;
+
+    auto newPerms =
+        isEmpty(permInput) ? currentPerms : splitCommaList(permInput);
+
+    if (database_->updateRole(roleName, newPerms)) {
+      std::cout << "\n✓ Rolle '" << roleName << "' aktualisiert.\n";
+      database_->logRoleAction(core::AuditEntry::ActionType::UPDATE, roleName,
+                               actor,
+                               "Rolle aktualisiert; Rechte: " +
+                                   std::to_string(newPerms.size()));
+    } else {
+      std::cout << "\n✗ Fehler beim Aktualisieren: "
+                << database_->getLastError() << "\n";
+    }
+
+    waitForEnter();
+    return;
+  }
+  case 0:
+    return;
+  default:
+    std::cout << "\nUngültige Auswahl.\n";
+    waitForEnter();
+    return;
+  }
+}
+
 // Validierungsfunktionen
 std::string CliInterface::trim(const std::string &str) {
   size_t start = str.find_first_not_of(" \t\r\n");
@@ -2564,6 +2722,24 @@ std::string CliInterface::trim(const std::string &str) {
 
   size_t end = str.find_last_not_of(" \t\r\n");
   return str.substr(start, end - start + 1);
+}
+
+std::vector<std::string> CliInterface::splitCommaList(
+    const std::string &input) {
+  std::vector<std::string> items;
+  std::stringstream ss(input);
+  std::string token;
+
+  while (std::getline(ss, token, ',')) {
+    auto trimmed = trim(token);
+    if (!trimmed.empty()) {
+      items.push_back(trimmed);
+    }
+  }
+
+  std::sort(items.begin(), items.end());
+  items.erase(std::unique(items.begin(), items.end()), items.end());
+  return items;
 }
 
 bool CliInterface::isValidId(const std::string &id) {

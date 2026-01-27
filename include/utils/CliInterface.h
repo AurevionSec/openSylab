@@ -5,6 +5,7 @@
 #include "db/Database.h"
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace opensylab {
 namespace utils {
@@ -88,6 +89,7 @@ private:
   void handleUpdateUser();
   void handleDeleteUser();
   void handleChangePassword();
+  void handleManageRoles();
 
   // Berechtigungsprüfung
   bool isLoggedIn() const { return currentUser_ != nullptr; }
@@ -114,6 +116,7 @@ private:
 
   // Validierungsfunktionen
   static std::string trim(const std::string &str);
+  static std::vector<std::string> splitCommaList(const std::string &input);
   static bool isValidId(const std::string &id);
   static bool isEmpty(const std::string &str);
   static bool parseDate(const std::string &input, std::time_t &out);
