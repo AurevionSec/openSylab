@@ -188,6 +188,17 @@ public:
   [[nodiscard]] bool verifyUserMfa(const std::string &username,
                                    const std::string &code);
 
+  // Sitzungsverfolgung
+  [[nodiscard]] bool startSession(int userId, const std::string &username,
+                                  AuthMethod method,
+                                  const std::string &details = "");
+  [[nodiscard]] bool endSession(int userId, const std::string &username,
+                                const std::string &reason = "");
+  [[nodiscard]] std::optional<int> getActiveSessionId(int userId);
+  [[nodiscard]] int getActiveSessionCount(int userId);
+  [[nodiscard]] int getSessionCount(int userId);
+  [[nodiscard]] bool hasActiveSession(int userId);
+
   // Authentifizierung
   [[nodiscard]] AuthResult authenticatePrimary(const std::string &username,
                                                const std::string &password);

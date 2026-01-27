@@ -2170,7 +2170,15 @@ void CliInterface::handleLogout() {
     return;
   }
 
+  const int userId = currentUser_->getId();
   std::string username = currentUser_->getUsername();
+
+  if (!database_->endSession(userId, username, "logout")) {
+    std::cout << "✗ Sitzung konnte nicht sauber beendet werden: "
+              << database_->getLastError() << "\n";
+    database_->clearError();
+  }
+
   currentUser_.reset();
   std::cout << "✓ Benutzer '" << username << "' erfolgreich abgemeldet.\n";
 

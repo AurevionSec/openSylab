@@ -837,6 +837,125 @@ bool test_database_AuthAuditLogging() {
   return true;
 }
 
+bool test_database_SessionStartAndEnd() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  const std::string username = "session_user";
+  const std::string password = "secret";
+
+  User user(username, User::hashPassword(password), User::Role::OPERATOR);
+  ASSERT_TRUE(db.createUser(user));
+
+  auto auth = db.authenticateUser(username, password);
+  ASSERT_NOT_NULL(auth);
+
+  const int userId = auth->getId();
+  ASSERT_TRUE(db.hasActiveSession(userId));
+  ASSERT_EQ(db.getActiveSessionCount(userId), 1);
+  ASSERT_EQ(db.getSessionCount(userId), 1);
+  ASSERT_TRUE(db.getActiveSessionId(userId).has_value());
+
+  ASSERT_TRUE(db.endSession(userId, username, "logout"));
+  ASSERT_EQ(db.getActiveSessionCount(userId), 0);
+  ASSERT_EQ(db.getSessionCount(userId), 1);
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_database_NoSessionOnFailedAuth() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  const std::string username = "session_fail";
+  const std::string password = "secret";
+
+  User user(username, User::hashPassword(password), User::Role::OPERATOR);
+  ASSERT_TRUE(db.createUser(user));
+
+  auto fail = db.authenticateUser(username, "wrong");
+  ASSERT_TRUE(fail == nullptr);
+
+  auto stored = db.getUserByUsername(username);
+  ASSERT_NOT_NULL(stored);
+  const int userId = stored->getId();
+  ASSERT_EQ(db.getSessionCount(userId), 0);
+  ASSERT_EQ(db.getActiveSessionCount(userId), 0);
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_database_ReloginClosesPreviousSession() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  const std::string username = "session_relogin";
+  const std::string password = "secret";
+
+  User user(username, User::hashPassword(password), User::Role::OPERATOR);
+  ASSERT_TRUE(db.createUser(user));
+
+  auto first = db.authenticateUser(username, password);
+  ASSERT_NOT_NULL(first);
+  const int userId = first->getId();
+
+  auto second = db.authenticateUser(username, password);
+  ASSERT_NOT_NULL(second);
+
+  ASSERT_EQ(db.getSessionCount(userId), 2);
+  ASSERT_EQ(db.getActiveSessionCount(userId), 1);
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_database_SessionLogoutAudit() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  const std::string username = "session_audit";
+  const std::string password = "secret";
+
+  User user(username, User::hashPassword(password), User::Role::ADMIN);
+  ASSERT_TRUE(db.createUser(user));
+
+  auto auth = db.authenticateUser(username, password);
+  ASSERT_NOT_NULL(auth);
+  const int userId = auth->getId();
+
+  ASSERT_TRUE(db.endSession(userId, username, "logout"));
+
+  auto entries =
+      db.getAuditLogByEntity(AuditEntry::EntityType::USER, username);
+  ASSERT_FALSE(entries.empty());
+
+  bool foundLogout = false;
+  for (const auto &entry : entries) {
+    if (entry->getAction() == AuditEntry::ActionType::LOGOUT) {
+      foundLogout = true;
+      break;
+    }
+  }
+  ASSERT_TRUE(foundLogout);
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
 bool test_database_ExportValidatedResults_CsvOutput() {
   std::string dbPath = uniqueDbPath();
   Database db(dbPath);
@@ -1231,6 +1350,13 @@ void registerDatabaseTests() {
   registerTest("Database::MfaRequiredFlowLocalUser",
                test_database_MfaRequiredFlowLocalUser);
   registerTest("Database::AuthAuditLogging", test_database_AuthAuditLogging);
+  registerTest("Database::SessionStartAndEnd", test_database_SessionStartAndEnd);
+  registerTest("Database::NoSessionOnFailedAuth",
+               test_database_NoSessionOnFailedAuth);
+  registerTest("Database::ReloginClosesPreviousSession",
+               test_database_ReloginClosesPreviousSession);
+  registerTest("Database::SessionLogoutAudit",
+               test_database_SessionLogoutAudit);
   registerTest("Database::ExportValidatedResults_CsvOutput",
                test_database_ExportValidatedResults_CsvOutput);
   registerTest("Database::ExportValidatedResults_LogsAudit",
