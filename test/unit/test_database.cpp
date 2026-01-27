@@ -899,6 +899,82 @@ bool test_database_AuditLogFilterReset() {
   return true;
 }
 
+bool test_database_RetentionMinEnforced() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  ASSERT_EQ(db.getRetentionDays(), 180);
+
+  ASSERT_TRUE(db.setRetentionDays(30));
+  ASSERT_EQ(db.getRetentionDays(), 180);
+
+  ASSERT_TRUE(db.setRetentionDays(365));
+  ASSERT_EQ(db.getRetentionDays(), 365);
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_database_AuditRetentionPurgesAndLogs() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  ASSERT_TRUE(db.setRetentionDays(180));
+
+  const std::time_t now = std::time(nullptr);
+  const std::time_t oldTs =
+      now - static_cast<std::time_t>(200 * 24 * 60 * 60);
+  const std::time_t recentTs =
+      now - static_cast<std::time_t>(10 * 24 * 60 * 60);
+
+  AuditEntry old1(AuditEntry::ActionType::CREATE,
+                  AuditEntry::EntityType::SAMPLE, "RET_OLD_1", "tester",
+                  "old");
+  old1.setTimestamp(oldTs);
+  ASSERT_TRUE(db.logAudit(old1));
+
+  AuditEntry old2(AuditEntry::ActionType::UPDATE,
+                  AuditEntry::EntityType::ORDER, "RET_OLD_2", "tester",
+                  "old");
+  old2.setTimestamp(oldTs);
+  ASSERT_TRUE(db.logAudit(old2));
+
+  AuditEntry recent(AuditEntry::ActionType::DELETE,
+                    AuditEntry::EntityType::RESULT, "RET_NEW_1", "tester",
+                    "recent");
+  recent.setTimestamp(recentTs);
+  ASSERT_TRUE(db.logAudit(recent));
+
+  int purged = 0;
+  ASSERT_TRUE(db.applyAuditRetention("admin", purged));
+  ASSERT_EQ(purged, 2);
+
+  auto entries = db.getAuditLog(50);
+  const AuditEntry *retentionEntry =
+      findAuditEntry(entries, AuditEntry::ActionType::DELETE,
+                     AuditEntry::EntityType::SYSTEM, "audit_log", "admin");
+  ASSERT_NOT_NULL(retentionEntry);
+
+  const AuditEntry *recentEntry =
+      findAuditEntry(entries, AuditEntry::ActionType::DELETE,
+                     AuditEntry::EntityType::RESULT, "RET_NEW_1", "tester");
+  ASSERT_NOT_NULL(recentEntry);
+
+  const AuditEntry *oldEntry =
+      findAuditEntry(entries, AuditEntry::ActionType::CREATE,
+                     AuditEntry::EntityType::SAMPLE, "RET_OLD_1", "tester");
+  ASSERT_TRUE(oldEntry == nullptr);
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
 bool test_database_AuthenticateUserRejectsInactive() {
   std::string dbPath = uniqueDbPath();
   Database db(dbPath);
@@ -1532,6 +1608,10 @@ void registerDatabaseTests() {
                test_database_AuditLogFiltering);
   registerTest("Database::AuditLogFilterReset",
                test_database_AuditLogFilterReset);
+  registerTest("Database::RetentionMinEnforced",
+               test_database_RetentionMinEnforced);
+  registerTest("Database::AuditRetentionPurgesAndLogs",
+               test_database_AuditRetentionPurgesAndLogs);
   registerTest("Database::AuthenticateUserRejectsInactive",
                test_database_AuthenticateUserRejectsInactive);
   registerTest("Database::AuthConfigLdapEnabled",

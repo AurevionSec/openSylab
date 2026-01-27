@@ -1,4 +1,5 @@
 #include "db/Database.h"
+#include <algorithm>
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -325,6 +326,11 @@ bool Database::initializeSchema() {
         CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_log(entity, entity_id);
         CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_log(user);
 
+        CREATE TABLE IF NOT EXISTS retention_settings (
+            key TEXT PRIMARY KEY,
+            value INTEGER NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT NOT NULL UNIQUE,
@@ -430,6 +436,20 @@ bool Database::initializeSchema() {
   if (rc != SQLITE_OK) {
     std::string error =
         "SQL-Fehler beim Initialisieren der Auth-Konfiguration: " +
+        std::string(errMsg);
+    sqlite3_free(errMsg);
+    setError(error);
+    return false;
+  }
+
+  const char *seedRetentionSQL = R"(
+        INSERT OR IGNORE INTO retention_settings (key, value)
+        VALUES ('audit_log_days', 180);
+    )";
+  rc = sqlite3_exec(db_, seedRetentionSQL, nullptr, nullptr, &errMsg);
+  if (rc != SQLITE_OK) {
+    std::string error =
+        "SQL-Fehler beim Initialisieren der Retention-Konfiguration: " +
         std::string(errMsg);
     sqlite3_free(errMsg);
     setError(error);
@@ -2281,6 +2301,136 @@ Database::getAuditLogFiltered(const AuditLogFilter &filter) {
   }
 
   return entries;
+}
+
+int Database::getRetentionDays() {
+  clearError();
+
+  if (!isOpen_) {
+    setError("Datenbank ist nicht geöffnet");
+    return 180;
+  }
+
+  const char *selectSQL =
+      "SELECT value FROM retention_settings WHERE key = ? LIMIT 1;";
+  sqlite3_stmt *rawStmt = nullptr;
+  int rc = sqlite3_prepare_v2(db_, selectSQL, -1, &rawStmt, nullptr);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Vorbereiten des SELECT: " +
+             std::string(sqlite3_errmsg(db_)));
+    return 180;
+  }
+
+  auto stmt = makeStatement(rawStmt);
+  sqlite3_bind_text(stmt.get(), 1, "audit_log_days", -1, SQLITE_TRANSIENT);
+
+  rc = sqlite3_step(stmt.get());
+  if (rc == SQLITE_ROW) {
+    int value = sqlite3_column_int(stmt.get(), 0);
+    return std::max(value, 180);
+  }
+  if (rc != SQLITE_DONE) {
+    setError("Fehler beim Laden der Retention-Konfiguration: " +
+             std::string(sqlite3_errmsg(db_)));
+  }
+
+  return 180;
+}
+
+bool Database::setRetentionDays(int days) {
+  clearError();
+
+  if (!isOpen_) {
+    setError("Datenbank ist nicht geöffnet");
+    return false;
+  }
+
+  int enforcedDays = std::max(days, 180);
+
+  const char *upsertSQL = R"(
+        INSERT INTO retention_settings (key, value) VALUES (?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value;
+    )";
+
+  sqlite3_stmt *rawStmt = nullptr;
+  int rc = sqlite3_prepare_v2(db_, upsertSQL, -1, &rawStmt, nullptr);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Vorbereiten der Retention-Konfiguration: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+
+  auto stmt = makeStatement(rawStmt);
+  sqlite3_bind_text(stmt.get(), 1, "audit_log_days", -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int(stmt.get(), 2, enforcedDays);
+
+  rc = sqlite3_step(stmt.get());
+  if (rc != SQLITE_DONE) {
+    setError("Fehler beim Speichern der Retention-Konfiguration: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+
+  return true;
+}
+
+bool Database::applyAuditRetention(const std::string &actor,
+                                   int &purgedCount) {
+  clearError();
+
+  purgedCount = 0;
+
+  if (!isOpen_) {
+    setError("Datenbank ist nicht geöffnet");
+    return false;
+  }
+
+  int retentionDays = getRetentionDays();
+  if (!getLastError().empty()) {
+    return false;
+  }
+
+  const std::time_t now = std::time(nullptr);
+  const std::time_t cutoff =
+      now - static_cast<std::time_t>(retentionDays * 24 * 60 * 60);
+
+  const char *deleteSQL =
+      "DELETE FROM audit_log WHERE timestamp < ?;";
+  sqlite3_stmt *rawStmt = nullptr;
+  int rc = sqlite3_prepare_v2(db_, deleteSQL, -1, &rawStmt, nullptr);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Vorbereiten des DELETE: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+
+  auto stmt = makeStatement(rawStmt);
+  sqlite3_bind_int64(stmt.get(), 1, static_cast<sqlite3_int64>(cutoff));
+
+  rc = sqlite3_step(stmt.get());
+  if (rc != SQLITE_DONE) {
+    setError("Fehler beim Anwenden der Retention-Regeln: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+
+  purgedCount = sqlite3_changes(db_);
+  if (purgedCount > 0) {
+    std::ostringstream details;
+    details << "Retention purge: " << purgedCount
+            << " audit entries older than " << cutoff << " (days="
+            << retentionDays << ")";
+
+    core::AuditEntry entry(core::AuditEntry::ActionType::DELETE,
+                           core::AuditEntry::EntityType::SYSTEM, "audit_log",
+                           normalizeActor(actor), details.str());
+    entry.setTimestamp(now);
+    if (!logAudit(entry)) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 // Audit-Hilfsmethoden

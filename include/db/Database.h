@@ -146,6 +146,12 @@ public:
   [[nodiscard]] std::vector<std::unique_ptr<core::AuditEntry>>
   getAuditLogFiltered(const AuditLogFilter &filter);
 
+  // Retention
+  [[nodiscard]] int getRetentionDays();
+  [[nodiscard]] bool setRetentionDays(int days);
+  [[nodiscard]] bool applyAuditRetention(const std::string &actor,
+                                         int &purgedCount);
+
   // Audit-Hilfsmethoden
   void logSampleAction(core::AuditEntry::ActionType action,
                        const std::string &sampleId, const std::string &user,

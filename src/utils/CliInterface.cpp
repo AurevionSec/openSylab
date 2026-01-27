@@ -90,6 +90,10 @@ void CliInterface::showMainMenu() {
   std::cout << "\n  === Audit-Trail ===\n";
   std::cout << "  [30] Audit-Log anzeigen\n";
   std::cout << "  [31] Audit für Entität anzeigen\n";
+  if (isAdmin()) {
+    std::cout << "  [32] Retention konfigurieren\n";
+    std::cout << "  [33] Retention jetzt ausführen\n";
+  }
   std::cout << "\n  === Benutzerverwaltung ===\n";
   if (!isLoggedIn()) {
     std::cout << "  [40] Anmelden\n";
@@ -184,6 +188,12 @@ void CliInterface::showMainMenu() {
     break;
   case 31:
     handleAuditForEntity();
+    break;
+  case 32:
+    handleConfigureRetention();
+    break;
+  case 33:
+    handleRunRetention();
     break;
   // Benutzerverwaltung
   case 40:
@@ -2189,6 +2199,90 @@ void CliInterface::handleAuditForEntity() {
     }
 
     std::cout << "\nGesamt: " << entries.size() << " Einträge\n";
+  }
+
+  waitForEnter();
+}
+
+void CliInterface::handleConfigureRetention() {
+  clearScreen();
+  printSeparator();
+  std::cout << "        RETENTION KONFIGURIEREN\n";
+  printSeparator();
+  std::cout << "\n";
+
+  if (!isAdmin()) {
+    std::cout << "✗ Nur Administratoren dürfen Retention ändern.\n";
+    waitForEnter();
+    return;
+  }
+
+  int currentDays = database_->getRetentionDays();
+  if (database_->hasError()) {
+    std::cout << "\n✗ Fehler beim Laden der Retention:\n";
+    std::cout << "  " << database_->getLastError() << "\n";
+    waitForEnter();
+    return;
+  }
+
+  std::cout << "Aktuelle Retention: " << currentDays << " Tage\n";
+  int newDays = readInteger("Neue Retention in Tagen (min. 180, 0=Abbruch)");
+  if (!running_)
+    return;
+
+  if (newDays == 0) {
+    std::cout << "\nAbgebrochen.\n";
+    waitForEnter();
+    return;
+  }
+  if (newDays < 0) {
+    std::cout << "\n✗ Ungültiger Wert.\n";
+    waitForEnter();
+    return;
+  }
+
+  if (newDays < 180) {
+    std::cout << "ℹ Mindestwert 180 Tage wird erzwungen.\n";
+    newDays = 180;
+  }
+
+  if (database_->setRetentionDays(newDays)) {
+    std::cout << "\n✓ Retention aktualisiert: " << newDays << " Tage\n";
+  } else {
+    std::cout << "\n✗ Fehler beim Speichern:\n";
+    std::cout << "  " << database_->getLastError() << "\n";
+  }
+
+  waitForEnter();
+}
+
+void CliInterface::handleRunRetention() {
+  clearScreen();
+  printSeparator();
+  std::cout << "        RETENTION AUSFÜHREN\n";
+  printSeparator();
+  std::cout << "\n";
+
+  if (!isAdmin()) {
+    std::cout << "✗ Nur Administratoren dürfen Retention ausführen.\n";
+    waitForEnter();
+    return;
+  }
+
+  int purged = 0;
+  const std::string actor =
+      currentUser_ ? currentUser_->getUsername() : std::string("system");
+
+  if (database_->applyAuditRetention(actor, purged)) {
+    if (purged > 0) {
+      std::cout << "\n✓ Retention abgeschlossen: " << purged
+                << " Einträge bereinigt.\n";
+    } else {
+      std::cout << "\nℹ Keine Einträge zum Bereinigen.\n";
+    }
+  } else {
+    std::cout << "\n✗ Fehler beim Ausführen der Retention:\n";
+    std::cout << "  " << database_->getLastError() << "\n";
   }
 
   waitForEnter();
