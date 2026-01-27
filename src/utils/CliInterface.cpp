@@ -254,7 +254,7 @@ void CliInterface::handleNewSample() {
   sample.setPatientName(patientName);
   sample.setDescription(description);
 
-  if (database_->createSample(sample)) {
+  if (database_->createSample(sample, getCurrentUsername())) {
     std::cout << "\n✓ Probe erfolgreich erfasst!\n";
   } else {
     std::cout << "\n✗ Fehler beim Erfassen der Probe: "
@@ -538,17 +538,8 @@ void CliInterface::handleUpdateSample() {
 
   sample->setStatus(newStatus);
 
-  if (database_->updateSample(*sample)) {
+  if (database_->updateSample(*sample, getCurrentUsername())) {
     std::cout << "\n✓ Probe erfolgreich aktualisiert!\n";
-    database_->logSampleAction(core::AuditEntry::ActionType::UPDATE,
-                               sample->getSampleId(), getCurrentUsername(),
-                               "Status: " + oldStatus + " -> " +
-                                   sample->getStatusString());
-    if (database_->hasError()) {
-      std::cout << "\n✗ Audit-Log konnte nicht geschrieben werden: "
-                << database_->getLastError() << "\n";
-      database_->clearError();
-    }
   } else {
     std::cout << "\n✗ Fehler beim Aktualisieren: " << database_->getLastError()
               << "\n";
@@ -615,36 +606,17 @@ void CliInterface::handleDeleteSample() {
     return;
   }
 
-  std::string sampleId = sample->getSampleId();
-  std::string oldStatus = sample->getStatusString();
-
   if (actionChoice == 1) {
     sample->setStatus(core::Sample::Status::ARCHIVED);
-    if (database_->updateSample(*sample)) {
+    if (database_->updateSample(*sample, getCurrentUsername())) {
       std::cout << "\n✓ Probe erfolgreich archiviert!\n";
-      database_->logSampleAction(
-          core::AuditEntry::ActionType::UPDATE, sampleId,
-          getCurrentUsername(),
-          "Status: " + oldStatus + " -> " + sample->getStatusString());
-      if (database_->hasError()) {
-        std::cout << "\n✗ Audit-Log konnte nicht geschrieben werden: "
-                  << database_->getLastError() << "\n";
-        database_->clearError();
-      }
     } else {
       std::cout << "\n✗ Fehler beim Archivieren: " << database_->getLastError()
                 << "\n";
     }
   } else if (actionChoice == 2) {
-    if (database_->deleteSample(id)) {
+    if (database_->deleteSample(id, getCurrentUsername())) {
       std::cout << "\n✓ Probe erfolgreich gelöscht!\n";
-      database_->logSampleAction(core::AuditEntry::ActionType::DELETE, sampleId,
-                                 getCurrentUsername(), "Sample gelöscht");
-      if (database_->hasError()) {
-        std::cout << "\n✗ Audit-Log konnte nicht geschrieben werden: "
-                  << database_->getLastError() << "\n";
-        database_->clearError();
-      }
     } else {
       std::cout << "\n✗ Fehler beim Löschen: " << database_->getLastError()
                 << "\n";
@@ -697,7 +669,7 @@ void CliInterface::handleImportCsv() {
       std::vector<std::string> failedSamples;
 
       for (const auto &record : importedRecords) {
-        if (database_->createSample(record.sample)) {
+        if (database_->createSample(record.sample, getCurrentUsername())) {
           imported++;
         } else {
           failed++;
@@ -1008,7 +980,7 @@ void CliInterface::handleNewOrder() {
   order.setPriority(priority);
   order.setNotes(notes);
 
-  if (database_->createOrder(order)) {
+  if (database_->createOrder(order, getCurrentUsername())) {
     std::cout << "\n✓ Auftrag erfolgreich erstellt!\n";
   } else {
     std::cout << "\n✗ Fehler beim Erstellen: " << database_->getLastError()
@@ -1172,7 +1144,6 @@ void CliInterface::handleUpdateOrder() {
   if (!running_)
     return;
 
-  std::string oldStatus = order->getStatusString();
   core::Order::Status newStatus;
   switch (statusChoice) {
   case 1:
@@ -1199,18 +1170,8 @@ void CliInterface::handleUpdateOrder() {
 
   order->setStatus(newStatus);
 
-  if (database_->updateOrder(*order)) {
+  if (database_->updateOrder(*order, getCurrentUsername())) {
     std::cout << "\n✓ Auftrag erfolgreich aktualisiert!\n";
-    std::string details =
-        "Status: " + oldStatus + " -> " + order->getStatusString();
-    database_->logOrderAction(core::AuditEntry::ActionType::UPDATE,
-                              order->getOrderId(), getCurrentUsername(),
-                              details);
-    if (database_->hasError()) {
-      std::cout << "\n✗ Audit-Log konnte nicht geschrieben werden: "
-                << database_->getLastError() << "\n";
-      database_->clearError();
-    }
   } else {
     std::cout << "\n✗ Fehler beim Aktualisieren: " << database_->getLastError()
               << "\n";
@@ -1255,20 +1216,9 @@ void CliInterface::handleDeleteOrder() {
 
   if (confirmLower == "ja" || confirmLower == "j" || confirmLower == "yes" ||
       confirmLower == "y") {
-    std::string oldStatus = order->getStatusString();
     order->setStatus(core::Order::Status::CANCELLED);
-    if (database_->updateOrder(*order)) {
+    if (database_->updateOrder(*order, getCurrentUsername())) {
       std::cout << "\n✓ Auftrag erfolgreich storniert!\n";
-      std::string details =
-          "Status: " + oldStatus + " -> " + order->getStatusString();
-      database_->logOrderAction(core::AuditEntry::ActionType::UPDATE,
-                                order->getOrderId(), getCurrentUsername(),
-                                details);
-      if (database_->hasError()) {
-        std::cout << "\n✗ Audit-Log konnte nicht geschrieben werden: "
-                  << database_->getLastError() << "\n";
-        database_->clearError();
-      }
     } else {
       std::cout << "\n✗ Fehler beim Stornieren: " << database_->getLastError()
                 << "\n";
@@ -1460,7 +1410,7 @@ void CliInterface::handleNewResult() {
   // Flag automatisch berechnen
   result.setFlag(result.evaluateFlag());
 
-  if (database_->createTestResult(result)) {
+  if (database_->createTestResult(result, getCurrentUsername())) {
     std::cout << "\n✓ Ergebnis erfolgreich erfasst!\n";
     std::cout << "  Flag: " << result.getFlagString() << "\n";
   } else {
@@ -1687,7 +1637,7 @@ void CliInterface::handleValidateResult() {
     }
   } else {
     result->setStatus(newStatus);
-    if (database_->updateTestResult(*result)) {
+    if (database_->updateTestResult(*result, getCurrentUsername())) {
       std::cout << "\n✓ Status erfolgreich geändert auf: "
                 << result->getStatusString() << "\n";
     } else {
@@ -1804,7 +1754,7 @@ void CliInterface::handleImportResultsCsv() {
       std::vector<std::string> storedResultIds;
 
       for (const auto &result : results) {
-        if (database_->createTestResult(result)) {
+        if (database_->createTestResult(result, getCurrentUsername())) {
           stored++;
           storedResultIds.push_back(result.getResultId());
         } else {
@@ -1957,14 +1907,138 @@ void CliInterface::handleShowAuditLog() {
   printSeparator();
   std::cout << "\n";
 
-  std::cout << "Anzahl der anzuzeigenden Einträge (Standard: 50): ";
-  std::string limitStr;
-  std::getline(std::cin, limitStr);
-
-  if (std::cin.eof()) {
-    running_ = false;
+  std::string filterInput = readInput("Filter anwenden? (j/n)");
+  if (!running_)
     return;
+  filterInput = trim(filterInput);
+  const bool applyFilters =
+      (!filterInput.empty() &&
+       (filterInput == "j" || filterInput == "ja" || filterInput == "y" ||
+        filterInput == "yes"));
+
+  db::Database::AuditLogFilter filter;
+
+  if (applyFilters) {
+    std::cout << "\nFilter (leer lassen = kein Filter):\n";
+
+    std::string user = readInput("Benutzer");
+    if (!running_)
+      return;
+    user = trim(user);
+    if (!isEmpty(user)) {
+      filter.user = user;
+    }
+
+    std::cout << "\nAktion filtern:\n";
+    std::cout << "  [0] Alle\n";
+    std::cout << "  [1] Erstellt\n";
+    std::cout << "  [2] Aktualisiert\n";
+    std::cout << "  [3] Gelöscht\n";
+    std::cout << "  [4] Angemeldet\n";
+    std::cout << "  [5] Abgemeldet\n";
+    std::cout << "  [6] Validiert\n\n";
+
+    int actionChoice = readInteger("Aktion (0-6)");
+    if (!running_)
+      return;
+    switch (actionChoice) {
+    case 0:
+      break;
+    case 1:
+      filter.action = core::AuditEntry::ActionType::CREATE;
+      break;
+    case 2:
+      filter.action = core::AuditEntry::ActionType::UPDATE;
+      break;
+    case 3:
+      filter.action = core::AuditEntry::ActionType::DELETE;
+      break;
+    case 4:
+      filter.action = core::AuditEntry::ActionType::LOGIN;
+      break;
+    case 5:
+      filter.action = core::AuditEntry::ActionType::LOGOUT;
+      break;
+    case 6:
+      filter.action = core::AuditEntry::ActionType::VALIDATE;
+      break;
+    default:
+      std::cout << "\n✗ Ungültige Auswahl.\n";
+      waitForEnter();
+      return;
+    }
+
+    std::cout << "\nEntität filtern:\n";
+    std::cout << "  [0] Alle\n";
+    std::cout << "  [1] Probe\n";
+    std::cout << "  [2] Auftrag\n";
+    std::cout << "  [3] Ergebnis\n";
+    std::cout << "  [4] Benutzer\n";
+    std::cout << "  [5] Rolle\n";
+    std::cout << "  [6] System\n\n";
+
+    int entityChoice = readInteger("Entität (0-6)");
+    if (!running_)
+      return;
+    switch (entityChoice) {
+    case 0:
+      break;
+    case 1:
+      filter.entity = core::AuditEntry::EntityType::SAMPLE;
+      break;
+    case 2:
+      filter.entity = core::AuditEntry::EntityType::ORDER;
+      break;
+    case 3:
+      filter.entity = core::AuditEntry::EntityType::RESULT;
+      break;
+    case 4:
+      filter.entity = core::AuditEntry::EntityType::USER;
+      break;
+    case 5:
+      filter.entity = core::AuditEntry::EntityType::ROLE;
+      break;
+    case 6:
+      filter.entity = core::AuditEntry::EntityType::SYSTEM;
+      break;
+    default:
+      std::cout << "\n✗ Ungültige Auswahl.\n";
+      waitForEnter();
+      return;
+    }
+
+    std::string fromTime = readInput("Von (Unix-Zeitstempel)");
+    if (!running_)
+      return;
+    fromTime = trim(fromTime);
+    if (!isEmpty(fromTime)) {
+      try {
+        filter.fromTime = static_cast<std::time_t>(std::stoll(fromTime));
+      } catch (...) {
+        std::cout << "\n✗ Ungültiger Zeitstempel.\n";
+        waitForEnter();
+        return;
+      }
+    }
+
+    std::string toTime = readInput("Bis (Unix-Zeitstempel)");
+    if (!running_)
+      return;
+    toTime = trim(toTime);
+    if (!isEmpty(toTime)) {
+      try {
+        filter.toTime = static_cast<std::time_t>(std::stoll(toTime));
+      } catch (...) {
+        std::cout << "\n✗ Ungültiger Zeitstempel.\n";
+        waitForEnter();
+        return;
+      }
+    }
   }
+
+  std::string limitStr = readInput("Anzahl der anzuzeigenden Einträge (50)");
+  if (!running_)
+    return;
 
   int limit = 50;
   if (!isEmpty(limitStr)) {
@@ -1977,35 +2051,57 @@ void CliInterface::handleShowAuditLog() {
     }
   }
 
-  auto entries = database_->getAuditLog(limit);
+  filter.limit = limit;
 
-  if (database_->hasError()) {
-    std::cout << "✗ Fehler beim Abrufen des Audit-Logs:\n";
-    std::cout << "  " << database_->getLastError() << "\n";
-  } else if (entries.empty()) {
-    std::cout << "ℹ Keine Audit-Einträge vorhanden.\n";
-  } else {
-    std::cout << std::left << std::setw(5) << "ID" << std::setw(20)
-              << "Zeitstempel" << std::setw(14) << "Aktion" << std::setw(12)
-              << "Entität" << std::setw(12) << "Entität-ID" << std::setw(15)
-              << "Benutzer" << "\n";
-    printSeparator();
+  auto printEntries =
+      [&](const std::vector<std::unique_ptr<core::AuditEntry>> &entries) {
+        if (database_->hasError()) {
+          std::cout << "✗ Fehler beim Abrufen des Audit-Logs:\n";
+          std::cout << "  " << database_->getLastError() << "\n";
+          return;
+        }
+        if (entries.empty()) {
+          std::cout << "ℹ Keine Audit-Einträge vorhanden.\n";
+          return;
+        }
 
-    for (const auto &entry : entries) {
-      std::cout << std::left << std::setw(5) << entry->getId() << std::setw(20)
-                << entry->getTimestampString() << std::setw(14)
-                << entry->getActionString() << std::setw(12)
-                << entry->getEntityString() << std::setw(12)
-                << entry->getEntityId() << std::setw(15) << entry->getUser()
-                << "\n";
+        std::cout << std::left << std::setw(5) << "ID" << std::setw(20)
+                  << "Zeitstempel" << std::setw(14) << "Aktion"
+                  << std::setw(12) << "Entität" << std::setw(12)
+                  << "Entität-ID" << std::setw(15) << "Benutzer" << "\n";
+        printSeparator();
 
-      // Details anzeigen falls vorhanden
-      if (!entry->getDetails().empty()) {
-        std::cout << "      Details: " << entry->getDetails() << "\n";
-      }
+        for (const auto &entry : entries) {
+          std::cout << std::left << std::setw(5) << entry->getId()
+                    << std::setw(20) << entry->getTimestampString()
+                    << std::setw(14) << entry->getActionString()
+                    << std::setw(12) << entry->getEntityString()
+                    << std::setw(12) << entry->getEntityId() << std::setw(15)
+                    << entry->getUser() << "\n";
+
+          if (!entry->getDetails().empty()) {
+            std::cout << "      Details: " << entry->getDetails() << "\n";
+          }
+        }
+
+        std::cout << "\nAngezeigt: " << entries.size() << " Einträge\n";
+      };
+
+  auto entries = database_->getAuditLogFiltered(filter);
+  printEntries(entries);
+
+  if (applyFilters) {
+    std::string reset = readInput("Filter zurücksetzen und alle anzeigen? (j/n)");
+    if (!running_)
+      return;
+    reset = trim(reset);
+    if (!reset.empty() &&
+        (reset == "j" || reset == "ja" || reset == "y" || reset == "yes")) {
+      db::Database::AuditLogFilter resetFilter;
+      resetFilter.limit = limit;
+      auto resetEntries = database_->getAuditLogFiltered(resetFilter);
+      printEntries(resetEntries);
     }
-
-    std::cout << "\nAngezeigt: " << entries.size() << " Einträge\n";
   }
 
   waitForEnter();
@@ -2230,7 +2326,7 @@ void CliInterface::handleChangePassword() {
 
   currentUser_->setPassword(newPassword);
 
-  if (database_->updateUser(*currentUser_)) {
+  if (database_->updateUser(*currentUser_, getCurrentUsername())) {
     std::cout << "\n✓ Passwort erfolgreich geändert.\n";
   } else {
     std::cout << "\n✗ Fehler beim Ändern des Passworts: "
@@ -2317,12 +2413,8 @@ void CliInterface::handleCreateUser() {
   newUser.setFullName(fullName);
   newUser.setEmail(email);
 
-  if (database_->createUser(newUser)) {
+  if (database_->createUser(newUser, getCurrentUsername())) {
     std::cout << "\n✓ Benutzer '" << username << "' erfolgreich angelegt.\n";
-    const std::string actor =
-        currentUser_ ? currentUser_->getUsername() : std::string("system");
-    database_->logUserAction(core::AuditEntry::ActionType::CREATE, username,
-                             actor, "Benutzer angelegt");
   } else {
     std::cout << "\n✗ Fehler beim Anlegen: " << database_->getLastError()
               << "\n";
@@ -2416,7 +2508,6 @@ void CliInterface::handleUpdateUser() {
   if (!running_)
     return;
 
-  const bool wasActive = user->isActive();
   bool roleChanged = false;
   std::string selectedRoleName;
 
@@ -2493,27 +2584,17 @@ void CliInterface::handleUpdateUser() {
     return;
   }
 
-  const std::string actor =
-      currentUser_ ? currentUser_->getUsername() : std::string("system");
-
   if (roleChanged) {
-    if (database_->assignUserRole(user->getId(), selectedRoleName)) {
+    if (database_->assignUserRole(user->getId(), selectedRoleName,
+                                  getCurrentUsername())) {
       user->setRoleName(selectedRoleName);
       std::cout << "\n✓ Rolle erfolgreich zugewiesen.\n";
-      database_->logUserAction(core::AuditEntry::ActionType::UPDATE,
-                               user->getUsername(), actor,
-                               "Rolle zugewiesen: " + selectedRoleName);
     } else {
       std::cout << "\n✗ Fehler beim Zuweisen der Rolle: "
                 << database_->getLastError() << "\n";
     }
-  } else if (database_->updateUser(*user)) {
+  } else if (database_->updateUser(*user, getCurrentUsername())) {
     std::cout << "\n✓ Benutzer erfolgreich aktualisiert.\n";
-    const std::string details =
-        (wasActive && !user->isActive()) ? "Benutzer deaktiviert"
-                                         : "Benutzer aktualisiert";
-    database_->logUserAction(core::AuditEntry::ActionType::UPDATE,
-                             user->getUsername(), actor, details);
   } else {
     std::cout << "\n✗ Fehler beim Aktualisieren: "
               << database_->getLastError() << "\n";
@@ -2577,13 +2658,8 @@ void CliInterface::handleDeleteUser() {
   if (confirmLower == "ja" || confirmLower == "j" || confirmLower == "yes" ||
       confirmLower == "y") {
     user->setActive(false);
-    if (database_->updateUser(*user)) {
+    if (database_->updateUser(*user, getCurrentUsername())) {
       std::cout << "\n✓ Benutzer erfolgreich deaktiviert.\n";
-      const std::string actor =
-          currentUser_ ? currentUser_->getUsername() : std::string("system");
-      database_->logUserAction(core::AuditEntry::ActionType::UPDATE,
-                               user->getUsername(), actor,
-                               "Benutzer deaktiviert");
     } else {
       std::cout << "\n✗ Fehler beim Deaktivieren: "
                 << database_->getLastError() << "\n";
@@ -2634,9 +2710,6 @@ void CliInterface::handleManageRoles() {
   if (!running_)
     return;
 
-  const std::string actor =
-      currentUser_ ? currentUser_->getUsername() : std::string("system");
-
   switch (choice) {
   case 1: {
     std::string roleName = readValidatedInput("Rollenname", "Rollenname");
@@ -2650,12 +2723,8 @@ void CliInterface::handleManageRoles() {
 
     auto permissions = splitCommaList(permInput);
 
-    if (database_->createRole(roleName, permissions)) {
+    if (database_->createRole(roleName, permissions, getCurrentUsername())) {
       std::cout << "\n✓ Rolle '" << roleName << "' erstellt.\n";
-      database_->logRoleAction(core::AuditEntry::ActionType::CREATE, roleName,
-                               actor,
-                               "Rolle erstellt; Rechte: " +
-                                   std::to_string(permissions.size()));
     } else {
       std::cout << "\n✗ Fehler beim Erstellen: " << database_->getLastError()
                 << "\n";
@@ -2708,12 +2777,8 @@ void CliInterface::handleManageRoles() {
     auto newPerms =
         isEmpty(permInput) ? currentPerms : splitCommaList(permInput);
 
-    if (database_->updateRole(roleName, newPerms)) {
+    if (database_->updateRole(roleName, newPerms, getCurrentUsername())) {
       std::cout << "\n✓ Rolle '" << roleName << "' aktualisiert.\n";
-      database_->logRoleAction(core::AuditEntry::ActionType::UPDATE, roleName,
-                               actor,
-                               "Rolle aktualisiert; Rechte: " +
-                                   std::to_string(newPerms.size()));
     } else {
       std::cout << "\n✗ Fehler beim Aktualisieren: "
                 << database_->getLastError() << "\n";

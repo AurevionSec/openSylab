@@ -40,6 +40,16 @@ public:
     std::string priority;
   };
 
+  struct AuditLogFilter {
+    std::optional<std::string> user;
+    std::optional<core::AuditEntry::ActionType> action;
+    std::optional<core::AuditEntry::EntityType> entity;
+    std::optional<std::string> entityId;
+    std::optional<std::time_t> fromTime;
+    std::optional<std::time_t> toTime;
+    int limit = 100;
+  };
+
   enum class AuthMethod { LOCAL, LDAP };
 
   struct AuthResult {
@@ -78,18 +88,21 @@ public:
   [[nodiscard]] bool initializeSchema();
 
   // Sample-Operationen (CRUD)
-  [[nodiscard]] bool createSample(const core::Sample &sample);
+  [[nodiscard]] bool createSample(const core::Sample &sample,
+                                  const std::string &actor = "");
   [[nodiscard]] std::unique_ptr<core::Sample> getSample(int id);
   [[nodiscard]] std::unique_ptr<core::Sample>
   getSampleByBarcode(const std::string &barcode);
   [[nodiscard]] std::vector<std::unique_ptr<core::Sample>> getAllSamples();
   [[nodiscard]] std::vector<std::unique_ptr<core::Sample>>
   getSamplesByFilter(const SampleFilter &filter);
-  [[nodiscard]] bool updateSample(const core::Sample &sample);
-  [[nodiscard]] bool deleteSample(int id);
+  [[nodiscard]] bool updateSample(const core::Sample &sample,
+                                  const std::string &actor = "");
+  [[nodiscard]] bool deleteSample(int id, const std::string &actor = "");
 
   // Order-Operationen (CRUD)
-  [[nodiscard]] bool createOrder(const core::Order &order);
+  [[nodiscard]] bool createOrder(const core::Order &order,
+                                 const std::string &actor = "");
   [[nodiscard]] std::unique_ptr<core::Order> getOrder(int id);
   [[nodiscard]] std::unique_ptr<core::Order>
   getOrderByOrderId(const std::string &orderId);
@@ -98,11 +111,13 @@ public:
   [[nodiscard]] std::vector<std::unique_ptr<core::Order>> getAllOrders();
   [[nodiscard]] std::vector<std::unique_ptr<core::Order>>
   getOrdersByFilter(const OrderFilter &filter);
-  [[nodiscard]] bool updateOrder(const core::Order &order);
-  [[nodiscard]] bool deleteOrder(int id);
+  [[nodiscard]] bool updateOrder(const core::Order &order,
+                                 const std::string &actor = "");
+  [[nodiscard]] bool deleteOrder(int id, const std::string &actor = "");
 
   // TestResult-Operationen (CRUD)
-  [[nodiscard]] bool createTestResult(const core::TestResult &result);
+  [[nodiscard]] bool createTestResult(const core::TestResult &result,
+                                      const std::string &actor = "");
   [[nodiscard]] std::unique_ptr<core::TestResult> getTestResult(int id);
   [[nodiscard]] std::unique_ptr<core::TestResult>
   getTestResultByResultId(const std::string &resultId);
@@ -110,7 +125,8 @@ public:
   getTestResultsByOrderId(int orderId);
   [[nodiscard]] std::vector<std::unique_ptr<core::TestResult>>
   getAllTestResults();
-  [[nodiscard]] bool updateTestResult(const core::TestResult &result);
+  [[nodiscard]] bool updateTestResult(const core::TestResult &result,
+                                      const std::string &actor = "");
   [[nodiscard]] bool updateTestResultWithAudit(const core::TestResult &result,
                                                const std::string &user);
   [[nodiscard]] bool exportValidatedResultsToCsv(
@@ -118,7 +134,7 @@ public:
       std::optional<int> orderId = std::nullopt);
   [[nodiscard]] bool validateTestResult(const std::string &resultId,
                                         const std::string &user);
-  [[nodiscard]] bool deleteTestResult(int id);
+  [[nodiscard]] bool deleteTestResult(int id, const std::string &actor = "");
 
   // Audit-Operationen
   [[nodiscard]] bool logAudit(const core::AuditEntry &entry);
@@ -127,6 +143,8 @@ public:
   [[nodiscard]] std::vector<std::unique_ptr<core::AuditEntry>>
   getAuditLogByEntity(core::AuditEntry::EntityType entity,
                       const std::string &entityId);
+  [[nodiscard]] std::vector<std::unique_ptr<core::AuditEntry>>
+  getAuditLogFiltered(const AuditLogFilter &filter);
 
   // Audit-Hilfsmethoden
   void logSampleAction(core::AuditEntry::ActionType action,
@@ -149,23 +167,28 @@ public:
                             const std::string &filePath);
 
   // User-Operationen (CRUD)
-  [[nodiscard]] bool createUser(const core::User &user);
+  [[nodiscard]] bool createUser(const core::User &user,
+                                const std::string &actor = "");
   [[nodiscard]] std::unique_ptr<core::User> getUser(int id);
   [[nodiscard]] std::unique_ptr<core::User>
   getUserByUsername(const std::string &username);
   [[nodiscard]] std::vector<std::unique_ptr<core::User>> getAllUsers();
-  [[nodiscard]] bool updateUser(const core::User &user);
-  [[nodiscard]] bool deleteUser(int id);
+  [[nodiscard]] bool updateUser(const core::User &user,
+                                const std::string &actor = "");
+  [[nodiscard]] bool deleteUser(int id, const std::string &actor = "");
 
   // Rollen & Berechtigungen
   [[nodiscard]] bool createRole(const std::string &name,
-                                const std::vector<std::string> &permissions);
+                                const std::vector<std::string> &permissions,
+                                const std::string &actor = "");
   [[nodiscard]] bool updateRole(const std::string &name,
-                                const std::vector<std::string> &permissions);
+                                const std::vector<std::string> &permissions,
+                                const std::string &actor = "");
   [[nodiscard]] std::vector<std::string>
   getRolePermissions(const std::string &name);
   [[nodiscard]] std::vector<std::string> getAllRoles();
-  [[nodiscard]] bool assignUserRole(int userId, const std::string &roleName);
+  [[nodiscard]] bool assignUserRole(int userId, const std::string &roleName,
+                                    const std::string &actor = "");
 
   // Auth-Konfiguration, LDAP und MFA
   [[nodiscard]] bool setAuthConfig(const std::string &key,
@@ -225,6 +248,7 @@ private:
 
   // Hilfsfunktionen
   void setError(const std::string &error);
+  [[nodiscard]] bool updateTestResultCore(const core::TestResult &result);
 };
 
 } // namespace db

@@ -33,6 +33,31 @@ int computeMfaCode(const std::string &secret, std::time_t now) {
   }
   return static_cast<int>(hash % 1000000UL);
 }
+
+const AuditEntry *findAuditEntry(
+    const std::vector<std::unique_ptr<AuditEntry>> &entries,
+    AuditEntry::ActionType action, AuditEntry::EntityType entity,
+    const std::string &entityId = "", const std::string &user = "") {
+  for (const auto &entry : entries) {
+    if (!entry) {
+      continue;
+    }
+    if (entry->getAction() != action) {
+      continue;
+    }
+    if (entry->getEntity() != entity) {
+      continue;
+    }
+    if (!entityId.empty() && entry->getEntityId() != entityId) {
+      continue;
+    }
+    if (!user.empty() && entry->getUser() != user) {
+      continue;
+    }
+    return entry.get();
+  }
+  return nullptr;
+}
 } // namespace
 
 bool test_database_OpenAndClose() {
@@ -239,11 +264,11 @@ bool test_database_LogSampleStatusUpdate() {
                                         "AUDIT001");
   ASSERT_FALSE(db.hasError());
   ASSERT_FALSE(entries.empty());
-  ASSERT_EQ(entries[0]->getAction(), AuditEntry::ActionType::UPDATE);
-  ASSERT_EQ(entries[0]->getEntity(), AuditEntry::EntityType::SAMPLE);
-  ASSERT_EQ(entries[0]->getEntityId(), "AUDIT001");
-  ASSERT_EQ(entries[0]->getUser(), "tester");
-  ASSERT_EQ(entries[0]->getDetails(), "Status: Erfasst -> Validiert");
+  const AuditEntry *entry =
+      findAuditEntry(entries, AuditEntry::ActionType::UPDATE,
+                     AuditEntry::EntityType::SAMPLE, "AUDIT001", "tester");
+  ASSERT_NOT_NULL(entry);
+  ASSERT_EQ(entry->getDetails(), "Status: Erfasst -> Validiert");
 
   db.close();
   std::remove(dbPath.c_str());
@@ -344,10 +369,60 @@ bool test_database_LogSampleDelete() {
       db.getAuditLogByEntity(AuditEntry::EntityType::SAMPLE, "DEL001");
   ASSERT_FALSE(db.hasError());
   ASSERT_FALSE(entries.empty());
-  ASSERT_EQ(entries[0]->getAction(), AuditEntry::ActionType::DELETE);
-  ASSERT_EQ(entries[0]->getEntity(), AuditEntry::EntityType::SAMPLE);
-  ASSERT_EQ(entries[0]->getEntityId(), "DEL001");
-  ASSERT_EQ(entries[0]->getDetails(), "Sample gelöscht");
+  const AuditEntry *entry =
+      findAuditEntry(entries, AuditEntry::ActionType::DELETE,
+                     AuditEntry::EntityType::SAMPLE, "DEL001");
+  ASSERT_NOT_NULL(entry);
+  ASSERT_EQ(entry->getDetails(), "Sample gelöscht");
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_database_AuditLogsSampleCrud() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  Sample sample("AUDIT_CRUD", "P900");
+  sample.setPatientName("Audit Patient");
+  ASSERT_TRUE(db.createSample(sample, "tester"));
+
+  auto createdEntries =
+      db.getAuditLogByEntity(AuditEntry::EntityType::SAMPLE, "AUDIT_CRUD");
+  ASSERT_FALSE(createdEntries.empty());
+  const AuditEntry *createdEntry =
+      findAuditEntry(createdEntries, AuditEntry::ActionType::CREATE,
+                     AuditEntry::EntityType::SAMPLE, "AUDIT_CRUD", "tester");
+  ASSERT_NOT_NULL(createdEntry);
+
+  auto retrieved = db.getSampleByBarcode("AUDIT_CRUD");
+  ASSERT_NOT_NULL(retrieved);
+  retrieved->setStatus(Sample::Status::VALIDATED);
+  ASSERT_TRUE(db.updateSample(*retrieved, "tester"));
+
+  auto updatedEntries =
+      db.getAuditLogByEntity(AuditEntry::EntityType::SAMPLE, "AUDIT_CRUD");
+  ASSERT_FALSE(updatedEntries.empty());
+  const AuditEntry *updatedEntry =
+      findAuditEntry(updatedEntries, AuditEntry::ActionType::UPDATE,
+                     AuditEntry::EntityType::SAMPLE, "AUDIT_CRUD", "tester");
+  ASSERT_NOT_NULL(updatedEntry);
+  ASSERT_NE(updatedEntry->getDetails().find("Status"), std::string::npos);
+  ASSERT_NE(updatedEntry->getDetails().find("->"), std::string::npos);
+
+  ASSERT_TRUE(db.deleteSample(retrieved->getId(), "tester"));
+
+  auto deletedEntries =
+      db.getAuditLogByEntity(AuditEntry::EntityType::SAMPLE, "AUDIT_CRUD");
+  ASSERT_FALSE(deletedEntries.empty());
+  const AuditEntry *deletedEntry =
+      findAuditEntry(deletedEntries, AuditEntry::ActionType::DELETE,
+                     AuditEntry::EntityType::SAMPLE, "AUDIT_CRUD", "tester");
+  ASSERT_NOT_NULL(deletedEntry);
+  ASSERT_NE(deletedEntry->getDetails().find("Proben-ID"), std::string::npos);
 
   db.close();
   std::remove(dbPath.c_str());
@@ -399,6 +474,23 @@ bool test_database_CreateOrder_MissingFieldsRejected() {
   Order missingTestType("ORD003", "S001", "");
   ASSERT_FALSE(db.createOrder(missingTestType));
   ASSERT_FALSE(db.getLastError().empty());
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_database_NoAuditOnFailedOrderCreate() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  Order missingOrderId("", "S001", "Blutbild");
+  ASSERT_FALSE(db.createOrder(missingOrderId, "tester"));
+
+  auto entries = db.getAuditLog();
+  ASSERT_TRUE(entries.empty());
 
   db.close();
   std::remove(dbPath.c_str());
@@ -534,11 +626,11 @@ bool test_database_ValidateResultLogsAudit() {
       db.getAuditLogByEntity(AuditEntry::EntityType::RESULT, "RES_AUDIT_1");
   ASSERT_FALSE(db.hasError());
   ASSERT_FALSE(entries.empty());
-  ASSERT_EQ(entries[0]->getAction(), AuditEntry::ActionType::UPDATE);
-  ASSERT_EQ(entries[0]->getEntity(), AuditEntry::EntityType::RESULT);
-  ASSERT_EQ(entries[0]->getEntityId(), "RES_AUDIT_1");
-  ASSERT_EQ(entries[0]->getUser(), "tester");
-  ASSERT_EQ(entries[0]->getDetails(), "Status: Eingegeben -> Validiert");
+  const AuditEntry *entry =
+      findAuditEntry(entries, AuditEntry::ActionType::VALIDATE,
+                     AuditEntry::EntityType::RESULT, "RES_AUDIT_1", "tester");
+  ASSERT_NOT_NULL(entry);
+  ASSERT_EQ(entry->getDetails(), "Status: Eingegeben -> Validiert");
 
   db.close();
   std::remove(dbPath.c_str());
@@ -581,9 +673,11 @@ bool test_database_LogResultRetryImportAudit() {
   auto entries =
       db.getAuditLogByEntity(AuditEntry::EntityType::RESULT, "RES_RETRY_1");
   ASSERT_FALSE(entries.empty());
-  ASSERT_EQ(entries[0]->getAction(), AuditEntry::ActionType::UPDATE);
-  ASSERT_EQ(entries[0]->getUser(), "tester");
-  ASSERT_EQ(entries[0]->getDetails(),
+  const AuditEntry *entry =
+      findAuditEntry(entries, AuditEntry::ActionType::UPDATE,
+                     AuditEntry::EntityType::RESULT, "RES_RETRY_1", "tester");
+  ASSERT_NOT_NULL(entry);
+  ASSERT_EQ(entry->getDetails(),
             "Retry-Import: retry_results.csv; Anzahl: 2");
 
   db.close();
@@ -607,11 +701,11 @@ bool test_database_LogUserAction() {
   auto entries =
       db.getAuditLogByEntity(AuditEntry::EntityType::USER, "admin1");
   ASSERT_FALSE(entries.empty());
-  ASSERT_EQ(entries[0]->getAction(), AuditEntry::ActionType::UPDATE);
-  ASSERT_EQ(entries[0]->getEntity(), AuditEntry::EntityType::USER);
-  ASSERT_EQ(entries[0]->getEntityId(), "admin1");
-  ASSERT_EQ(entries[0]->getUser(), "system");
-  ASSERT_EQ(entries[0]->getDetails(), "Benutzer aktualisiert");
+  const AuditEntry *entry =
+      findAuditEntry(entries, AuditEntry::ActionType::UPDATE,
+                     AuditEntry::EntityType::USER, "admin1", "system");
+  ASSERT_NOT_NULL(entry);
+  ASSERT_EQ(entry->getDetails(), "Benutzer aktualisiert");
 
   db.close();
   std::remove(dbPath.c_str());
@@ -711,11 +805,94 @@ bool test_database_LogRoleAction() {
 
   auto entries = db.getAuditLogByEntity(AuditEntry::EntityType::ROLE, roleName);
   ASSERT_FALSE(entries.empty());
-  ASSERT_EQ(entries[0]->getAction(), AuditEntry::ActionType::UPDATE);
-  ASSERT_EQ(entries[0]->getEntity(), AuditEntry::EntityType::ROLE);
-  ASSERT_EQ(entries[0]->getEntityId(), roleName);
-  ASSERT_EQ(entries[0]->getUser(), "admin");
-  ASSERT_EQ(entries[0]->getDetails(), "Rolle aktualisiert");
+  const AuditEntry *entry =
+      findAuditEntry(entries, AuditEntry::ActionType::UPDATE,
+                     AuditEntry::EntityType::ROLE, roleName, "admin");
+  ASSERT_NOT_NULL(entry);
+  ASSERT_EQ(entry->getDetails(), "Rolle aktualisiert");
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_database_AuditLogFiltering() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  AuditEntry e1(AuditEntry::ActionType::CREATE,
+                AuditEntry::EntityType::SAMPLE, "S1", "userA", "one");
+  e1.setTimestamp(1000);
+  ASSERT_TRUE(db.logAudit(e1));
+
+  AuditEntry e2(AuditEntry::ActionType::UPDATE, AuditEntry::EntityType::ORDER,
+                "O1", "userB", "two");
+  e2.setTimestamp(2000);
+  ASSERT_TRUE(db.logAudit(e2));
+
+  AuditEntry e3(AuditEntry::ActionType::DELETE, AuditEntry::EntityType::RESULT,
+                "R1", "userA", "three");
+  e3.setTimestamp(3000);
+  ASSERT_TRUE(db.logAudit(e3));
+
+  Database::AuditLogFilter byUser;
+  byUser.user = "userA";
+  auto userEntries = db.getAuditLogFiltered(byUser);
+  ASSERT_EQ(userEntries.size(), static_cast<size_t>(2));
+
+  Database::AuditLogFilter byAction;
+  byAction.action = AuditEntry::ActionType::UPDATE;
+  auto actionEntries = db.getAuditLogFiltered(byAction);
+  ASSERT_EQ(actionEntries.size(), static_cast<size_t>(1));
+  ASSERT_EQ(actionEntries[0]->getEntityId(), "O1");
+
+  Database::AuditLogFilter byEntity;
+  byEntity.entity = AuditEntry::EntityType::SAMPLE;
+  auto entityEntries = db.getAuditLogFiltered(byEntity);
+  ASSERT_EQ(entityEntries.size(), static_cast<size_t>(1));
+  ASSERT_EQ(entityEntries[0]->getEntityId(), "S1");
+
+  Database::AuditLogFilter byTime;
+  byTime.fromTime = 1500;
+  byTime.toTime = 3500;
+  auto timeEntries = db.getAuditLogFiltered(byTime);
+  ASSERT_EQ(timeEntries.size(), static_cast<size_t>(2));
+
+  Database::AuditLogFilter combo;
+  combo.user = "userA";
+  combo.entity = AuditEntry::EntityType::RESULT;
+  auto comboEntries = db.getAuditLogFiltered(combo);
+  ASSERT_EQ(comboEntries.size(), static_cast<size_t>(1));
+  ASSERT_EQ(comboEntries[0]->getEntityId(), "R1");
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_database_AuditLogFilterReset() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  AuditEntry e1(AuditEntry::ActionType::CREATE,
+                AuditEntry::EntityType::SAMPLE, "S1", "userA", "one");
+  e1.setTimestamp(1000);
+  ASSERT_TRUE(db.logAudit(e1));
+
+  AuditEntry e2(AuditEntry::ActionType::UPDATE, AuditEntry::EntityType::ORDER,
+                "O1", "userB", "two");
+  e2.setTimestamp(2000);
+  ASSERT_TRUE(db.logAudit(e2));
+
+  Database::AuditLogFilter emptyFilter;
+  emptyFilter.limit = 50;
+  auto filtered = db.getAuditLogFiltered(emptyFilter);
+  auto unfiltered = db.getAuditLog(50);
+  ASSERT_EQ(filtered.size(), unfiltered.size());
 
   db.close();
   std::remove(dbPath.c_str());
@@ -1073,15 +1250,21 @@ bool test_database_ExportValidatedResults_LogsAudit() {
   auto entries1 =
       db.getAuditLogByEntity(AuditEntry::EntityType::RESULT, "RES_EXP_AUD_1");
   ASSERT_FALSE(entries1.empty());
-  ASSERT_EQ(entries1[0]->getAction(), AuditEntry::ActionType::UPDATE);
-  ASSERT_EQ(entries1[0]->getDetails(),
+  const AuditEntry *entry1 =
+      findAuditEntry(entries1, AuditEntry::ActionType::UPDATE,
+                     AuditEntry::EntityType::RESULT, "RES_EXP_AUD_1");
+  ASSERT_NOT_NULL(entry1);
+  ASSERT_EQ(entry1->getDetails(),
             "Export: test_export_audit.csv; Anzahl: 2");
 
   auto entries2 =
       db.getAuditLogByEntity(AuditEntry::EntityType::RESULT, "RES_EXP_AUD_2");
   ASSERT_FALSE(entries2.empty());
-  ASSERT_EQ(entries2[0]->getAction(), AuditEntry::ActionType::UPDATE);
-  ASSERT_EQ(entries2[0]->getDetails(),
+  const AuditEntry *entry2 =
+      findAuditEntry(entries2, AuditEntry::ActionType::UPDATE,
+                     AuditEntry::EntityType::RESULT, "RES_EXP_AUD_2");
+  ASSERT_NOT_NULL(entry2);
+  ASSERT_EQ(entry2->getDetails(),
             "Export: test_export_audit.csv; Anzahl: 2");
 
   std::remove(exportPath.c_str());
@@ -1172,13 +1355,16 @@ bool test_database_UpdateResultWithAudit_LogsChanges() {
       db.getAuditLogByEntity(AuditEntry::EntityType::RESULT, "RES_EDIT_AUDIT_1");
   ASSERT_FALSE(db.hasError());
   ASSERT_FALSE(entries.empty());
-  ASSERT_EQ(entries[0]->getAction(), AuditEntry::ActionType::UPDATE);
-  ASSERT_EQ(entries[0]->getEntity(), AuditEntry::EntityType::RESULT);
-  ASSERT_EQ(entries[0]->getEntityId(), "RES_EDIT_AUDIT_1");
-  ASSERT_EQ(entries[0]->getUser(), "tester");
-  ASSERT_EQ(entries[0]->getDetails(),
-            "Wert: 1.0 -> 2.0; Einheit: mg/L -> g/L; Kommentar: initial -> "
-            "updated");
+  const AuditEntry *entry =
+      findAuditEntry(entries, AuditEntry::ActionType::UPDATE,
+                     AuditEntry::EntityType::RESULT, "RES_EDIT_AUDIT_1",
+                     "tester");
+  ASSERT_NOT_NULL(entry);
+  ASSERT_NE(entry->getDetails().find("Wert: 1.0 -> 2.0"), std::string::npos);
+  ASSERT_NE(entry->getDetails().find("Einheit: mg/L -> g/L"),
+            std::string::npos);
+  ASSERT_NE(entry->getDetails().find("Kommentar: initial -> updated"),
+            std::string::npos);
 
   db.close();
   std::remove(dbPath.c_str());
@@ -1249,20 +1435,18 @@ bool test_database_LogOrderStatusUpdate() {
   auto stored = db.getOrderByOrderId("ORD_UPD_1");
   ASSERT_NOT_NULL(stored);
   stored->setStatus(Order::Status::IN_PROGRESS);
-  ASSERT_TRUE(db.updateOrder(*stored));
-
-  db.logOrderAction(AuditEntry::ActionType::UPDATE, "ORD_UPD_1", "tester",
-                    "Status: Angefordert -> In Bearbeitung");
+  ASSERT_TRUE(db.updateOrder(*stored, "tester"));
 
   auto entries =
       db.getAuditLogByEntity(AuditEntry::EntityType::ORDER, "ORD_UPD_1");
   ASSERT_FALSE(db.hasError());
   ASSERT_FALSE(entries.empty());
-  ASSERT_EQ(entries[0]->getAction(), AuditEntry::ActionType::UPDATE);
-  ASSERT_EQ(entries[0]->getEntity(), AuditEntry::EntityType::ORDER);
-  ASSERT_EQ(entries[0]->getEntityId(), "ORD_UPD_1");
-  ASSERT_EQ(entries[0]->getDetails(),
-            "Status: Angefordert -> In Bearbeitung");
+  const AuditEntry *entry =
+      findAuditEntry(entries, AuditEntry::ActionType::UPDATE,
+                     AuditEntry::EntityType::ORDER, "ORD_UPD_1", "tester");
+  ASSERT_NOT_NULL(entry);
+  ASSERT_NE(entry->getDetails().find("Status"), std::string::npos);
+  ASSERT_NE(entry->getDetails().find("->"), std::string::npos);
 
   db.close();
   std::remove(dbPath.c_str());
@@ -1284,19 +1468,18 @@ bool test_database_CancelOrderLogsAudit() {
   auto stored = db.getOrderByOrderId("ORD_CANCEL");
   ASSERT_NOT_NULL(stored);
   stored->setStatus(Order::Status::CANCELLED);
-  ASSERT_TRUE(db.updateOrder(*stored));
-
-  db.logOrderAction(AuditEntry::ActionType::UPDATE, "ORD_CANCEL", "tester",
-                    "Status: Angefordert -> Storniert");
+  ASSERT_TRUE(db.updateOrder(*stored, "tester"));
 
   auto entries =
       db.getAuditLogByEntity(AuditEntry::EntityType::ORDER, "ORD_CANCEL");
   ASSERT_FALSE(db.hasError());
   ASSERT_FALSE(entries.empty());
-  ASSERT_EQ(entries[0]->getAction(), AuditEntry::ActionType::UPDATE);
-  ASSERT_EQ(entries[0]->getEntity(), AuditEntry::EntityType::ORDER);
-  ASSERT_EQ(entries[0]->getEntityId(), "ORD_CANCEL");
-  ASSERT_EQ(entries[0]->getDetails(), "Status: Angefordert -> Storniert");
+  const AuditEntry *entry =
+      findAuditEntry(entries, AuditEntry::ActionType::UPDATE,
+                     AuditEntry::EntityType::ORDER, "ORD_CANCEL", "tester");
+  ASSERT_NOT_NULL(entry);
+  ASSERT_NE(entry->getDetails().find("Status"), std::string::npos);
+  ASSERT_NE(entry->getDetails().find("->"), std::string::npos);
 
   db.close();
   std::remove(dbPath.c_str());
@@ -1317,6 +1500,8 @@ void registerDatabaseTests() {
   registerTest("Database::LogSampleStatusUpdate",
                test_database_LogSampleStatusUpdate);
   registerTest("Database::LogSampleDelete", test_database_LogSampleDelete);
+  registerTest("Database::AuditLogsSampleCrud",
+               test_database_AuditLogsSampleCrud);
   registerTest("Database::LogOrderStatusUpdate",
                test_database_LogOrderStatusUpdate);
   registerTest("Database::CancelOrderLogsAudit",
@@ -1325,6 +1510,8 @@ void registerDatabaseTests() {
                test_database_CreateOrder_RequestedDateStored);
   registerTest("Database::CreateOrder_MissingFieldsRejected",
                test_database_CreateOrder_MissingFieldsRejected);
+  registerTest("Database::NoAuditOnFailedOrderCreate",
+               test_database_NoAuditOnFailedOrderCreate);
   registerTest("Database::CreateTestResult_Valid",
                test_database_CreateTestResult_Valid);
   registerTest("Database::CreateTestResult_MissingFieldsRejected",
@@ -1341,6 +1528,10 @@ void registerDatabaseTests() {
   registerTest("Database::AssignUserRoleCustom",
                test_database_AssignUserRoleCustom);
   registerTest("Database::LogRoleAction", test_database_LogRoleAction);
+  registerTest("Database::AuditLogFiltering",
+               test_database_AuditLogFiltering);
+  registerTest("Database::AuditLogFilterReset",
+               test_database_AuditLogFilterReset);
   registerTest("Database::AuthenticateUserRejectsInactive",
                test_database_AuthenticateUserRejectsInactive);
   registerTest("Database::AuthConfigLdapEnabled",

@@ -68,6 +68,41 @@ std::string escapeCsvField(const std::string &value) {
   return "\"" + escaped + "\"";
 }
 
+std::string normalizeActor(const std::string &user) {
+  return user.empty() ? "system" : user;
+}
+
+void appendAuditChange(std::ostringstream &details, bool &hasChanges,
+                       const std::string &label, const std::string &oldValue,
+                       const std::string &newValue) {
+  if (oldValue == newValue) {
+    return;
+  }
+  if (hasChanges) {
+    details << "; ";
+  }
+  details << label << ": " << oldValue << " -> " << newValue;
+  hasChanges = true;
+}
+
+std::string joinList(const std::vector<std::string> &items) {
+  if (items.empty()) {
+    return "";
+  }
+  std::ostringstream joined;
+  for (size_t i = 0; i < items.size(); ++i) {
+    if (i > 0) {
+      joined << ", ";
+    }
+    joined << items[i];
+  }
+  return joined.str();
+}
+
+std::string formatActive(bool active) {
+  return active ? "aktiv" : "inaktiv";
+}
+
 std::unique_ptr<opensylab::core::Sample> sampleFromRow(sqlite3_stmt *stmt) {
   auto sample = std::make_unique<opensylab::core::Sample>();
   sample->setId(sqlite3_column_int(stmt, 0));
@@ -405,7 +440,8 @@ bool Database::initializeSchema() {
   return true;
 }
 
-bool Database::createSample(const core::Sample &sample) {
+bool Database::createSample(const core::Sample &sample,
+                            const std::string &actor) {
   clearError();
 
   if (!isOpen_) {
@@ -447,6 +483,16 @@ bool Database::createSample(const core::Sample &sample) {
              std::string(sqlite3_errmsg(db_)));
     return false;
   }
+
+  std::ostringstream details;
+  details << "Patient-ID: " << sample.getPatientId() << "; Patient: "
+          << sample.getPatientName()
+          << "; Status: " << sample.getStatusString();
+  if (!sample.getDescription().empty()) {
+    details << "; Beschreibung: " << sample.getDescription();
+  }
+  logSampleAction(core::AuditEntry::ActionType::CREATE, sample.getSampleId(),
+                  normalizeActor(actor), details.str());
 
   return true;
 }
@@ -701,11 +747,17 @@ Database::getSamplesByFilter(const SampleFilter &filter) {
   return samples;
 }
 
-bool Database::updateSample(const core::Sample &sample) {
+bool Database::updateSample(const core::Sample &sample,
+                            const std::string &actor) {
   clearError();
 
   if (!isOpen_) {
     setError("Datenbank ist nicht geöffnet");
+    return false;
+  }
+
+  auto existing = getSample(sample.getId());
+  if (!existing) {
     return false;
   }
 
@@ -753,47 +805,40 @@ bool Database::updateSample(const core::Sample &sample) {
     return false;
   }
 
-  // Prüfen, ob überhaupt ein Datensatz mit der ID existiert.
-  // sqlite3_changes ist 0, wenn entweder kein Datensatz existiert ODER alle
-  // Werte unverändert wären.
-  if (sqlite3_changes(db_) == 0) {
-    static const char *existsSQL =
-        "SELECT 1 FROM samples WHERE id = ? LIMIT 1;";
-    sqlite3_stmt *existsStmtRaw = nullptr;
-    int existsRc =
-        sqlite3_prepare_v2(db_, existsSQL, -1, &existsStmtRaw, nullptr);
-    if (existsRc != SQLITE_OK) {
-      setError("Fehler beim Prüfen der Probe: " +
-               std::string(sqlite3_errmsg(db_)));
-      return false;
-    }
-    auto existsStmt = makeStatement(existsStmtRaw);
-    sqlite3_bind_int(existsStmt.get(), 1, sample.getId());
-    existsRc = sqlite3_step(existsStmt.get());
+  std::ostringstream details;
+  bool hasChanges = false;
+  appendAuditChange(details, hasChanges, "Proben-ID",
+                    existing->getSampleId(), sample.getSampleId());
+  appendAuditChange(details, hasChanges, "Patient-ID",
+                    existing->getPatientId(), sample.getPatientId());
+  appendAuditChange(details, hasChanges, "Patient",
+                    existing->getPatientName(), sample.getPatientName());
+  appendAuditChange(details, hasChanges, "Beschreibung",
+                    existing->getDescription(), sample.getDescription());
+  appendAuditChange(details, hasChanges, "Status",
+                    existing->getStatusString(), sample.getStatusString());
+  appendAuditChange(details, hasChanges, "Registriert",
+                    std::to_string(existing->getRegistrationDate()),
+                    std::to_string(sample.getRegistrationDate()));
 
-    if (existsRc == SQLITE_ROW) {
-      // Datensatz existiert, Werte waren unverändert -> trotzdem Erfolg
-      return true;
-    }
-
-    if (existsRc == SQLITE_DONE) {
-      setError("Probe mit ID " + std::to_string(sample.getId()) +
-               " nicht gefunden");
-    } else {
-      setError("Fehler beim Prüfen der Probe: " +
-               std::string(sqlite3_errmsg(db_)));
-    }
-    return false;
-  }
+  const std::string detailText =
+      hasChanges ? details.str() : "Keine Änderungen";
+  logSampleAction(core::AuditEntry::ActionType::UPDATE, sample.getSampleId(),
+                  normalizeActor(actor), detailText);
 
   return true;
 }
 
-bool Database::deleteSample(int id) {
+bool Database::deleteSample(int id, const std::string &actor) {
   clearError();
 
   if (!isOpen_) {
     setError("Datenbank ist nicht geöffnet");
+    return false;
+  }
+
+  auto existing = getSample(id);
+  if (!existing) {
     return false;
   }
 
@@ -826,6 +871,14 @@ bool Database::deleteSample(int id) {
     return false;
   }
 
+  std::ostringstream details;
+  details << "Proben-ID: " << existing->getSampleId()
+          << "; Patient-ID: " << existing->getPatientId()
+          << "; Status: " << existing->getStatusString();
+  logSampleAction(core::AuditEntry::ActionType::DELETE,
+                  existing->getSampleId(), normalizeActor(actor),
+                  details.str());
+
   return true;
 }
 
@@ -833,7 +886,7 @@ bool Database::deleteSample(int id) {
 // Order-Operationen
 // ============================================================================
 
-bool Database::createOrder(const core::Order &order) {
+bool Database::createOrder(const core::Order &order, const std::string &actor) {
   clearError();
 
   if (!isOpen_) {
@@ -895,6 +948,14 @@ bool Database::createOrder(const core::Order &order) {
              std::string(sqlite3_errmsg(db_)));
     return false;
   }
+
+  std::ostringstream details;
+  details << "Proben-ID: " << order.getSampleId()
+          << "; Testtyp: " << order.getTestType()
+          << "; Status: " << order.getStatusString()
+          << "; Priorität: " << order.getPriorityString();
+  logOrderAction(core::AuditEntry::ActionType::CREATE, order.getOrderId(),
+                 normalizeActor(actor), details.str());
 
   return true;
 }
@@ -1155,11 +1216,16 @@ Database::getOrdersByFilter(const OrderFilter &filter) {
   return orders;
 }
 
-bool Database::updateOrder(const core::Order &order) {
+bool Database::updateOrder(const core::Order &order, const std::string &actor) {
   clearError();
 
   if (!isOpen_) {
     setError("Datenbank ist nicht geöffnet");
+    return false;
+  }
+
+  auto existing = getOrder(order.getId());
+  if (!existing) {
     return false;
   }
 
@@ -1216,42 +1282,47 @@ bool Database::updateOrder(const core::Order &order) {
     return false;
   }
 
-  if (sqlite3_changes(db_) == 0) {
-    static const char *existsSQL = "SELECT 1 FROM orders WHERE id = ? LIMIT 1;";
-    sqlite3_stmt *existsStmtRaw = nullptr;
-    int existsRc =
-        sqlite3_prepare_v2(db_, existsSQL, -1, &existsStmtRaw, nullptr);
-    if (existsRc != SQLITE_OK) {
-      setError("Fehler beim Prüfen des Auftrags: " +
-               std::string(sqlite3_errmsg(db_)));
-      return false;
-    }
-    auto existsStmt = makeStatement(existsStmtRaw);
-    sqlite3_bind_int(existsStmt.get(), 1, order.getId());
-    existsRc = sqlite3_step(existsStmt.get());
+  std::ostringstream details;
+  bool hasChanges = false;
+  appendAuditChange(details, hasChanges, "Auftrags-ID",
+                    existing->getOrderId(), order.getOrderId());
+  appendAuditChange(details, hasChanges, "Proben-ID",
+                    existing->getSampleId(), order.getSampleId());
+  appendAuditChange(details, hasChanges, "Testtyp",
+                    existing->getTestType(), order.getTestType());
+  appendAuditChange(details, hasChanges, "Status",
+                    existing->getStatusString(), order.getStatusString());
+  appendAuditChange(details, hasChanges, "Priorität",
+                    existing->getPriorityString(), order.getPriorityString());
+  appendAuditChange(details, hasChanges, "Angefragt",
+                    std::to_string(existing->getRequestedDate()),
+                    std::to_string(order.getRequestedDate()));
+  appendAuditChange(details, hasChanges, "Abgeschlossen",
+                    std::to_string(existing->getCompletedDate()),
+                    std::to_string(order.getCompletedDate()));
+  appendAuditChange(details, hasChanges, "Angefragt von",
+                    existing->getRequestedBy(), order.getRequestedBy());
+  appendAuditChange(details, hasChanges, "Notizen",
+                    existing->getNotes(), order.getNotes());
 
-    if (existsRc == SQLITE_ROW) {
-      return true;
-    }
-
-    if (existsRc == SQLITE_DONE) {
-      setError("Auftrag mit ID " + std::to_string(order.getId()) +
-               " nicht gefunden");
-    } else {
-      setError("Fehler beim Prüfen des Auftrags: " +
-               std::string(sqlite3_errmsg(db_)));
-    }
-    return false;
-  }
+  const std::string detailText =
+      hasChanges ? details.str() : "Keine Änderungen";
+  logOrderAction(core::AuditEntry::ActionType::UPDATE, order.getOrderId(),
+                 normalizeActor(actor), detailText);
 
   return true;
 }
 
-bool Database::deleteOrder(int id) {
+bool Database::deleteOrder(int id, const std::string &actor) {
   clearError();
 
   if (!isOpen_) {
     setError("Datenbank ist nicht geöffnet");
+    return false;
+  }
+
+  auto existing = getOrder(id);
+  if (!existing) {
     return false;
   }
 
@@ -1283,6 +1354,13 @@ bool Database::deleteOrder(int id) {
     return false;
   }
 
+  std::ostringstream details;
+  details << "Auftrags-ID: " << existing->getOrderId()
+          << "; Proben-ID: " << existing->getSampleId()
+          << "; Status: " << existing->getStatusString();
+  logOrderAction(core::AuditEntry::ActionType::DELETE,
+                 existing->getOrderId(), normalizeActor(actor), details.str());
+
   return true;
 }
 
@@ -1290,7 +1368,8 @@ bool Database::deleteOrder(int id) {
 // TestResult-Operationen
 // ============================================================================
 
-bool Database::createTestResult(const core::TestResult &result) {
+bool Database::createTestResult(const core::TestResult &result,
+                                const std::string &actor) {
   clearError();
 
   if (!isOpen_) {
@@ -1371,6 +1450,19 @@ bool Database::createTestResult(const core::TestResult &result) {
              std::string(sqlite3_errmsg(db_)));
     return false;
   }
+
+  std::ostringstream details;
+  details << "Auftrags-ID: " << result.getOrderId()
+          << "; Parameter: " << result.getTestParameter()
+          << "; Status: " << result.getStatusString();
+  if (!result.getValue().empty()) {
+    details << "; Wert: " << result.getValue();
+  }
+  if (!result.getUnit().empty()) {
+    details << " " << result.getUnit();
+  }
+  logResultAction(core::AuditEntry::ActionType::CREATE, result.getResultId(),
+                  normalizeActor(actor), details.str());
 
   return true;
 }
@@ -1565,7 +1657,8 @@ std::vector<std::unique_ptr<core::TestResult>> Database::getAllTestResults() {
   return results;
 }
 
-bool Database::updateTestResult(const core::TestResult &result) {
+bool Database::updateTestResult(const core::TestResult &result,
+                                const std::string &actor) {
   clearError();
 
   if (!isOpen_) {
@@ -1573,6 +1666,53 @@ bool Database::updateTestResult(const core::TestResult &result) {
     return false;
   }
 
+  auto existing = getTestResult(result.getId());
+  if (!existing) {
+    return false;
+  }
+
+  if (!updateTestResultCore(result)) {
+    return false;
+  }
+
+  std::ostringstream details;
+  bool hasChanges = false;
+  appendAuditChange(details, hasChanges, "Parameter",
+                    existing->getTestParameter(), result.getTestParameter());
+  appendAuditChange(details, hasChanges, "Wert", existing->getValue(),
+                    result.getValue());
+  appendAuditChange(details, hasChanges, "Einheit", existing->getUnit(),
+                    result.getUnit());
+  appendAuditChange(details, hasChanges, "Referenzbereich",
+                    existing->getReferenceRange(),
+                    result.getReferenceRange());
+  appendAuditChange(details, hasChanges, "Referenz (low)",
+                    std::to_string(existing->getReferenceLow()),
+                    std::to_string(result.getReferenceLow()));
+  appendAuditChange(details, hasChanges, "Referenz (high)",
+                    std::to_string(existing->getReferenceHigh()),
+                    std::to_string(result.getReferenceHigh()));
+  appendAuditChange(details, hasChanges, "Status",
+                    existing->getStatusString(), result.getStatusString());
+  appendAuditChange(details, hasChanges, "Flag", existing->getFlagString(),
+                    result.getFlagString());
+  appendAuditChange(details, hasChanges, "Gemessen am",
+                    std::to_string(existing->getMeasuredDate()),
+                    std::to_string(result.getMeasuredDate()));
+  appendAuditChange(details, hasChanges, "Gemessen von",
+                    existing->getMeasuredBy(), result.getMeasuredBy());
+  appendAuditChange(details, hasChanges, "Kommentar",
+                    existing->getComment(), result.getComment());
+
+  const std::string detailText =
+      hasChanges ? details.str() : "Keine Änderungen";
+  logResultAction(core::AuditEntry::ActionType::UPDATE, result.getResultId(),
+                  normalizeActor(actor), detailText);
+
+  return true;
+}
+
+bool Database::updateTestResultCore(const core::TestResult &result) {
   const char *updateSQL = R"(
         UPDATE test_results SET
             result_id = ?,
@@ -1685,34 +1825,43 @@ bool Database::updateTestResultWithAudit(const core::TestResult &result,
     return false;
   }
 
-  std::ostringstream details;
-  bool hasChanges = false;
-  auto appendChange = [&](const std::string &label,
-                          const std::string &oldValue,
-                          const std::string &newValue) {
-    if (oldValue == newValue) {
-      return;
-    }
-    if (hasChanges) {
-      details << "; ";
-    }
-    details << label << ": " << oldValue << " -> " << newValue;
-    hasChanges = true;
-  };
-
-  appendChange("Wert", existing->getValue(), result.getValue());
-  appendChange("Einheit", existing->getUnit(), result.getUnit());
-  appendChange("Kommentar", existing->getComment(), result.getComment());
-
-  if (!updateTestResult(result)) {
+  if (!updateTestResultCore(result)) {
     return false;
   }
 
-  if (hasChanges) {
-    const std::string actor = user.empty() ? "system" : user;
-    logResultAction(core::AuditEntry::ActionType::UPDATE, result.getResultId(),
-                    actor, details.str());
-  }
+  std::ostringstream details;
+  bool hasChanges = false;
+  appendAuditChange(details, hasChanges, "Parameter",
+                    existing->getTestParameter(), result.getTestParameter());
+  appendAuditChange(details, hasChanges, "Wert", existing->getValue(),
+                    result.getValue());
+  appendAuditChange(details, hasChanges, "Einheit", existing->getUnit(),
+                    result.getUnit());
+  appendAuditChange(details, hasChanges, "Referenzbereich",
+                    existing->getReferenceRange(),
+                    result.getReferenceRange());
+  appendAuditChange(details, hasChanges, "Referenz (low)",
+                    std::to_string(existing->getReferenceLow()),
+                    std::to_string(result.getReferenceLow()));
+  appendAuditChange(details, hasChanges, "Referenz (high)",
+                    std::to_string(existing->getReferenceHigh()),
+                    std::to_string(result.getReferenceHigh()));
+  appendAuditChange(details, hasChanges, "Status",
+                    existing->getStatusString(), result.getStatusString());
+  appendAuditChange(details, hasChanges, "Flag", existing->getFlagString(),
+                    result.getFlagString());
+  appendAuditChange(details, hasChanges, "Gemessen am",
+                    std::to_string(existing->getMeasuredDate()),
+                    std::to_string(result.getMeasuredDate()));
+  appendAuditChange(details, hasChanges, "Gemessen von",
+                    existing->getMeasuredBy(), result.getMeasuredBy());
+  appendAuditChange(details, hasChanges, "Kommentar",
+                    existing->getComment(), result.getComment());
+
+  const std::string detailText =
+      hasChanges ? details.str() : "Keine Änderungen";
+  logResultAction(core::AuditEntry::ActionType::UPDATE, result.getResultId(),
+                  normalizeActor(user), detailText);
 
   return true;
 }
@@ -1783,7 +1932,7 @@ bool Database::exportValidatedResultsToCsv(const std::string &filePath,
     return false;
   }
 
-  const std::string actor = user.empty() ? "system" : user;
+  const std::string actor = normalizeActor(user);
   const std::string details = "Export: " + filePath + "; Anzahl: " +
                               std::to_string(validated.size());
   for (const auto *result : validated) {
@@ -1811,22 +1960,27 @@ bool Database::validateTestResult(const std::string &resultId,
   std::string oldStatus = result->getStatusString();
   result->setStatus(core::TestResult::Status::VALIDATED);
 
-  if (!updateTestResult(*result)) {
+  if (!updateTestResultCore(*result)) {
     return false;
   }
 
-  const std::string actor = user.empty() ? "system" : user;
-  logResultAction(core::AuditEntry::ActionType::UPDATE, resultId, actor,
+  logResultAction(core::AuditEntry::ActionType::VALIDATE, resultId,
+                  normalizeActor(user),
                   "Status: " + oldStatus + " -> " + result->getStatusString());
 
   return true;
 }
 
-bool Database::deleteTestResult(int id) {
+bool Database::deleteTestResult(int id, const std::string &actor) {
   clearError();
 
   if (!isOpen_) {
     setError("Datenbank ist nicht geöffnet");
+    return false;
+  }
+
+  auto existing = getTestResult(id);
+  if (!existing) {
     return false;
   }
 
@@ -1857,6 +2011,14 @@ bool Database::deleteTestResult(int id) {
     setError("Ergebnis mit ID " + std::to_string(id) + " nicht gefunden");
     return false;
   }
+
+  std::ostringstream details;
+  details << "Ergebnis-ID: " << existing->getResultId()
+          << "; Parameter: " << existing->getTestParameter()
+          << "; Status: " << existing->getStatusString();
+  logResultAction(core::AuditEntry::ActionType::DELETE,
+                  existing->getResultId(), normalizeActor(actor),
+                  details.str());
 
   return true;
 }
@@ -2010,13 +2172,125 @@ Database::getAuditLogByEntity(core::AuditEntry::EntityType entity,
   return entries;
 }
 
+std::vector<std::unique_ptr<core::AuditEntry>>
+Database::getAuditLogFiltered(const AuditLogFilter &filter) {
+  std::vector<std::unique_ptr<core::AuditEntry>> entries;
+
+  clearError();
+
+  if (!isOpen_) {
+    setError("Datenbank ist nicht geöffnet");
+    return entries;
+  }
+
+  const bool hasFilter =
+      (filter.user && !filter.user->empty()) || filter.action.has_value() ||
+      filter.entity.has_value() ||
+      (filter.entityId && !filter.entityId->empty()) ||
+      filter.fromTime.has_value() || filter.toTime.has_value();
+
+  int limit = filter.limit;
+  if (limit <= 0) {
+    limit = 100;
+  }
+
+  if (!hasFilter) {
+    return getAuditLog(limit);
+  }
+
+  std::ostringstream sql;
+  sql << "SELECT id, action, entity, entity_id, user, timestamp, details "
+         "FROM audit_log WHERE 1=1";
+
+  if (filter.user && !filter.user->empty()) {
+    sql << " AND user = ?";
+  }
+  if (filter.action.has_value()) {
+    sql << " AND action = ?";
+  }
+  if (filter.entity.has_value()) {
+    sql << " AND entity = ?";
+  }
+  if (filter.entityId && !filter.entityId->empty()) {
+    sql << " AND entity_id = ?";
+  }
+  if (filter.fromTime.has_value()) {
+    sql << " AND timestamp >= ?";
+  }
+  if (filter.toTime.has_value()) {
+    sql << " AND timestamp <= ?";
+  }
+
+  sql << " ORDER BY timestamp DESC LIMIT ?;";
+
+  sqlite3_stmt *rawStmt = nullptr;
+  int rc = sqlite3_prepare_v2(db_, sql.str().c_str(), -1, &rawStmt, nullptr);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Vorbereiten des SELECT: " +
+             std::string(sqlite3_errmsg(db_)));
+    return entries;
+  }
+
+  auto stmt = makeStatement(rawStmt);
+  int index = 1;
+
+  if (filter.user && !filter.user->empty()) {
+    sqlite3_bind_text(stmt.get(), index++, filter.user->c_str(), -1,
+                      SQLITE_TRANSIENT);
+  }
+  if (filter.action.has_value()) {
+    const std::string action =
+        core::AuditEntry::actionToString(filter.action.value());
+    sqlite3_bind_text(stmt.get(), index++, action.c_str(), -1,
+                      SQLITE_TRANSIENT);
+  }
+  if (filter.entity.has_value()) {
+    const std::string entity =
+        core::AuditEntry::entityToString(filter.entity.value());
+    sqlite3_bind_text(stmt.get(), index++, entity.c_str(), -1,
+                      SQLITE_TRANSIENT);
+  }
+  if (filter.entityId && !filter.entityId->empty()) {
+    sqlite3_bind_text(stmt.get(), index++, filter.entityId->c_str(), -1,
+                      SQLITE_TRANSIENT);
+  }
+  if (filter.fromTime.has_value()) {
+    sqlite3_bind_int64(stmt.get(), index++,
+                       static_cast<sqlite3_int64>(filter.fromTime.value()));
+  }
+  if (filter.toTime.has_value()) {
+    sqlite3_bind_int64(stmt.get(), index++,
+                       static_cast<sqlite3_int64>(filter.toTime.value()));
+  }
+
+  sqlite3_bind_int(stmt.get(), index++, limit);
+
+  while ((rc = sqlite3_step(stmt.get())) == SQLITE_ROW) {
+    try {
+      entries.push_back(auditEntryFromRow(stmt.get()));
+    } catch (const std::exception &e) {
+      setError("Fehler beim Verarbeiten des Audit-Eintrags: " +
+               std::string(e.what()));
+      return entries;
+    }
+  }
+
+  if (rc != SQLITE_DONE) {
+    setError("Fehler beim Abrufen der Audit-Einträge: " +
+             std::string(sqlite3_errmsg(db_)));
+  }
+
+  return entries;
+}
+
 // Audit-Hilfsmethoden
 void Database::logSampleAction(core::AuditEntry::ActionType action,
                                const std::string &sampleId,
                                const std::string &user,
                                const std::string &details) {
+  const std::string actor = normalizeActor(user);
   core::AuditEntry entry(action, core::AuditEntry::EntityType::SAMPLE, sampleId,
-                         user, details);
+                         actor, details);
   (void)logAudit(entry);
 }
 
@@ -2024,8 +2298,9 @@ void Database::logOrderAction(core::AuditEntry::ActionType action,
                               const std::string &orderId,
                               const std::string &user,
                               const std::string &details) {
+  const std::string actor = normalizeActor(user);
   core::AuditEntry entry(action, core::AuditEntry::EntityType::ORDER, orderId,
-                         user, details);
+                         actor, details);
   (void)logAudit(entry);
 }
 
@@ -2033,8 +2308,9 @@ void Database::logResultAction(core::AuditEntry::ActionType action,
                                const std::string &resultId,
                                const std::string &user,
                                const std::string &details) {
+  const std::string actor = normalizeActor(user);
   core::AuditEntry entry(action, core::AuditEntry::EntityType::RESULT, resultId,
-                         user, details);
+                         actor, details);
   (void)logAudit(entry);
 }
 
@@ -2042,8 +2318,9 @@ void Database::logUserAction(core::AuditEntry::ActionType action,
                              const std::string &username,
                              const std::string &user,
                              const std::string &details) {
+  const std::string actor = normalizeActor(user);
   core::AuditEntry entry(action, core::AuditEntry::EntityType::USER, username,
-                         user, details);
+                         actor, details);
   (void)logAudit(entry);
 }
 
@@ -2051,8 +2328,9 @@ void Database::logRoleAction(core::AuditEntry::ActionType action,
                              const std::string &roleName,
                              const std::string &user,
                              const std::string &details) {
+  const std::string actor = normalizeActor(user);
   core::AuditEntry entry(action, core::AuditEntry::EntityType::ROLE, roleName,
-                         user, details);
+                         actor, details);
   (void)logAudit(entry);
 }
 
@@ -2077,7 +2355,7 @@ void Database::logResultRetryImport(const std::vector<std::string> &resultIds,
 // User-Operationen
 // ============================================================================
 
-bool Database::createUser(const core::User &user) {
+bool Database::createUser(const core::User &user, const std::string &actor) {
   clearError();
 
   if (!isOpen_) {
@@ -2123,6 +2401,18 @@ bool Database::createUser(const core::User &user) {
              std::string(sqlite3_errmsg(db_)));
     return false;
   }
+
+  std::ostringstream details;
+  details << "Rolle: " << user.getRoleString()
+          << "; Status: " << formatActive(user.isActive());
+  if (!user.getFullName().empty()) {
+    details << "; Name: " << user.getFullName();
+  }
+  if (!user.getEmail().empty()) {
+    details << "; Email: " << user.getEmail();
+  }
+  logUserAction(core::AuditEntry::ActionType::CREATE, user.getUsername(),
+                normalizeActor(actor), details.str());
 
   return true;
 }
@@ -2263,11 +2553,16 @@ std::vector<std::unique_ptr<core::User>> Database::getAllUsers() {
   return users;
 }
 
-bool Database::updateUser(const core::User &user) {
+bool Database::updateUser(const core::User &user, const std::string &actor) {
   clearError();
 
   if (!isOpen_) {
     setError("Datenbank ist nicht geöffnet");
+    return false;
+  }
+
+  auto existing = getUser(user.getId());
+  if (!existing) {
     return false;
   }
 
@@ -2320,42 +2615,41 @@ bool Database::updateUser(const core::User &user) {
     return false;
   }
 
-  if (sqlite3_changes(db_) == 0) {
-    static const char *existsSQL = "SELECT 1 FROM users WHERE id = ? LIMIT 1;";
-    sqlite3_stmt *existsStmtRaw = nullptr;
-    int existsRc =
-        sqlite3_prepare_v2(db_, existsSQL, -1, &existsStmtRaw, nullptr);
-    if (existsRc != SQLITE_OK) {
-      setError("Fehler beim Prüfen des Benutzers: " +
-               std::string(sqlite3_errmsg(db_)));
-      return false;
-    }
-    auto existsStmt = makeStatement(existsStmtRaw);
-    sqlite3_bind_int(existsStmt.get(), 1, user.getId());
-    existsRc = sqlite3_step(existsStmt.get());
+  std::ostringstream details;
+  bool hasChanges = false;
+  appendAuditChange(details, hasChanges, "Benutzername",
+                    existing->getUsername(), user.getUsername());
+  appendAuditChange(details, hasChanges, "Rolle",
+                    existing->getRoleString(), user.getRoleString());
+  appendAuditChange(details, hasChanges, "Status",
+                    formatActive(existing->isActive()),
+                    formatActive(user.isActive()));
+  appendAuditChange(details, hasChanges, "Letzter Login",
+                    std::to_string(existing->getLastLogin()),
+                    std::to_string(user.getLastLogin()));
+  appendAuditChange(details, hasChanges, "Name",
+                    existing->getFullName(), user.getFullName());
+  appendAuditChange(details, hasChanges, "Email",
+                    existing->getEmail(), user.getEmail());
 
-    if (existsRc == SQLITE_ROW) {
-      return true;
-    }
-
-    if (existsRc == SQLITE_DONE) {
-      setError("Benutzer mit ID " + std::to_string(user.getId()) +
-               " nicht gefunden");
-    } else {
-      setError("Fehler beim Prüfen des Benutzers: " +
-               std::string(sqlite3_errmsg(db_)));
-    }
-    return false;
-  }
+  const std::string detailText =
+      hasChanges ? details.str() : "Keine Änderungen";
+  logUserAction(core::AuditEntry::ActionType::UPDATE, user.getUsername(),
+                normalizeActor(actor), detailText);
 
   return true;
 }
 
-bool Database::deleteUser(int id) {
+bool Database::deleteUser(int id, const std::string &actor) {
   clearError();
 
   if (!isOpen_) {
     setError("Datenbank ist nicht geöffnet");
+    return false;
+  }
+
+  auto existing = getUser(id);
+  if (!existing) {
     return false;
   }
 
@@ -2387,6 +2681,13 @@ bool Database::deleteUser(int id) {
     return false;
   }
 
+  std::ostringstream details;
+  details << "Benutzername: " << existing->getUsername()
+          << "; Rolle: " << existing->getRoleString()
+          << "; Status: " << formatActive(existing->isActive());
+  logUserAction(core::AuditEntry::ActionType::DELETE, existing->getUsername(),
+                normalizeActor(actor), details.str());
+
   return true;
 }
 
@@ -2395,7 +2696,8 @@ bool Database::deleteUser(int id) {
 // ============================================================================
 
 bool Database::createRole(const std::string &name,
-                          const std::vector<std::string> &permissions) {
+                          const std::vector<std::string> &permissions,
+                          const std::string &actor) {
   clearError();
 
   if (!isOpen_) {
@@ -2483,11 +2785,17 @@ bool Database::createRole(const std::string &name,
     return false;
   }
 
+  std::ostringstream details;
+  details << "Berechtigungen: [" << joinList(permissions) << "]";
+  logRoleAction(core::AuditEntry::ActionType::CREATE, name,
+                normalizeActor(actor), details.str());
+
   return true;
 }
 
 bool Database::updateRole(const std::string &name,
-                          const std::vector<std::string> &permissions) {
+                          const std::vector<std::string> &permissions,
+                          const std::string &actor) {
   clearError();
 
   if (!isOpen_) {
@@ -2518,6 +2826,11 @@ bool Database::updateRole(const std::string &name,
   if (rc != SQLITE_ROW) {
     setError("Fehler beim Prüfen der Rolle: " +
              std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+
+  auto existingPerms = getRolePermissions(name);
+  if (hasError()) {
     return false;
   }
 
@@ -2591,6 +2904,12 @@ bool Database::updateRole(const std::string &name,
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     return false;
   }
+
+  std::ostringstream details;
+  details << "Berechtigungen: [" << joinList(existingPerms) << "] -> ["
+          << joinList(permissions) << "]";
+  logRoleAction(core::AuditEntry::ActionType::UPDATE, name,
+                normalizeActor(actor), details.str());
 
   return true;
 }
@@ -2674,7 +2993,8 @@ std::vector<std::string> Database::getAllRoles() {
   return roles;
 }
 
-bool Database::assignUserRole(int userId, const std::string &roleName) {
+bool Database::assignUserRole(int userId, const std::string &roleName,
+                              const std::string &actor) {
   clearError();
 
   if (!isOpen_) {
@@ -2709,6 +3029,11 @@ bool Database::assignUserRole(int userId, const std::string &roleName) {
     return false;
   }
 
+  auto existing = getUser(userId);
+  if (!existing) {
+    return false;
+  }
+
   const char *updateSQL = "UPDATE users SET role = ? WHERE id = ?;";
   sqlite3_stmt *updateStmtRaw = nullptr;
   rc = sqlite3_prepare_v2(db_, updateSQL, -1, &updateStmtRaw, nullptr);
@@ -2734,6 +3059,10 @@ bool Database::assignUserRole(int userId, const std::string &roleName) {
     setError("Benutzer mit ID " + std::to_string(userId) + " nicht gefunden");
     return false;
   }
+
+  logUserAction(core::AuditEntry::ActionType::UPDATE,
+                existing->getUsername(), normalizeActor(actor),
+                "Rolle: " + existing->getRoleString() + " -> " + roleName);
 
   return true;
 }
@@ -3368,7 +3697,7 @@ Database::AuthResult Database::authenticatePrimary(const std::string &username,
           core::User newUser(username, core::User::hashPassword(password),
                              core::User::Role::OPERATOR);
           newUser.setRoleName("Operator");
-          (void)createUser(newUser);
+          (void)createUser(newUser, actor);
           localUser = getUserByUsername(username);
         }
 
@@ -3505,7 +3834,7 @@ Database::authenticateUser(const std::string &username,
 
   // Login-Timestamp aktualisieren
   result.user->updateLastLogin();
-  (void)updateUser(*result.user);
+  (void)updateUser(*result.user, actor);
 
   if (!startSession(result.user->getId(), actor, result.method,
                     "Authentifiziert")) {
