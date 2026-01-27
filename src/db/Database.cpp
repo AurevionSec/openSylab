@@ -19,6 +19,39 @@ std::string columnText(sqlite3_stmt *stmt, int index) {
   return text ? reinterpret_cast<const char *>(text) : "";
 }
 
+int computeMfaCode(const std::string &secret, std::time_t now) {
+  const long step = static_cast<long>(now / 30);
+  const std::string material = secret + ":" + std::to_string(step);
+
+  unsigned long hash = 5381;
+  for (unsigned char c : material) {
+    hash = ((hash << 5) + hash) ^ c;
+  }
+  return static_cast<int>(hash % 1000000UL);
+}
+
+bool verifyMfaCode(const std::string &secret, const std::string &code) {
+  if (secret.empty() || code.empty()) {
+    return false;
+  }
+
+  int provided = -1;
+  try {
+    provided = std::stoi(code);
+  } catch (...) {
+    return false;
+  }
+
+  const std::time_t now = std::time(nullptr);
+  for (int offset = -1; offset <= 1; ++offset) {
+    const std::time_t candidate = now + static_cast<std::time_t>(offset * 30);
+    if (computeMfaCode(secret, candidate) == provided) {
+      return true;
+    }
+  }
+  return false;
+}
+
 std::string escapeCsvField(const std::string &value) {
   if (value.find_first_of(",\"\n\r") == std::string::npos) {
     return value;
@@ -284,6 +317,32 @@ bool Database::initializeSchema() {
             PRIMARY KEY (role_name, permission),
             FOREIGN KEY(role_name) REFERENCES roles(name) ON DELETE CASCADE
         );
+
+        CREATE TABLE IF NOT EXISTS auth_config (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS ldap_directory (
+            username TEXT PRIMARY KEY,
+            password_hash TEXT NOT NULL,
+            active INTEGER NOT NULL DEFAULT 1,
+            mfa_required INTEGER NOT NULL DEFAULT 0,
+            mfa_secret TEXT NOT NULL DEFAULT ''
+        );
+
+        CREATE TABLE IF NOT EXISTS user_mfa (
+            username TEXT PRIMARY KEY,
+            mfa_required INTEGER NOT NULL DEFAULT 0,
+            mfa_secret TEXT NOT NULL DEFAULT '',
+            FOREIGN KEY(username) REFERENCES users(username) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS role_mfa (
+            role_name TEXT PRIMARY KEY,
+            mfa_required INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY(role_name) REFERENCES roles(name) ON DELETE CASCADE
+        );
     )";
 
   char *errMsg = nullptr;
@@ -307,6 +366,20 @@ bool Database::initializeSchema() {
   if (rc != SQLITE_OK) {
     std::string error =
         "SQL-Fehler beim Initialisieren der Rollen: " + std::string(errMsg);
+    sqlite3_free(errMsg);
+    setError(error);
+    return false;
+  }
+
+  const char *seedAuthConfigSQL = R"(
+        INSERT OR IGNORE INTO auth_config (key, value)
+        VALUES ('ldap_enabled', '0');
+    )";
+  rc = sqlite3_exec(db_, seedAuthConfigSQL, nullptr, nullptr, &errMsg);
+  if (rc != SQLITE_OK) {
+    std::string error =
+        "SQL-Fehler beim Initialisieren der Auth-Konfiguration: " +
+        std::string(errMsg);
     sqlite3_free(errMsg);
     setError(error);
     return false;
@@ -2649,32 +2722,537 @@ bool Database::assignUserRole(int userId, const std::string &roleName) {
   return true;
 }
 
-std::unique_ptr<core::User>
-Database::authenticateUser(const std::string &username,
-                           const std::string &password) {
+// ============================================================================
+// Auth-Konfiguration, LDAP und MFA
+// ============================================================================
+
+bool Database::setAuthConfig(const std::string &key, const std::string &value) {
   clearError();
 
-  auto user = getUserByUsername(username);
-  if (!user) {
-    setError("Ungültiger Benutzername oder Passwort");
+  if (!isOpen_) {
+    setError("Datenbank ist nicht geöffnet");
+    return false;
+  }
+
+  const char *upsertSQL = R"(
+        INSERT INTO auth_config (key, value) VALUES (?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value;
+    )";
+
+  sqlite3_stmt *rawStmt = nullptr;
+  int rc = sqlite3_prepare_v2(db_, upsertSQL, -1, &rawStmt, nullptr);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Vorbereiten der Auth-Konfiguration: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+
+  auto stmt = makeStatement(rawStmt);
+  sqlite3_bind_text(stmt.get(), 1, key.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt.get(), 2, value.c_str(), -1, SQLITE_TRANSIENT);
+
+  rc = sqlite3_step(stmt.get());
+  if (rc != SQLITE_DONE) {
+    setError("Fehler beim Speichern der Auth-Konfiguration: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+
+  return true;
+}
+
+std::optional<std::string> Database::getAuthConfig(const std::string &key) {
+  clearError();
+
+  if (!isOpen_) {
+    setError("Datenbank ist nicht geöffnet");
+    return std::nullopt;
+  }
+
+  const char *selectSQL =
+      "SELECT value FROM auth_config WHERE key = ? LIMIT 1;";
+  sqlite3_stmt *rawStmt = nullptr;
+  int rc = sqlite3_prepare_v2(db_, selectSQL, -1, &rawStmt, nullptr);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Vorbereiten des SELECT: " +
+             std::string(sqlite3_errmsg(db_)));
+    return std::nullopt;
+  }
+
+  auto stmt = makeStatement(rawStmt);
+  sqlite3_bind_text(stmt.get(), 1, key.c_str(), -1, SQLITE_TRANSIENT);
+
+  rc = sqlite3_step(stmt.get());
+  if (rc == SQLITE_DONE) {
+    return std::nullopt;
+  }
+  if (rc != SQLITE_ROW) {
+    setError("Fehler beim Laden der Auth-Konfiguration: " +
+             std::string(sqlite3_errmsg(db_)));
+    return std::nullopt;
+  }
+
+  return columnText(stmt.get(), 0);
+}
+
+bool Database::setLdapEnabled(bool enabled) {
+  return setAuthConfig("ldap_enabled", enabled ? "1" : "0");
+}
+
+bool Database::isLdapEnabled() {
+  auto value = getAuthConfig("ldap_enabled");
+  if (!value.has_value()) {
+    clearError();
+    return false;
+  }
+  return value.value() == "1";
+}
+
+bool Database::upsertLdapUser(const std::string &username,
+                              const std::string &passwordHash, bool active,
+                              bool mfaRequired,
+                              const std::string &mfaSecret) {
+  clearError();
+
+  if (!isOpen_) {
+    setError("Datenbank ist nicht geöffnet");
+    return false;
+  }
+
+  if (username.empty() || passwordHash.empty()) {
+    setError("LDAP-Benutzername und Passwort-Hash sind erforderlich");
+    return false;
+  }
+
+  const char *upsertSQL = R"(
+        INSERT INTO ldap_directory (username, password_hash, active, mfa_required, mfa_secret)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(username) DO UPDATE SET
+            password_hash = excluded.password_hash,
+            active = excluded.active,
+            mfa_required = excluded.mfa_required,
+            mfa_secret = excluded.mfa_secret;
+    )";
+
+  sqlite3_stmt *rawStmt = nullptr;
+  int rc = sqlite3_prepare_v2(db_, upsertSQL, -1, &rawStmt, nullptr);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Vorbereiten des LDAP-UPSERT: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+
+  auto stmt = makeStatement(rawStmt);
+  sqlite3_bind_text(stmt.get(), 1, username.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt.get(), 2, passwordHash.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int(stmt.get(), 3, active ? 1 : 0);
+  sqlite3_bind_int(stmt.get(), 4, mfaRequired ? 1 : 0);
+  sqlite3_bind_text(stmt.get(), 5, mfaSecret.c_str(), -1, SQLITE_TRANSIENT);
+
+  rc = sqlite3_step(stmt.get());
+  if (rc != SQLITE_DONE) {
+    setError("Fehler beim Speichern des LDAP-Benutzers: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+
+  return true;
+}
+
+bool Database::setUserMfaRequirement(const std::string &username,
+                                     bool required,
+                                     const std::string &mfaSecret) {
+  clearError();
+
+  if (!isOpen_) {
+    setError("Datenbank ist nicht geöffnet");
+    return false;
+  }
+
+  if (username.empty()) {
+    setError("Benutzername darf nicht leer sein");
+    return false;
+  }
+
+  const char *upsertSQL = R"(
+        INSERT INTO user_mfa (username, mfa_required, mfa_secret)
+        VALUES (?, ?, ?)
+        ON CONFLICT(username) DO UPDATE SET
+            mfa_required = excluded.mfa_required,
+            mfa_secret = excluded.mfa_secret;
+    )";
+
+  sqlite3_stmt *rawStmt = nullptr;
+  int rc = sqlite3_prepare_v2(db_, upsertSQL, -1, &rawStmt, nullptr);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Vorbereiten des MFA-UPSERT: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+
+  auto stmt = makeStatement(rawStmt);
+  sqlite3_bind_text(stmt.get(), 1, username.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int(stmt.get(), 2, required ? 1 : 0);
+  sqlite3_bind_text(stmt.get(), 3, mfaSecret.c_str(), -1, SQLITE_TRANSIENT);
+
+  rc = sqlite3_step(stmt.get());
+  if (rc != SQLITE_DONE) {
+    setError("Fehler beim Speichern der MFA-Anforderung: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+
+  return true;
+}
+
+bool Database::setRoleMfaRequirement(const std::string &roleName,
+                                     bool required) {
+  clearError();
+
+  if (!isOpen_) {
+    setError("Datenbank ist nicht geöffnet");
+    return false;
+  }
+
+  if (roleName.empty()) {
+    setError("Rollenname darf nicht leer sein");
+    return false;
+  }
+
+  const char *upsertSQL = R"(
+        INSERT INTO role_mfa (role_name, mfa_required)
+        VALUES (?, ?)
+        ON CONFLICT(role_name) DO UPDATE SET
+            mfa_required = excluded.mfa_required;
+    )";
+
+  sqlite3_stmt *rawStmt = nullptr;
+  int rc = sqlite3_prepare_v2(db_, upsertSQL, -1, &rawStmt, nullptr);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Vorbereiten des Rollen-MFA-UPSERT: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+
+  auto stmt = makeStatement(rawStmt);
+  sqlite3_bind_text(stmt.get(), 1, roleName.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int(stmt.get(), 2, required ? 1 : 0);
+
+  rc = sqlite3_step(stmt.get());
+  if (rc != SQLITE_DONE) {
+    setError("Fehler beim Speichern der Rollen-MFA-Anforderung: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+
+  return true;
+}
+
+bool Database::isMfaRequiredForUser(const std::string &username,
+                                    const std::string &roleName) {
+  clearError();
+
+  if (!isOpen_) {
+    setError("Datenbank ist nicht geöffnet");
+    return false;
+  }
+
+  const char *userSQL = R"(
+        SELECT mfa_required
+        FROM user_mfa
+        WHERE username = ?
+        LIMIT 1;
+    )";
+  sqlite3_stmt *userStmtRaw = nullptr;
+  int rc = sqlite3_prepare_v2(db_, userSQL, -1, &userStmtRaw, nullptr);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Vorbereiten des MFA-SELECT: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+  auto userStmt = makeStatement(userStmtRaw);
+  sqlite3_bind_text(userStmt.get(), 1, username.c_str(), -1, SQLITE_TRANSIENT);
+  rc = sqlite3_step(userStmt.get());
+  if (rc == SQLITE_ROW) {
+    return sqlite3_column_int(userStmt.get(), 0) != 0;
+  }
+  if (rc != SQLITE_DONE) {
+    setError("Fehler beim Laden der Benutzer-MFA-Anforderung: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+
+  const char *roleSQL = R"(
+        SELECT mfa_required
+        FROM role_mfa
+        WHERE role_name = ?
+        LIMIT 1;
+    )";
+  sqlite3_stmt *roleStmtRaw = nullptr;
+  rc = sqlite3_prepare_v2(db_, roleSQL, -1, &roleStmtRaw, nullptr);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Vorbereiten des Rollen-MFA-SELECT: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+  auto roleStmt = makeStatement(roleStmtRaw);
+  sqlite3_bind_text(roleStmt.get(), 1, roleName.c_str(), -1, SQLITE_TRANSIENT);
+  rc = sqlite3_step(roleStmt.get());
+  if (rc == SQLITE_ROW) {
+    return sqlite3_column_int(roleStmt.get(), 0) != 0;
+  }
+  if (rc != SQLITE_DONE) {
+    setError("Fehler beim Laden der Rollen-MFA-Anforderung: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+
+  clearError();
+  return false;
+}
+
+bool Database::verifyUserMfa(const std::string &username,
+                             const std::string &code) {
+  clearError();
+
+  if (!isOpen_) {
+    setError("Datenbank ist nicht geöffnet");
+    return false;
+  }
+
+  const char *selectSQL = R"(
+        SELECT mfa_secret
+        FROM user_mfa
+        WHERE username = ?
+        LIMIT 1;
+    )";
+  sqlite3_stmt *rawStmt = nullptr;
+  int rc = sqlite3_prepare_v2(db_, selectSQL, -1, &rawStmt, nullptr);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Vorbereiten des MFA-SELECT: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+  auto stmt = makeStatement(rawStmt);
+  sqlite3_bind_text(stmt.get(), 1, username.c_str(), -1, SQLITE_TRANSIENT);
+
+  rc = sqlite3_step(stmt.get());
+  if (rc == SQLITE_DONE) {
+    setError("Keine MFA-Konfiguration für Benutzer '" + username + "'");
+    return false;
+  }
+  if (rc != SQLITE_ROW) {
+    setError("Fehler beim Laden des MFA-Secrets: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+
+  const std::string secret = columnText(stmt.get(), 0);
+  if (!verifyMfaCode(secret, code)) {
+    setError("Ungültiger oder abgelaufener MFA-Code");
+    return false;
+  }
+
+  return true;
+}
+
+Database::AuthResult Database::authenticatePrimary(const std::string &username,
+                                                   const std::string &password) {
+  clearError();
+  AuthResult result;
+
+  auto localUser = getUserByUsername(username);
+  const bool ldapEnabled = isLdapEnabled();
+  const std::string actor = username.empty() ? "unbekannt" : username;
+
+  // LDAP-Pfad zuerst prüfen, wenn aktiviert und ein LDAP-Benutzer existiert.
+  if (ldapEnabled) {
+    const char *ldapSQL = R"(
+          SELECT password_hash, active, mfa_required, mfa_secret
+          FROM ldap_directory
+          WHERE username = ?
+          LIMIT 1;
+      )";
+    sqlite3_stmt *ldapStmtRaw = nullptr;
+    int rc = sqlite3_prepare_v2(db_, ldapSQL, -1, &ldapStmtRaw, nullptr);
+    if (rc == SQLITE_OK) {
+      auto ldapStmt = makeStatement(ldapStmtRaw);
+      sqlite3_bind_text(ldapStmt.get(), 1, username.c_str(), -1,
+                        SQLITE_TRANSIENT);
+      rc = sqlite3_step(ldapStmt.get());
+      if (rc == SQLITE_ROW) {
+        const std::string storedHash = columnText(ldapStmt.get(), 0);
+        const bool active = sqlite3_column_int(ldapStmt.get(), 1) != 0;
+        const bool ldapMfaRequired = sqlite3_column_int(ldapStmt.get(), 2) != 0;
+        const std::string ldapSecret = columnText(ldapStmt.get(), 3);
+
+        result.method = AuthMethod::LDAP;
+
+        if (!active) {
+          const std::string msg = "LDAP-Benutzer ist deaktiviert";
+          setError(msg);
+          logUserAction(core::AuditEntry::ActionType::UPDATE, actor, actor,
+                        "Login fehlgeschlagen (LDAP, deaktiviert)");
+          setError(msg);
+          return result;
+        }
+
+        if (core::User::hashPassword(password) != storedHash) {
+          const std::string msg = "Ungültiger Benutzername oder Passwort";
+          setError(msg);
+          logUserAction(core::AuditEntry::ActionType::UPDATE, actor, actor,
+                        "Login fehlgeschlagen (LDAP, falsches Passwort)");
+          setError(msg);
+          return result;
+        }
+
+        // Sicherstellen, dass es einen lokalen Benutzer für Rollen/ACL gibt.
+        if (!localUser) {
+          core::User newUser(username, core::User::hashPassword(password),
+                             core::User::Role::OPERATOR);
+          newUser.setRoleName("Operator");
+          (void)createUser(newUser);
+          localUser = getUserByUsername(username);
+        }
+
+        if (!localUser) {
+          const std::string msg =
+              "LDAP-Anmeldung erfolgreich, aber lokaler Benutzer fehlt";
+          setError(msg);
+          logUserAction(core::AuditEntry::ActionType::UPDATE, actor, actor,
+                        "Login fehlgeschlagen (LDAP, lokaler Benutzer fehlt)");
+          setError(msg);
+          return result;
+        }
+
+        // LDAP-MFA-Vorgaben in die lokale MFA-Konfiguration spiegeln.
+        if (ldapMfaRequired && !ldapSecret.empty()) {
+          (void)setUserMfaRequirement(username, true, ldapSecret);
+        }
+
+        result.user = std::move(localUser);
+        result.requiresMfa =
+            ldapMfaRequired || isMfaRequiredForUser(username, result.user->getRoleString());
+        result.mfaSecret = ldapSecret;
+        return result;
+      }
+    }
+    clearError();
+  }
+
+  // Lokaler Passwort-Pfad als Default.
+  result.method = AuthMethod::LOCAL;
+
+  if (!localUser) {
+    const std::string msg = "Ungültiger Benutzername oder Passwort";
+    setError(msg);
+    logUserAction(core::AuditEntry::ActionType::UPDATE, actor, actor,
+                  "Login fehlgeschlagen (lokal, Benutzer unbekannt)");
+    setError(msg);
+    return result;
+  }
+
+  if (!localUser->isActive()) {
+    const std::string msg = "Benutzer ist deaktiviert";
+    setError(msg);
+    logUserAction(core::AuditEntry::ActionType::UPDATE, actor, actor,
+                  "Login fehlgeschlagen (lokal, deaktiviert)");
+    setError(msg);
+    return result;
+  }
+
+  if (!localUser->verifyPassword(password)) {
+    const std::string msg = "Ungültiger Benutzername oder Passwort";
+    setError(msg);
+    logUserAction(core::AuditEntry::ActionType::UPDATE, actor, actor,
+                  "Login fehlgeschlagen (lokal, falsches Passwort)");
+    setError(msg);
+    return result;
+  }
+
+  result.user = std::move(localUser);
+  result.requiresMfa =
+      isMfaRequiredForUser(username, result.user->getRoleString());
+  return result;
+}
+
+std::unique_ptr<core::User>
+Database::authenticateUser(const std::string &username,
+                           const std::string &password,
+                           const std::optional<std::string> &mfaCode) {
+  clearError();
+  pendingAuth_.active = false;
+  pendingAuth_.username.clear();
+  pendingAuth_.mfaSecret.clear();
+
+  auto result = authenticatePrimary(username, password);
+  if (!result.user) {
     return nullptr;
   }
 
-  if (!user->isActive()) {
-    setError("Benutzer ist deaktiviert");
-    return nullptr;
-  }
+  const std::string methodStr =
+      result.method == AuthMethod::LDAP ? "LDAP" : "Lokal";
+  const std::string actor = result.user->getUsername();
 
-  if (!user->verifyPassword(password)) {
-    setError("Ungültiger Benutzername oder Passwort");
-    return nullptr;
+  if (result.requiresMfa) {
+    // MFA-Secret aus user_mfa bevorzugen, sonst aus LDAP übernehmen.
+    const char *secretSQL = R"(
+          SELECT mfa_secret
+          FROM user_mfa
+          WHERE username = ?
+          LIMIT 1;
+      )";
+    sqlite3_stmt *secretStmtRaw = nullptr;
+    int rc = sqlite3_prepare_v2(db_, secretSQL, -1, &secretStmtRaw, nullptr);
+    if (rc == SQLITE_OK) {
+      auto secretStmt = makeStatement(secretStmtRaw);
+      sqlite3_bind_text(secretStmt.get(), 1, actor.c_str(), -1,
+                        SQLITE_TRANSIENT);
+      rc = sqlite3_step(secretStmt.get());
+      if (rc == SQLITE_ROW) {
+        result.mfaSecret = columnText(secretStmt.get(), 0);
+      }
+    }
+    clearError();
+
+    if (result.mfaSecret.empty()) {
+      const std::string msg =
+          "MFA ist erforderlich, aber kein MFA-Secret ist konfiguriert";
+      setError(msg);
+      logUserAction(core::AuditEntry::ActionType::UPDATE, actor, actor,
+                    "Login fehlgeschlagen (" + methodStr +
+                        ", MFA-Secret fehlt)");
+      setError(msg);
+      return nullptr;
+    }
+
+    if (!mfaCode.has_value()) {
+      pendingAuth_.active = true;
+      pendingAuth_.username = actor;
+      pendingAuth_.method = result.method;
+      pendingAuth_.mfaSecret = result.mfaSecret;
+      setError("MFA erforderlich. Bitte MFA-Code eingeben.");
+      return nullptr;
+    }
+
+    if (!verifyMfaCode(result.mfaSecret, mfaCode.value())) {
+      const std::string msg = "Ungültiger oder abgelaufener MFA-Code";
+      setError(msg);
+      logUserAction(core::AuditEntry::ActionType::UPDATE, actor, actor,
+                    "Login fehlgeschlagen (" + methodStr +
+                        ", MFA ungültig)");
+      setError(msg);
+      return nullptr;
+    }
   }
 
   // Login-Timestamp aktualisieren
-  user->updateLastLogin();
-  (void)updateUser(*user);
+  result.user->updateLastLogin();
+  (void)updateUser(*result.user);
 
-  return user;
+  logUserAction(core::AuditEntry::ActionType::LOGIN, actor, actor,
+                "Login erfolgreich (Methode: " + methodStr + ")");
+  return std::move(result.user);
 }
 
 void Database::setError(const std::string &error) {

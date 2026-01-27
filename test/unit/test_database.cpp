@@ -22,6 +22,17 @@ std::string uniqueDbPath() {
   ss << "test_db_" << std::rand() << "_" << std::time(nullptr) << ".db";
   return ss.str();
 }
+
+int computeMfaCode(const std::string &secret, std::time_t now) {
+  const long step = static_cast<long>(now / 30);
+  std::string material = secret + ":" + std::to_string(step);
+
+  unsigned long hash = 5381;
+  for (unsigned char c : material) {
+    hash = ((hash << 5) + hash) ^ c;
+  }
+  return static_cast<int>(hash % 1000000UL);
+}
 } // namespace
 
 bool test_database_OpenAndClose() {
@@ -731,6 +742,101 @@ bool test_database_AuthenticateUserRejectsInactive() {
   return true;
 }
 
+bool test_database_AuthConfigLdapEnabled() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  ASSERT_TRUE(db.setLdapEnabled(true));
+  ASSERT_TRUE(db.isLdapEnabled());
+
+  ASSERT_TRUE(db.setLdapEnabled(false));
+  ASSERT_FALSE(db.isLdapEnabled());
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_database_LdapAuthenticationPath() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  ASSERT_TRUE(db.setLdapEnabled(true));
+
+  const std::string username = "ldap_user";
+  const std::string password = "secret";
+  ASSERT_TRUE(db.upsertLdapUser(username, User::hashPassword(password), true,
+                                false, ""));
+
+  auto user = db.authenticateUser(username, password);
+  ASSERT_NOT_NULL(user);
+  ASSERT_EQ(user->getUsername(), username);
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_database_MfaRequiredFlowLocalUser() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  const std::string username = "mfa_local";
+  const std::string password = "secret";
+  const std::string secret = "LOCAL_MFA_SECRET";
+
+  User user(username, User::hashPassword(password), User::Role::OPERATOR);
+  ASSERT_TRUE(db.createUser(user));
+
+  ASSERT_TRUE(db.setUserMfaRequirement(username, true, secret));
+
+  auto missing = db.authenticateUser(username, password);
+  ASSERT_TRUE(missing == nullptr);
+  ASSERT_NE(db.getLastError().find("MFA"), std::string::npos);
+
+  const int code = computeMfaCode(secret, std::time(nullptr));
+  auto ok = db.authenticateUser(username, password, std::to_string(code));
+  ASSERT_NOT_NULL(ok);
+  ASSERT_EQ(ok->getUsername(), username);
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_database_AuthAuditLogging() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  const std::string username = "audit_auth";
+  const std::string password = "secret";
+
+  User user(username, User::hashPassword(password), User::Role::ADMIN);
+  ASSERT_TRUE(db.createUser(user));
+
+  auto fail = db.authenticateUser(username, "wrong");
+  ASSERT_TRUE(fail == nullptr);
+
+  auto success = db.authenticateUser(username, password);
+  ASSERT_NOT_NULL(success);
+
+  auto entries =
+      db.getAuditLogByEntity(AuditEntry::EntityType::USER, username);
+  ASSERT_FALSE(entries.empty());
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
 bool test_database_ExportValidatedResults_CsvOutput() {
   std::string dbPath = uniqueDbPath();
   Database db(dbPath);
@@ -1118,6 +1224,13 @@ void registerDatabaseTests() {
   registerTest("Database::LogRoleAction", test_database_LogRoleAction);
   registerTest("Database::AuthenticateUserRejectsInactive",
                test_database_AuthenticateUserRejectsInactive);
+  registerTest("Database::AuthConfigLdapEnabled",
+               test_database_AuthConfigLdapEnabled);
+  registerTest("Database::LdapAuthenticationPath",
+               test_database_LdapAuthenticationPath);
+  registerTest("Database::MfaRequiredFlowLocalUser",
+               test_database_MfaRequiredFlowLocalUser);
+  registerTest("Database::AuthAuditLogging", test_database_AuthAuditLogging);
   registerTest("Database::ExportValidatedResults_CsvOutput",
                test_database_ExportValidatedResults_CsvOutput);
   registerTest("Database::ExportValidatedResults_LogsAudit",

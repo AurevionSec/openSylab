@@ -39,6 +39,16 @@ public:
     std::string sampleId;
     std::string priority;
   };
+
+  enum class AuthMethod { LOCAL, LDAP };
+
+  struct AuthResult {
+    std::unique_ptr<core::User> user;
+    AuthMethod method = AuthMethod::LOCAL;
+    bool requiresMfa = false;
+    std::string mfaSecret;
+    std::string message;
+  };
   /**
    * @brief Konstruktor
    * @param dbPath Pfad zur SQLite-Datenbankdatei
@@ -157,9 +167,33 @@ public:
   [[nodiscard]] std::vector<std::string> getAllRoles();
   [[nodiscard]] bool assignUserRole(int userId, const std::string &roleName);
 
+  // Auth-Konfiguration, LDAP und MFA
+  [[nodiscard]] bool setAuthConfig(const std::string &key,
+                                   const std::string &value);
+  [[nodiscard]] std::optional<std::string>
+  getAuthConfig(const std::string &key);
+  [[nodiscard]] bool setLdapEnabled(bool enabled);
+  [[nodiscard]] bool isLdapEnabled();
+  [[nodiscard]] bool upsertLdapUser(const std::string &username,
+                                    const std::string &passwordHash,
+                                    bool active, bool mfaRequired,
+                                    const std::string &mfaSecret);
+  [[nodiscard]] bool setUserMfaRequirement(const std::string &username,
+                                           bool required,
+                                           const std::string &mfaSecret);
+  [[nodiscard]] bool setRoleMfaRequirement(const std::string &roleName,
+                                           bool required);
+  [[nodiscard]] bool isMfaRequiredForUser(const std::string &username,
+                                          const std::string &roleName);
+  [[nodiscard]] bool verifyUserMfa(const std::string &username,
+                                   const std::string &code);
+
   // Authentifizierung
+  [[nodiscard]] AuthResult authenticatePrimary(const std::string &username,
+                                               const std::string &password);
   [[nodiscard]] std::unique_ptr<core::User>
-  authenticateUser(const std::string &username, const std::string &password);
+  authenticateUser(const std::string &username, const std::string &password,
+                   const std::optional<std::string> &mfaCode = std::nullopt);
 
   // Fehlerbehandlung
   const std::string &getLastError() const { return lastError_; }
@@ -171,6 +205,12 @@ private:
   sqlite3 *db_ = nullptr;
   bool isOpen_ = false;
   std::string lastError_;
+  struct PendingAuth {
+    bool active = false;
+    std::string username;
+    AuthMethod method = AuthMethod::LOCAL;
+    std::string mfaSecret;
+  } pendingAuth_;
 
   // Hilfsfunktionen
   void setError(const std::string &error);

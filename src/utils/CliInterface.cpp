@@ -2134,6 +2134,16 @@ void CliInterface::handleLogin() {
 
   auto user = database_->authenticateUser(username, password);
 
+  if (!user) {
+    const std::string err = database_->getLastError();
+    if (err.find("MFA") != std::string::npos) {
+      std::string mfaCode = readInput("MFA-Code");
+      if (!running_)
+        return;
+      user = database_->authenticateUser(username, password, trim(mfaCode));
+    }
+  }
+
   if (user) {
     currentUser_ = std::move(user);
     std::cout << "\n✓ Erfolgreich angemeldet als: "
