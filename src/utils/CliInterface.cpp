@@ -792,47 +792,126 @@ void CliInterface::handleStatistics() {
   printSeparator();
   std::cout << "\n";
 
-  auto samples = database_->getAllSamples();
-
-  // Fehlerprüfung
+  const auto sampleStats = database_->getSampleStats();
   if (database_->hasError()) {
-    std::cout << "✗ Fehler beim Abrufen der Statistiken:\n";
+    std::cout << "✗ Fehler beim Abrufen der Proben-Statistiken:\n";
     std::cout << "  " << database_->getLastError() << "\n";
     waitForEnter();
     return;
   }
 
-  size_t total = samples.size();
-  size_t registered = 0, inAnalysis = 0, analyzed = 0, validated = 0,
-         archived = 0;
-
-  for (const auto &sample : samples) {
-    switch (sample->getStatus()) {
-    case core::Sample::Status::REGISTERED:
-      registered++;
-      break;
-    case core::Sample::Status::IN_ANALYSIS:
-      inAnalysis++;
-      break;
-    case core::Sample::Status::ANALYZED:
-      analyzed++;
-      break;
-    case core::Sample::Status::VALIDATED:
-      validated++;
-      break;
-    case core::Sample::Status::ARCHIVED:
-      archived++;
-      break;
-    }
+  const auto orderStats = database_->getOrderStats();
+  if (database_->hasError()) {
+    std::cout << "✗ Fehler beim Abrufen der Auftrags-Statistiken:\n";
+    std::cout << "  " << database_->getLastError() << "\n";
+    waitForEnter();
+    return;
   }
 
-  std::cout << "Gesamtanzahl Proben:     " << total << "\n\n";
+  const auto resultStats = database_->getResultStats();
+  if (database_->hasError()) {
+    std::cout << "✗ Fehler beim Abrufen der Ergebnis-Statistiken:\n";
+    std::cout << "  " << database_->getLastError() << "\n";
+    waitForEnter();
+    return;
+  }
+
+  auto countFor = [](const std::vector<db::Database::StatusCount> &entries,
+                     const std::string &status) {
+    for (const auto &entry : entries) {
+      if (entry.status == status) {
+        return entry.count;
+      }
+    }
+    return 0;
+  };
+
+  std::cout << "PROBEN\n";
+  std::cout << "Gesamtanzahl:            " << sampleStats.total << "\n";
   std::cout << "Nach Status:\n";
-  std::cout << "  Erfasst:               " << registered << "\n";
-  std::cout << "  In Analyse:            " << inAnalysis << "\n";
-  std::cout << "  Analysiert:            " << analyzed << "\n";
-  std::cout << "  Validiert:             " << validated << "\n";
-  std::cout << "  Archiviert:            " << archived << "\n";
+  std::cout << "  Erfasst:               "
+            << countFor(sampleStats.byStatus,
+                        core::Sample::statusToString(
+                            core::Sample::Status::REGISTERED))
+            << "\n";
+  std::cout << "  In Analyse:            "
+            << countFor(sampleStats.byStatus,
+                        core::Sample::statusToString(
+                            core::Sample::Status::IN_ANALYSIS))
+            << "\n";
+  std::cout << "  Analysiert:            "
+            << countFor(sampleStats.byStatus,
+                        core::Sample::statusToString(
+                            core::Sample::Status::ANALYZED))
+            << "\n";
+  std::cout << "  Validiert:             "
+            << countFor(sampleStats.byStatus,
+                        core::Sample::statusToString(
+                            core::Sample::Status::VALIDATED))
+            << "\n";
+  std::cout << "  Archiviert:            "
+            << countFor(sampleStats.byStatus,
+                        core::Sample::statusToString(
+                            core::Sample::Status::ARCHIVED))
+            << "\n\n";
+
+  std::cout << "AUFTRÄGE\n";
+  std::cout << "Gesamtanzahl:            " << orderStats.total << "\n";
+  std::cout << "Nach Status:\n";
+  std::cout << "  Angefordert:           "
+            << countFor(orderStats.byStatus,
+                        core::Order::statusToString(
+                            core::Order::Status::REQUESTED))
+            << "\n";
+  std::cout << "  In Bearbeitung:        "
+            << countFor(orderStats.byStatus,
+                        core::Order::statusToString(
+                            core::Order::Status::IN_PROGRESS))
+            << "\n";
+  std::cout << "  Abgeschlossen:         "
+            << countFor(orderStats.byStatus,
+                        core::Order::statusToString(
+                            core::Order::Status::COMPLETED))
+            << "\n";
+  std::cout << "  Validiert:             "
+            << countFor(orderStats.byStatus,
+                        core::Order::statusToString(
+                            core::Order::Status::VALIDATED))
+            << "\n";
+  std::cout << "  Storniert:             "
+            << countFor(orderStats.byStatus,
+                        core::Order::statusToString(
+                            core::Order::Status::CANCELLED))
+            << "\n\n";
+
+  std::cout << "ERGEBNISSE\n";
+  std::cout << "Gesamtanzahl:            " << resultStats.total << "\n";
+  std::cout << "Nach Status:\n";
+  std::cout << "  Ausstehend:            "
+            << countFor(resultStats.byStatus,
+                        core::TestResult::statusToString(
+                            core::TestResult::Status::PENDING))
+            << "\n";
+  std::cout << "  Eingegeben:            "
+            << countFor(resultStats.byStatus,
+                        core::TestResult::statusToString(
+                            core::TestResult::Status::ENTERED))
+            << "\n";
+  std::cout << "  Validiert:             "
+            << countFor(resultStats.byStatus,
+                        core::TestResult::statusToString(
+                            core::TestResult::Status::VALIDATED))
+            << "\n";
+  std::cout << "  Abgelehnt:             "
+            << countFor(resultStats.byStatus,
+                        core::TestResult::statusToString(
+                            core::TestResult::Status::REJECTED))
+            << "\n";
+  std::cout << "  Wiederholung nötig:    "
+            << countFor(resultStats.byStatus,
+                        core::TestResult::statusToString(
+                            core::TestResult::Status::REPEATED))
+            << "\n";
 
   printSeparator();
   waitForEnter();

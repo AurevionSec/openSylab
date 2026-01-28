@@ -59,6 +59,16 @@ public:
     std::string mfaSecret;
     std::string message;
   };
+
+  struct StatusCount {
+    std::string status;
+    int count = 0;
+  };
+
+  struct EntityStats {
+    int total = 0;
+    std::vector<StatusCount> byStatus;
+  };
   /**
    * @brief Konstruktor
    * @param dbPath Pfad zur SQLite-Datenbankdatei
@@ -136,6 +146,11 @@ public:
   [[nodiscard]] bool validateTestResult(const std::string &resultId,
                                         const std::string &user);
   [[nodiscard]] bool deleteTestResult(int id, const std::string &actor = "");
+
+  // Statistik-Operationen
+  [[nodiscard]] EntityStats getSampleStats();
+  [[nodiscard]] EntityStats getOrderStats();
+  [[nodiscard]] EntityStats getResultStats();
 
   // Audit-Operationen
   [[nodiscard]] bool logAudit(const core::AuditEntry &entry);

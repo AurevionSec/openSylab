@@ -2091,6 +2091,163 @@ bool Database::deleteTestResult(int id, const std::string &actor) {
 }
 
 // ============================================================================
+// Statistik-Operationen
+// ============================================================================
+
+Database::EntityStats Database::getSampleStats() {
+  EntityStats stats;
+  clearError();
+
+  if (!isOpen_) {
+    setError("Datenbank ist nicht geöffnet");
+    return stats;
+  }
+
+  const char *totalSQL = "SELECT COUNT(*) FROM samples;";
+  sqlite3_stmt *rawStmt = nullptr;
+  int rc = sqlite3_prepare_v2(db_, totalSQL, -1, &rawStmt, nullptr);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Vorbereiten des COUNT: " +
+             std::string(sqlite3_errmsg(db_)));
+    return stats;
+  }
+  auto stmt = makeStatement(rawStmt);
+  rc = sqlite3_step(stmt.get());
+  if (rc == SQLITE_ROW) {
+    stats.total = sqlite3_column_int(stmt.get(), 0);
+  } else {
+    setError("Fehler beim Abrufen der Statistik: " +
+             std::string(sqlite3_errmsg(db_)));
+    return stats;
+  }
+
+  const char *statusSQL =
+      "SELECT status, COUNT(*) FROM samples GROUP BY status;";
+  rawStmt = nullptr;
+  rc = sqlite3_prepare_v2(db_, statusSQL, -1, &rawStmt, nullptr);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Vorbereiten der Status-Statistik: " +
+             std::string(sqlite3_errmsg(db_)));
+    return stats;
+  }
+  stmt = makeStatement(rawStmt);
+  while ((rc = sqlite3_step(stmt.get())) == SQLITE_ROW) {
+    StatusCount entry;
+    entry.status = columnText(stmt.get(), 0);
+    entry.count = sqlite3_column_int(stmt.get(), 1);
+    stats.byStatus.push_back(std::move(entry));
+  }
+  if (rc != SQLITE_DONE) {
+    setError("Fehler beim Abrufen der Status-Statistiken: " +
+             std::string(sqlite3_errmsg(db_)));
+  }
+
+  return stats;
+}
+
+Database::EntityStats Database::getOrderStats() {
+  EntityStats stats;
+  clearError();
+
+  if (!isOpen_) {
+    setError("Datenbank ist nicht geöffnet");
+    return stats;
+  }
+
+  const char *totalSQL = "SELECT COUNT(*) FROM orders;";
+  sqlite3_stmt *rawStmt = nullptr;
+  int rc = sqlite3_prepare_v2(db_, totalSQL, -1, &rawStmt, nullptr);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Vorbereiten des COUNT: " +
+             std::string(sqlite3_errmsg(db_)));
+    return stats;
+  }
+  auto stmt = makeStatement(rawStmt);
+  rc = sqlite3_step(stmt.get());
+  if (rc == SQLITE_ROW) {
+    stats.total = sqlite3_column_int(stmt.get(), 0);
+  } else {
+    setError("Fehler beim Abrufen der Statistik: " +
+             std::string(sqlite3_errmsg(db_)));
+    return stats;
+  }
+
+  const char *statusSQL =
+      "SELECT status, COUNT(*) FROM orders GROUP BY status;";
+  rawStmt = nullptr;
+  rc = sqlite3_prepare_v2(db_, statusSQL, -1, &rawStmt, nullptr);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Vorbereiten der Status-Statistik: " +
+             std::string(sqlite3_errmsg(db_)));
+    return stats;
+  }
+  stmt = makeStatement(rawStmt);
+  while ((rc = sqlite3_step(stmt.get())) == SQLITE_ROW) {
+    StatusCount entry;
+    entry.status = columnText(stmt.get(), 0);
+    entry.count = sqlite3_column_int(stmt.get(), 1);
+    stats.byStatus.push_back(std::move(entry));
+  }
+  if (rc != SQLITE_DONE) {
+    setError("Fehler beim Abrufen der Status-Statistiken: " +
+             std::string(sqlite3_errmsg(db_)));
+  }
+
+  return stats;
+}
+
+Database::EntityStats Database::getResultStats() {
+  EntityStats stats;
+  clearError();
+
+  if (!isOpen_) {
+    setError("Datenbank ist nicht geöffnet");
+    return stats;
+  }
+
+  const char *totalSQL = "SELECT COUNT(*) FROM test_results;";
+  sqlite3_stmt *rawStmt = nullptr;
+  int rc = sqlite3_prepare_v2(db_, totalSQL, -1, &rawStmt, nullptr);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Vorbereiten des COUNT: " +
+             std::string(sqlite3_errmsg(db_)));
+    return stats;
+  }
+  auto stmt = makeStatement(rawStmt);
+  rc = sqlite3_step(stmt.get());
+  if (rc == SQLITE_ROW) {
+    stats.total = sqlite3_column_int(stmt.get(), 0);
+  } else {
+    setError("Fehler beim Abrufen der Statistik: " +
+             std::string(sqlite3_errmsg(db_)));
+    return stats;
+  }
+
+  const char *statusSQL =
+      "SELECT status, COUNT(*) FROM test_results GROUP BY status;";
+  rawStmt = nullptr;
+  rc = sqlite3_prepare_v2(db_, statusSQL, -1, &rawStmt, nullptr);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Vorbereiten der Status-Statistik: " +
+             std::string(sqlite3_errmsg(db_)));
+    return stats;
+  }
+  stmt = makeStatement(rawStmt);
+  while ((rc = sqlite3_step(stmt.get())) == SQLITE_ROW) {
+    StatusCount entry;
+    entry.status = columnText(stmt.get(), 0);
+    entry.count = sqlite3_column_int(stmt.get(), 1);
+    stats.byStatus.push_back(std::move(entry));
+  }
+  if (rc != SQLITE_DONE) {
+    setError("Fehler beim Abrufen der Status-Statistiken: " +
+             std::string(sqlite3_errmsg(db_)));
+  }
+
+  return stats;
+}
+
+// ============================================================================
 // Audit-Operationen
 // ============================================================================
 
