@@ -93,6 +93,7 @@ void CliInterface::showMainMenu() {
   if (isAdmin()) {
     std::cout << "  [32] Retention konfigurieren\n";
     std::cout << "  [33] Retention jetzt ausführen\n";
+    std::cout << "  [34] Audit-Log exportieren\n";
   }
   std::cout << "\n  === Benutzerverwaltung ===\n";
   if (!isLoggedIn()) {
@@ -194,6 +195,9 @@ void CliInterface::showMainMenu() {
     break;
   case 33:
     handleRunRetention();
+    break;
+  case 34:
+    handleExportAuditLog();
     break;
   // Benutzerverwaltung
   case 40:
@@ -2282,6 +2286,201 @@ void CliInterface::handleRunRetention() {
     }
   } else {
     std::cout << "\n✗ Fehler beim Ausführen der Retention:\n";
+    std::cout << "  " << database_->getLastError() << "\n";
+  }
+
+  waitForEnter();
+}
+
+void CliInterface::handleExportAuditLog() {
+  clearScreen();
+  printSeparator();
+  std::cout << "        AUDIT-LOG EXPORTIEREN\n";
+  printSeparator();
+  std::cout << "\n";
+
+  if (!isAdmin()) {
+    std::cout << "✗ Nur Administratoren dürfen Audit-Logs exportieren.\n";
+    waitForEnter();
+    return;
+  }
+
+  std::string filePath = readInput("Dateipfad für Export");
+  if (!running_)
+    return;
+  filePath = trim(filePath);
+  if (isEmpty(filePath)) {
+    std::cout << "\n✗ Bitte geben Sie einen Dateipfad an.\n";
+    waitForEnter();
+    return;
+  }
+
+  std::string filterInput = readInput("Filter anwenden? (j/n)");
+  if (!running_)
+    return;
+  filterInput = trim(filterInput);
+  const bool applyFilters =
+      (!filterInput.empty() &&
+       (filterInput == "j" || filterInput == "ja" || filterInput == "y" ||
+        filterInput == "yes"));
+
+  db::Database::AuditLogFilter filter;
+
+  if (applyFilters) {
+    std::cout << "\nFilter (leer lassen = kein Filter):\n";
+
+    std::string user = readInput("Benutzer");
+    if (!running_)
+      return;
+    user = trim(user);
+    if (!isEmpty(user)) {
+      filter.user = user;
+    }
+
+    std::cout << "\nAktion filtern:\n";
+    std::cout << "  [0] Alle\n";
+    std::cout << "  [1] Erstellt\n";
+    std::cout << "  [2] Aktualisiert\n";
+    std::cout << "  [3] Gelöscht\n";
+    std::cout << "  [4] Angemeldet\n";
+    std::cout << "  [5] Abgemeldet\n";
+    std::cout << "  [6] Validiert\n\n";
+
+    int actionChoice = readInteger("Aktion (0-6)");
+    if (!running_)
+      return;
+    switch (actionChoice) {
+    case 0:
+      break;
+    case 1:
+      filter.action = core::AuditEntry::ActionType::CREATE;
+      break;
+    case 2:
+      filter.action = core::AuditEntry::ActionType::UPDATE;
+      break;
+    case 3:
+      filter.action = core::AuditEntry::ActionType::DELETE;
+      break;
+    case 4:
+      filter.action = core::AuditEntry::ActionType::LOGIN;
+      break;
+    case 5:
+      filter.action = core::AuditEntry::ActionType::LOGOUT;
+      break;
+    case 6:
+      filter.action = core::AuditEntry::ActionType::VALIDATE;
+      break;
+    default:
+      std::cout << "\n✗ Ungültige Auswahl.\n";
+      waitForEnter();
+      return;
+    }
+
+    std::cout << "\nEntität filtern:\n";
+    std::cout << "  [0] Alle\n";
+    std::cout << "  [1] Probe\n";
+    std::cout << "  [2] Auftrag\n";
+    std::cout << "  [3] Ergebnis\n";
+    std::cout << "  [4] Benutzer\n";
+    std::cout << "  [5] Rolle\n";
+    std::cout << "  [6] System\n\n";
+
+    int entityChoice = readInteger("Entität (0-6)");
+    if (!running_)
+      return;
+    switch (entityChoice) {
+    case 0:
+      break;
+    case 1:
+      filter.entity = core::AuditEntry::EntityType::SAMPLE;
+      break;
+    case 2:
+      filter.entity = core::AuditEntry::EntityType::ORDER;
+      break;
+    case 3:
+      filter.entity = core::AuditEntry::EntityType::RESULT;
+      break;
+    case 4:
+      filter.entity = core::AuditEntry::EntityType::USER;
+      break;
+    case 5:
+      filter.entity = core::AuditEntry::EntityType::ROLE;
+      break;
+    case 6:
+      filter.entity = core::AuditEntry::EntityType::SYSTEM;
+      break;
+    default:
+      std::cout << "\n✗ Ungültige Auswahl.\n";
+      waitForEnter();
+      return;
+    }
+
+    std::string entityId = readInput("Entität-ID");
+    if (!running_)
+      return;
+    entityId = trim(entityId);
+    if (!isEmpty(entityId)) {
+      filter.entityId = entityId;
+    }
+
+    std::string fromTime = readInput("Von (Unix-Zeitstempel)");
+    if (!running_)
+      return;
+    fromTime = trim(fromTime);
+    if (!isEmpty(fromTime)) {
+      try {
+        filter.fromTime = static_cast<std::time_t>(std::stoll(fromTime));
+      } catch (...) {
+        std::cout << "\n✗ Ungültiger Zeitstempel.\n";
+        waitForEnter();
+        return;
+      }
+    }
+
+    std::string toTime = readInput("Bis (Unix-Zeitstempel)");
+    if (!running_)
+      return;
+    toTime = trim(toTime);
+    if (!isEmpty(toTime)) {
+      try {
+        filter.toTime = static_cast<std::time_t>(std::stoll(toTime));
+      } catch (...) {
+        std::cout << "\n✗ Ungültiger Zeitstempel.\n";
+        waitForEnter();
+        return;
+      }
+    }
+  }
+
+  std::string limitStr = readInput("Limit (100)");
+  if (!running_)
+    return;
+
+  int limit = 100;
+  if (!isEmpty(limitStr)) {
+    try {
+      limit = std::stoi(trim(limitStr));
+    } catch (...) {
+      std::cout << "\n✗ Ungültiges Limit.\n";
+      waitForEnter();
+      return;
+    }
+  }
+  if (limit <= 0) {
+    std::cout << "\n✗ Limit muss größer als 0 sein.\n";
+    waitForEnter();
+    return;
+  }
+  filter.limit = limit;
+
+  int exported = 0;
+  const std::string actor =
+      currentUser_ ? currentUser_->getUsername() : std::string("system");
+  if (database_->exportAuditLogToCsv(filePath, filter, actor, exported)) {
+    std::cout << "\n✓ Export abgeschlossen: " << exported
+              << " Einträge -> " << filePath << "\n";
+  } else {
+    std::cout << "\n✗ Fehler beim Export:\n";
     std::cout << "  " << database_->getLastError() << "\n";
   }
 

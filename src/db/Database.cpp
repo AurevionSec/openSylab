@@ -2303,6 +2303,64 @@ Database::getAuditLogFiltered(const AuditLogFilter &filter) {
   return entries;
 }
 
+bool Database::exportAuditLogToCsv(const std::string &filePath,
+                                   const AuditLogFilter &filter,
+                                   const std::string &actor,
+                                   int &exportedCount) {
+  clearError();
+  exportedCount = 0;
+
+  if (!isOpen_) {
+    setError("Datenbank ist nicht geöffnet");
+    return false;
+  }
+
+  auto entries = getAuditLogFiltered(filter);
+  if (hasError()) {
+    return false;
+  }
+  if (entries.empty()) {
+    setError("Keine Audit-Einträge zum Export");
+    return false;
+  }
+
+  std::ofstream output(filePath);
+  if (!output.is_open()) {
+    setError("Exportdatei konnte nicht geschrieben werden");
+    return false;
+  }
+
+  output << "id,action,entity,entity_id,user,timestamp,details\n";
+
+  for (const auto &entry : entries) {
+    output << entry->getId() << ","
+           << escapeCsvField(entry->getActionString()) << ","
+           << escapeCsvField(entry->getEntityString()) << ","
+           << escapeCsvField(entry->getEntityId()) << ","
+           << escapeCsvField(entry->getUser()) << ","
+           << static_cast<long long>(entry->getTimestamp()) << ","
+           << escapeCsvField(entry->getDetails()) << "\n";
+  }
+
+  if (!output) {
+    setError("Fehler beim Schreiben der Exportdatei");
+    return false;
+  }
+
+  exportedCount = static_cast<int>(entries.size());
+
+  const std::string details =
+      "Export: " + filePath + "; Anzahl: " + std::to_string(exportedCount);
+  core::AuditEntry auditEntry(core::AuditEntry::ActionType::UPDATE,
+                              core::AuditEntry::EntityType::SYSTEM,
+                              "audit_log", normalizeActor(actor), details);
+  if (!logAudit(auditEntry)) {
+    return false;
+  }
+
+  return true;
+}
+
 int Database::getRetentionDays() {
   clearError();
 

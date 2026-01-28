@@ -899,6 +899,110 @@ bool test_database_AuditLogFilterReset() {
   return true;
 }
 
+bool test_database_AuditLogExport_CsvOutput() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  AuditEntry e1(AuditEntry::ActionType::CREATE,
+                AuditEntry::EntityType::SAMPLE, "EXP_S1", "alice", "one");
+  e1.setTimestamp(1000);
+  ASSERT_TRUE(db.logAudit(e1));
+
+  AuditEntry e2(AuditEntry::ActionType::DELETE,
+                AuditEntry::EntityType::ORDER, "EXP_O1", "bob", "two");
+  e2.setTimestamp(2000);
+  ASSERT_TRUE(db.logAudit(e2));
+
+  Database::AuditLogFilter filter;
+  filter.limit = 100;
+  int exported = 0;
+  std::string exportPath = "test_export_audit_log.csv";
+  ASSERT_TRUE(
+      db.exportAuditLogToCsv(exportPath, filter, "admin", exported));
+  ASSERT_EQ(exported, 2);
+
+  std::ifstream input(exportPath);
+  ASSERT_TRUE(input.is_open());
+
+  std::string header;
+  std::getline(input, header);
+  ASSERT_EQ(header,
+            "id,action,entity,entity_id,user,timestamp,details");
+
+  int rows = 0;
+  std::string row;
+  while (std::getline(input, row)) {
+    if (!row.empty()) {
+      rows++;
+    }
+  }
+  ASSERT_EQ(rows, 2);
+
+  input.close();
+  std::remove(exportPath.c_str());
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_database_AuditLogExport_FilteredAndLogged() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  AuditEntry e1(AuditEntry::ActionType::UPDATE,
+                AuditEntry::EntityType::RESULT, "EXP_R1", "alice", "one");
+  e1.setTimestamp(1000);
+  ASSERT_TRUE(db.logAudit(e1));
+
+  AuditEntry e2(AuditEntry::ActionType::UPDATE,
+                AuditEntry::EntityType::RESULT, "EXP_R2", "bob", "two");
+  e2.setTimestamp(2000);
+  ASSERT_TRUE(db.logAudit(e2));
+
+  Database::AuditLogFilter filter;
+  filter.user = "alice";
+  filter.limit = 100;
+  int exported = 0;
+  std::string exportPath = "test_export_audit_filtered.csv";
+  ASSERT_TRUE(
+      db.exportAuditLogToCsv(exportPath, filter, "admin", exported));
+  ASSERT_EQ(exported, 1);
+
+  std::ifstream input(exportPath);
+  ASSERT_TRUE(input.is_open());
+  std::string header;
+  std::getline(input, header);
+  std::string row;
+  std::getline(input, row);
+  ASSERT_FALSE(row.empty());
+  ASSERT_NE(row.find("alice"), std::string::npos);
+  ASSERT_EQ(row.find("bob"), std::string::npos);
+  input.close();
+
+  auto entries =
+      db.getAuditLogByEntity(AuditEntry::EntityType::SYSTEM, "audit_log");
+  ASSERT_FALSE(entries.empty());
+  const AuditEntry *entry =
+      findAuditEntry(entries, AuditEntry::ActionType::UPDATE,
+                     AuditEntry::EntityType::SYSTEM, "audit_log", "admin");
+  ASSERT_NOT_NULL(entry);
+  ASSERT_NE(entry->getDetails().find("Export: " + exportPath),
+            std::string::npos);
+  ASSERT_NE(entry->getDetails().find("Anzahl: 1"),
+            std::string::npos);
+
+  std::remove(exportPath.c_str());
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
 bool test_database_RetentionMinEnforced() {
   std::string dbPath = uniqueDbPath();
   Database db(dbPath);
@@ -1608,6 +1712,10 @@ void registerDatabaseTests() {
                test_database_AuditLogFiltering);
   registerTest("Database::AuditLogFilterReset",
                test_database_AuditLogFilterReset);
+  registerTest("Database::AuditLogExport_CsvOutput",
+               test_database_AuditLogExport_CsvOutput);
+  registerTest("Database::AuditLogExport_FilteredAndLogged",
+               test_database_AuditLogExport_FilteredAndLogged);
   registerTest("Database::RetentionMinEnforced",
                test_database_RetentionMinEnforced);
   registerTest("Database::AuditRetentionPurgesAndLogs",

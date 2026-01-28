@@ -145,6 +145,10 @@ public:
                       const std::string &entityId);
   [[nodiscard]] std::vector<std::unique_ptr<core::AuditEntry>>
   getAuditLogFiltered(const AuditLogFilter &filter);
+  [[nodiscard]] bool exportAuditLogToCsv(const std::string &filePath,
+                                         const AuditLogFilter &filter,
+                                         const std::string &actor,
+                                         int &exportedCount);
 
   // Retention
   [[nodiscard]] int getRetentionDays();

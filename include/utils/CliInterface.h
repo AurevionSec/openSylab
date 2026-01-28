@@ -82,6 +82,7 @@ private:
   void handleAuditForEntity();
   void handleConfigureRetention();
   void handleRunRetention();
+  void handleExportAuditLog();
 
   // User-Menü-Aktionen (Authentifizierung)
   void handleLogin();
