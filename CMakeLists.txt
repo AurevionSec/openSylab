@@ -68,6 +68,7 @@ set(UTILS_SOURCES
     src/utils/CsvImport.cpp
     src/utils/CsvResultImport.cpp
     src/utils/Hl7.cpp
+    src/utils/Fhir.cpp
     src/utils/CliInterface.cpp
 )
 

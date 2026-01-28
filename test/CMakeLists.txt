@@ -10,6 +10,7 @@ set(TEST_SOURCES
     unit/test_csvimport.cpp
     unit/test_csvresultimport.cpp
     unit/test_hl7.cpp
+    unit/test_fhir.cpp
     unit/test_runner.cpp
 )
 
@@ -36,6 +37,7 @@ target_sources(opensylab_tests PRIVATE
     ${PROJECT_SOURCE_DIR}/src/utils/CsvImport.cpp
     ${PROJECT_SOURCE_DIR}/src/utils/CsvResultImport.cpp
     ${PROJECT_SOURCE_DIR}/src/utils/Hl7.cpp
+    ${PROJECT_SOURCE_DIR}/src/utils/Fhir.cpp
 )
 
 # Test hinzufügen
