@@ -67,6 +67,7 @@ set(DB_SOURCES
 set(UTILS_SOURCES
     src/utils/CsvImport.cpp
     src/utils/CsvResultImport.cpp
+    src/utils/Hl7.cpp
     src/utils/CliInterface.cpp
 )
 

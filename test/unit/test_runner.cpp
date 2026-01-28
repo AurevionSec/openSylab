@@ -66,6 +66,7 @@ extern void registerDatabaseTests();
 extern void registerApiTests();
 extern void registerCsvImportTests();
 extern void registerCsvResultImportTests();
+extern void registerHl7Tests();
 
 int main() {
   std::cout << "\n";
@@ -85,6 +86,7 @@ int main() {
   registerApiTests();
   registerCsvImportTests();
   registerCsvResultImportTests();
+  registerHl7Tests();
 
   int passed = 0;
   int failed = 0;
