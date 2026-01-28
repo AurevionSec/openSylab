@@ -133,6 +133,8 @@ std::string statusMessage(int status) {
     return "Not Found";
   case 405:
     return "Method Not Allowed";
+  case 409:
+    return "Conflict";
   case 500:
     return "Internal Server Error";
   default:
@@ -155,6 +157,63 @@ ApiResponse makeError(int status, const std::string &code,
        << "}";
   response.body = body.str();
   return response;
+}
+
+ApiResponse makeDbErrorResponse(const std::string &message) {
+  const std::string lower = toLower(message);
+  if (lower.find("nicht gefunden") != std::string::npos) {
+    return makeError(404, "not_found", "Record not found", message);
+  }
+  if (lower.find("unique constraint failed") != std::string::npos) {
+    return makeError(409, "conflict", "Duplicate record", message);
+  }
+  if (lower.find("darf nicht leer") != std::string::npos ||
+      lower.find("ung\u00fcltig") != std::string::npos) {
+    return makeError(400, "validation_error", "Invalid input", message);
+  }
+  return makeError(500, "internal_error", "Database error", message);
+}
+
+bool parseIntValue(const std::string &value, int &out) {
+  try {
+    size_t idx = 0;
+    int parsed = std::stoi(value, &idx);
+    if (idx != value.size()) {
+      return false;
+    }
+    out = parsed;
+    return true;
+  } catch (...) {
+    return false;
+  }
+}
+
+bool parseTimeValue(const std::string &value, std::time_t &out) {
+  try {
+    size_t idx = 0;
+    long long parsed = std::stoll(value, &idx);
+    if (idx != value.size()) {
+      return false;
+    }
+    out = static_cast<std::time_t>(parsed);
+    return true;
+  } catch (...) {
+    return false;
+  }
+}
+
+bool parseDoubleValue(const std::string &value, double &out) {
+  try {
+    size_t idx = 0;
+    double parsed = std::stod(value, &idx);
+    if (idx != value.size()) {
+      return false;
+    }
+    out = parsed;
+    return true;
+  } catch (...) {
+    return false;
+  }
 }
 
 std::string extractApiKey(const std::unordered_map<std::string, std::string> &headers) {
@@ -180,6 +239,173 @@ std::string sanitizeActor(const std::string &apiKey) {
   }
   const size_t keep = std::min<size_t>(6, apiKey.size());
   return "api-key:" + apiKey.substr(0, keep);
+}
+
+std::string trimLeadingNewlines(const std::string &value) {
+  size_t start = 0;
+  while (start < value.size() &&
+         (value[start] == '\r' || value[start] == '\n')) {
+    ++start;
+  }
+  return value.substr(start);
+}
+
+bool parseJsonString(const std::string &input, size_t &pos, std::string &out) {
+  if (pos >= input.size() || input[pos] != '"') {
+    return false;
+  }
+  ++pos;
+  std::ostringstream value;
+  while (pos < input.size()) {
+    char ch = input[pos++];
+    if (ch == '"') {
+      out = value.str();
+      return true;
+    }
+    if (ch == '\\') {
+      if (pos >= input.size()) {
+        return false;
+      }
+      char esc = input[pos++];
+      switch (esc) {
+      case '"':
+        value << '"';
+        break;
+      case '\\':
+        value << '\\';
+        break;
+      case 'n':
+        value << '\n';
+        break;
+      case 'r':
+        value << '\r';
+        break;
+      case 't':
+        value << '\t';
+        break;
+      case 'b':
+        value << '\b';
+        break;
+      case 'f':
+        value << '\f';
+        break;
+      case 'u':
+        if (pos + 3 >= input.size()) {
+          return false;
+        }
+        pos += 4;
+        value << '?';
+        break;
+      default:
+        return false;
+      }
+    } else {
+      value << ch;
+    }
+  }
+  return false;
+}
+
+void skipWhitespace(const std::string &input, size_t &pos) {
+  while (pos < input.size() &&
+         std::isspace(static_cast<unsigned char>(input[pos]))) {
+    ++pos;
+  }
+}
+
+bool parseJsonValue(const std::string &input, size_t &pos, std::string &out) {
+  skipWhitespace(input, pos);
+  if (pos >= input.size()) {
+    return false;
+  }
+  if (input[pos] == '"') {
+    return parseJsonString(input, pos, out);
+  }
+  if (std::isdigit(static_cast<unsigned char>(input[pos])) ||
+      input[pos] == '-') {
+    size_t start = pos;
+    ++pos;
+    while (pos < input.size()) {
+      char ch = input[pos];
+      if (!std::isdigit(static_cast<unsigned char>(ch)) && ch != '.' &&
+          ch != 'e' && ch != 'E' && ch != '+' && ch != '-') {
+        break;
+      }
+      ++pos;
+    }
+    out = input.substr(start, pos - start);
+    return true;
+  }
+  if (input.compare(pos, 4, "true") == 0) {
+    pos += 4;
+    out = "true";
+    return true;
+  }
+  if (input.compare(pos, 5, "false") == 0) {
+    pos += 5;
+    out = "false";
+    return true;
+  }
+  if (input.compare(pos, 4, "null") == 0) {
+    pos += 4;
+    out.clear();
+    return true;
+  }
+  return false;
+}
+
+bool parseJsonObject(const std::string &input,
+                     std::unordered_map<std::string, std::string> &out,
+                     std::string &error) {
+  out.clear();
+  size_t pos = 0;
+  skipWhitespace(input, pos);
+  if (pos >= input.size() || input[pos] != '{') {
+    error = "Expected JSON object";
+    return false;
+  }
+  ++pos;
+  skipWhitespace(input, pos);
+  if (pos < input.size() && input[pos] == '}') {
+    ++pos;
+    return true;
+  }
+  while (pos < input.size()) {
+    skipWhitespace(input, pos);
+    std::string key;
+    if (!parseJsonString(input, pos, key)) {
+      error = "Invalid JSON key";
+      return false;
+    }
+    skipWhitespace(input, pos);
+    if (pos >= input.size() || input[pos] != ':') {
+      error = "Expected ':' after key";
+      return false;
+    }
+    ++pos;
+    std::string value;
+    if (!parseJsonValue(input, pos, value)) {
+      error = "Invalid JSON value";
+      return false;
+    }
+    out[toLower(key)] = value;
+    skipWhitespace(input, pos);
+    if (pos >= input.size()) {
+      break;
+    }
+    if (input[pos] == ',') {
+      ++pos;
+      continue;
+    }
+    if (input[pos] == '}') {
+      ++pos;
+      return true;
+    }
+    error = "Expected ',' or '}'";
+    return false;
+  }
+  error = "Unexpected end of JSON";
+  return false;
 }
 
 } // namespace
@@ -251,9 +477,14 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                      "Provide X-API-Key or Authorization: Bearer <token>.");
   }
 
-  if (toLower(request.method) != "get") {
+  const std::string method = toLower(request.method);
+  const bool isGet = method == "get";
+  const bool isPost = method == "post";
+  const bool isPut = method == "put";
+
+  if (!isGet && !isPost && !isPut) {
     return makeError(405, "validation_error", "Method not allowed",
-                     "Use GET for read endpoints.");
+                     "Use GET for read endpoints or POST/PUT for writes.");
   }
 
   std::string path = request.path;
@@ -268,6 +499,549 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       parseQuery(queryString);
 
   const std::string actor = sanitizeActor(apiKey);
+
+  if (isPost || isPut) {
+    const std::string body = trimLeadingNewlines(request.body);
+    if (body.empty()) {
+      return makeError(400, "validation_error", "Missing request body",
+                       "Provide JSON payload in request body.");
+    }
+
+    std::unordered_map<std::string, std::string> payload;
+    std::string parseError;
+    if (!parseJsonObject(body, payload, parseError)) {
+      return makeError(400, "validation_error", "Invalid JSON payload",
+                       parseError);
+    }
+
+    if (path == "/api/v1/samples" && isPost) {
+      if (payload.find("sample_id") == payload.end() ||
+          payload["sample_id"].empty()) {
+        return makeError(400, "validation_error", "Missing sample_id",
+                         "Provide sample_id in request body.");
+      }
+      if (payload.find("patient_id") == payload.end() ||
+          payload["patient_id"].empty()) {
+        return makeError(400, "validation_error", "Missing patient_id",
+                         "Provide patient_id in request body.");
+      }
+
+      core::Sample sample(payload["sample_id"], payload["patient_id"]);
+      auto nameIt = payload.find("patient_name");
+      if (nameIt != payload.end()) {
+        sample.setPatientName(nameIt->second);
+      }
+      auto descIt = payload.find("description");
+      if (descIt != payload.end()) {
+        sample.setDescription(descIt->second);
+      }
+      auto statusIt = payload.find("status");
+      if (statusIt != payload.end() && !statusIt->second.empty()) {
+        try {
+          sample.setStatus(core::Sample::stringToStatus(statusIt->second));
+        } catch (const std::exception &e) {
+          return makeError(400, "validation_error", "Invalid status",
+                           e.what());
+        }
+      }
+      auto regIt = payload.find("registration_date");
+      if (regIt != payload.end() && !regIt->second.empty()) {
+        std::time_t ts{};
+        if (!parseTimeValue(regIt->second, ts)) {
+          return makeError(400, "validation_error",
+                           "Invalid registration_date",
+                           "Provide Unix timestamp for registration_date.");
+        }
+        sample.setRegistrationDate(ts);
+      }
+
+      if (!database_->createSample(sample, actor)) {
+        return makeDbErrorResponse(database_->getLastError());
+      }
+
+      auto created = database_->getSampleByBarcode(sample.getSampleId());
+      if (database_->hasError()) {
+        return makeDbErrorResponse(database_->getLastError());
+      }
+      const core::Sample &responseSample = created ? *created : sample;
+      return ApiResponse{200,
+                         "{\"data\":" + sampleToJson(responseSample) + "}",
+                         "application/json"};
+    }
+
+    if (path == "/api/v1/orders" && isPost) {
+      if (payload.find("order_id") == payload.end() ||
+          payload["order_id"].empty()) {
+        return makeError(400, "validation_error", "Missing order_id",
+                         "Provide order_id in request body.");
+      }
+      if (payload.find("sample_id") == payload.end() ||
+          payload["sample_id"].empty()) {
+        return makeError(400, "validation_error", "Missing sample_id",
+                         "Provide sample_id in request body.");
+      }
+      if (payload.find("test_type") == payload.end() ||
+          payload["test_type"].empty()) {
+        return makeError(400, "validation_error", "Missing test_type",
+                         "Provide test_type in request body.");
+      }
+
+      core::Order order(payload["order_id"], payload["sample_id"],
+                        payload["test_type"]);
+      auto statusIt = payload.find("status");
+      if (statusIt != payload.end() && !statusIt->second.empty()) {
+        try {
+          order.setStatus(core::Order::stringToStatus(statusIt->second));
+        } catch (const std::exception &e) {
+          return makeError(400, "validation_error", "Invalid status",
+                           e.what());
+        }
+      }
+      auto priorityIt = payload.find("priority");
+      if (priorityIt != payload.end() && !priorityIt->second.empty()) {
+        try {
+          order.setPriority(core::Order::stringToPriority(priorityIt->second));
+        } catch (const std::exception &e) {
+          return makeError(400, "validation_error", "Invalid priority",
+                           e.what());
+        }
+      }
+      auto requestedIt = payload.find("requested_date");
+      if (requestedIt != payload.end() && !requestedIt->second.empty()) {
+        std::time_t ts{};
+        if (!parseTimeValue(requestedIt->second, ts)) {
+          return makeError(400, "validation_error",
+                           "Invalid requested_date",
+                           "Provide Unix timestamp for requested_date.");
+        }
+        order.setRequestedDate(ts);
+      }
+      auto completedIt = payload.find("completed_date");
+      if (completedIt != payload.end() && !completedIt->second.empty()) {
+        std::time_t ts{};
+        if (!parseTimeValue(completedIt->second, ts)) {
+          return makeError(400, "validation_error",
+                           "Invalid completed_date",
+                           "Provide Unix timestamp for completed_date.");
+        }
+        order.setCompletedDate(ts);
+      }
+      auto requesterIt = payload.find("requested_by");
+      if (requesterIt != payload.end()) {
+        order.setRequestedBy(requesterIt->second);
+      }
+      auto notesIt = payload.find("notes");
+      if (notesIt != payload.end()) {
+        order.setNotes(notesIt->second);
+      }
+
+      if (!database_->createOrder(order, actor)) {
+        return makeDbErrorResponse(database_->getLastError());
+      }
+
+      auto created = database_->getOrderByOrderId(order.getOrderId());
+      if (database_->hasError()) {
+        return makeDbErrorResponse(database_->getLastError());
+      }
+      const core::Order &responseOrder = created ? *created : order;
+      return ApiResponse{200,
+                         "{\"data\":" + orderToJson(responseOrder) + "}",
+                         "application/json"};
+    }
+
+    if (path == "/api/v1/results" && isPost) {
+      if (payload.find("result_id") == payload.end() ||
+          payload["result_id"].empty()) {
+        return makeError(400, "validation_error", "Missing result_id",
+                         "Provide result_id in request body.");
+      }
+      if (payload.find("order_id") == payload.end() ||
+          payload["order_id"].empty()) {
+        return makeError(400, "validation_error", "Missing order_id",
+                         "Provide order_id in request body.");
+      }
+      if (payload.find("test_parameter") == payload.end() ||
+          payload["test_parameter"].empty()) {
+        return makeError(400, "validation_error",
+                         "Missing test_parameter",
+                         "Provide test_parameter in request body.");
+      }
+      if (payload.find("value") == payload.end() ||
+          payload["value"].empty()) {
+        return makeError(400, "validation_error", "Missing value",
+                         "Provide value in request body.");
+      }
+      if (payload.find("unit") == payload.end() ||
+          payload["unit"].empty()) {
+        return makeError(400, "validation_error", "Missing unit",
+                         "Provide unit in request body.");
+      }
+
+      int orderId = 0;
+      if (!parseIntValue(payload["order_id"], orderId) || orderId <= 0) {
+        return makeError(400, "validation_error", "Invalid order_id",
+                         "Provide numeric order_id.");
+      }
+
+      core::TestResult result(payload["result_id"], orderId,
+                              payload["test_parameter"]);
+      result.setValue(payload["value"]);
+      result.setUnit(payload["unit"]);
+      auto refRangeIt = payload.find("reference_range");
+      if (refRangeIt != payload.end()) {
+        result.setReferenceRange(refRangeIt->second);
+      }
+      auto refLowIt = payload.find("reference_low");
+      if (refLowIt != payload.end() && !refLowIt->second.empty()) {
+        double refLow = 0.0;
+        if (!parseDoubleValue(refLowIt->second, refLow)) {
+          return makeError(400, "validation_error", "Invalid reference_low",
+                           "Provide numeric reference_low.");
+        }
+        result.setReferenceLow(refLow);
+      }
+      auto refHighIt = payload.find("reference_high");
+      if (refHighIt != payload.end() && !refHighIt->second.empty()) {
+        double refHigh = 0.0;
+        if (!parseDoubleValue(refHighIt->second, refHigh)) {
+          return makeError(400, "validation_error", "Invalid reference_high",
+                           "Provide numeric reference_high.");
+        }
+        result.setReferenceHigh(refHigh);
+      }
+      auto statusIt = payload.find("status");
+      if (statusIt != payload.end() && !statusIt->second.empty()) {
+        try {
+          result.setStatus(
+              core::TestResult::stringToStatus(statusIt->second));
+        } catch (const std::exception &e) {
+          return makeError(400, "validation_error", "Invalid status",
+                           e.what());
+        }
+      } else {
+        result.setStatus(core::TestResult::Status::ENTERED);
+      }
+      auto measuredIt = payload.find("measured_date");
+      if (measuredIt != payload.end() && !measuredIt->second.empty()) {
+        std::time_t ts{};
+        if (!parseTimeValue(measuredIt->second, ts)) {
+          return makeError(400, "validation_error", "Invalid measured_date",
+                           "Provide Unix timestamp for measured_date.");
+        }
+        result.setMeasuredDate(ts);
+      } else {
+        result.setMeasuredDate(std::time(nullptr));
+      }
+      auto measuredByIt = payload.find("measured_by");
+      if (measuredByIt != payload.end()) {
+        result.setMeasuredBy(measuredByIt->second);
+      }
+      auto commentIt = payload.find("comment");
+      if (commentIt != payload.end()) {
+        result.setComment(commentIt->second);
+      }
+      auto flagIt = payload.find("flag");
+      if (flagIt != payload.end() && !flagIt->second.empty()) {
+        try {
+          result.setFlag(core::TestResult::stringToFlag(flagIt->second));
+        } catch (const std::exception &e) {
+          return makeError(400, "validation_error", "Invalid flag", e.what());
+        }
+      } else {
+        result.setFlag(result.evaluateFlag());
+      }
+
+      if (!database_->createTestResult(result, actor)) {
+        return makeDbErrorResponse(database_->getLastError());
+      }
+
+      auto created = database_->getTestResultByResultId(result.getResultId());
+      if (database_->hasError()) {
+        return makeDbErrorResponse(database_->getLastError());
+      }
+      const core::TestResult &responseResult = created ? *created : result;
+      return ApiResponse{200,
+                         "{\"data\":" + resultToJson(responseResult) + "}",
+                         "application/json"};
+    }
+
+    if (isPut && path.rfind("/api/v1/samples/", 0) == 0) {
+      const std::string sampleId =
+          path.substr(std::string("/api/v1/samples/").size());
+      if (sampleId.empty()) {
+        return makeError(400, "validation_error", "Missing sample_id",
+                         "Provide sample_id in URL path.");
+      }
+      auto existing = database_->getSampleByBarcode(sampleId);
+      if (database_->hasError()) {
+        return makeDbErrorResponse(database_->getLastError());
+      }
+      if (!existing) {
+        return makeError(404, "not_found", "Sample not found",
+                         "Verify the sample_id.");
+      }
+
+      auto idIt = payload.find("sample_id");
+      if (idIt != payload.end() && idIt->second != sampleId) {
+        return makeError(409, "conflict", "sample_id mismatch",
+                         "sample_id in body must match URL.");
+      }
+      auto patientIt = payload.find("patient_id");
+      if (patientIt == payload.end() || patientIt->second.empty()) {
+        return makeError(400, "validation_error", "Missing patient_id",
+                         "Provide patient_id in request body.");
+      }
+
+      core::Sample updated = *existing;
+      updated.setSampleId(sampleId);
+      updated.setPatientId(patientIt->second);
+      auto nameIt = payload.find("patient_name");
+      if (nameIt != payload.end()) {
+        updated.setPatientName(nameIt->second);
+      }
+      auto descIt = payload.find("description");
+      if (descIt != payload.end()) {
+        updated.setDescription(descIt->second);
+      }
+      auto statusIt = payload.find("status");
+      if (statusIt != payload.end() && !statusIt->second.empty()) {
+        try {
+          updated.setStatus(core::Sample::stringToStatus(statusIt->second));
+        } catch (const std::exception &e) {
+          return makeError(400, "validation_error", "Invalid status",
+                           e.what());
+        }
+      }
+      auto regIt = payload.find("registration_date");
+      if (regIt != payload.end() && !regIt->second.empty()) {
+        std::time_t ts{};
+        if (!parseTimeValue(regIt->second, ts)) {
+          return makeError(400, "validation_error",
+                           "Invalid registration_date",
+                           "Provide Unix timestamp for registration_date.");
+        }
+        updated.setRegistrationDate(ts);
+      }
+
+      if (!database_->updateSample(updated, actor)) {
+        return makeDbErrorResponse(database_->getLastError());
+      }
+      return ApiResponse{200,
+                         "{\"data\":" + sampleToJson(updated) + "}",
+                         "application/json"};
+    }
+
+    if (isPut && path.rfind("/api/v1/orders/", 0) == 0) {
+      const std::string orderId =
+          path.substr(std::string("/api/v1/orders/").size());
+      if (orderId.empty()) {
+        return makeError(400, "validation_error", "Missing order_id",
+                         "Provide order_id in URL path.");
+      }
+      auto existing = database_->getOrderByOrderId(orderId);
+      if (database_->hasError()) {
+        return makeDbErrorResponse(database_->getLastError());
+      }
+      if (!existing) {
+        return makeError(404, "not_found", "Order not found",
+                         "Verify the order_id.");
+      }
+
+      auto idIt = payload.find("order_id");
+      if (idIt != payload.end() && idIt->second != orderId) {
+        return makeError(409, "conflict", "order_id mismatch",
+                         "order_id in body must match URL.");
+      }
+      auto sampleIt = payload.find("sample_id");
+      if (sampleIt == payload.end() || sampleIt->second.empty()) {
+        return makeError(400, "validation_error", "Missing sample_id",
+                         "Provide sample_id in request body.");
+      }
+      auto testIt = payload.find("test_type");
+      if (testIt == payload.end() || testIt->second.empty()) {
+        return makeError(400, "validation_error", "Missing test_type",
+                         "Provide test_type in request body.");
+      }
+
+      core::Order updated = *existing;
+      updated.setOrderId(orderId);
+      updated.setSampleId(sampleIt->second);
+      updated.setTestType(testIt->second);
+      auto statusIt = payload.find("status");
+      if (statusIt != payload.end() && !statusIt->second.empty()) {
+        try {
+          updated.setStatus(core::Order::stringToStatus(statusIt->second));
+        } catch (const std::exception &e) {
+          return makeError(400, "validation_error", "Invalid status",
+                           e.what());
+        }
+      }
+      auto priorityIt = payload.find("priority");
+      if (priorityIt != payload.end() && !priorityIt->second.empty()) {
+        try {
+          updated.setPriority(core::Order::stringToPriority(priorityIt->second));
+        } catch (const std::exception &e) {
+          return makeError(400, "validation_error", "Invalid priority",
+                           e.what());
+        }
+      }
+      auto requestedIt = payload.find("requested_date");
+      if (requestedIt != payload.end() && !requestedIt->second.empty()) {
+        std::time_t ts{};
+        if (!parseTimeValue(requestedIt->second, ts)) {
+          return makeError(400, "validation_error",
+                           "Invalid requested_date",
+                           "Provide Unix timestamp for requested_date.");
+        }
+        updated.setRequestedDate(ts);
+      }
+      auto completedIt = payload.find("completed_date");
+      if (completedIt != payload.end() && !completedIt->second.empty()) {
+        std::time_t ts{};
+        if (!parseTimeValue(completedIt->second, ts)) {
+          return makeError(400, "validation_error",
+                           "Invalid completed_date",
+                           "Provide Unix timestamp for completed_date.");
+        }
+        updated.setCompletedDate(ts);
+      }
+      auto requesterIt = payload.find("requested_by");
+      if (requesterIt != payload.end()) {
+        updated.setRequestedBy(requesterIt->second);
+      }
+      auto notesIt = payload.find("notes");
+      if (notesIt != payload.end()) {
+        updated.setNotes(notesIt->second);
+      }
+
+      if (!database_->updateOrder(updated, actor)) {
+        return makeDbErrorResponse(database_->getLastError());
+      }
+      return ApiResponse{200,
+                         "{\"data\":" + orderToJson(updated) + "}",
+                         "application/json"};
+    }
+
+    if (isPut && path.rfind("/api/v1/results/", 0) == 0) {
+      const std::string resultId =
+          path.substr(std::string("/api/v1/results/").size());
+      if (resultId.empty()) {
+        return makeError(400, "validation_error", "Missing result_id",
+                         "Provide result_id in URL path.");
+      }
+      auto existing = database_->getTestResultByResultId(resultId);
+      if (database_->hasError()) {
+        return makeDbErrorResponse(database_->getLastError());
+      }
+      if (!existing) {
+        return makeError(404, "not_found", "Result not found",
+                         "Verify the result_id.");
+      }
+
+      auto idIt = payload.find("result_id");
+      if (idIt != payload.end() && idIt->second != resultId) {
+        return makeError(409, "conflict", "result_id mismatch",
+                         "result_id in body must match URL.");
+      }
+      auto paramIt = payload.find("test_parameter");
+      if (paramIt == payload.end() || paramIt->second.empty()) {
+        return makeError(400, "validation_error",
+                         "Missing test_parameter",
+                         "Provide test_parameter in request body.");
+      }
+      auto valueIt = payload.find("value");
+      if (valueIt == payload.end() || valueIt->second.empty()) {
+        return makeError(400, "validation_error", "Missing value",
+                         "Provide value in request body.");
+      }
+      auto unitIt = payload.find("unit");
+      if (unitIt == payload.end() || unitIt->second.empty()) {
+        return makeError(400, "validation_error", "Missing unit",
+                         "Provide unit in request body.");
+      }
+
+      core::TestResult updated = *existing;
+      updated.setResultId(resultId);
+      updated.setTestParameter(paramIt->second);
+      updated.setValue(valueIt->second);
+      updated.setUnit(unitIt->second);
+      auto orderIt = payload.find("order_id");
+      if (orderIt != payload.end() && !orderIt->second.empty()) {
+        int orderId = 0;
+        if (!parseIntValue(orderIt->second, orderId) || orderId <= 0) {
+          return makeError(400, "validation_error", "Invalid order_id",
+                           "Provide numeric order_id.");
+        }
+        updated.setOrderId(orderId);
+      }
+      auto refRangeIt = payload.find("reference_range");
+      if (refRangeIt != payload.end()) {
+        updated.setReferenceRange(refRangeIt->second);
+      }
+      auto refLowIt = payload.find("reference_low");
+      if (refLowIt != payload.end() && !refLowIt->second.empty()) {
+        double refLow = 0.0;
+        if (!parseDoubleValue(refLowIt->second, refLow)) {
+          return makeError(400, "validation_error", "Invalid reference_low",
+                           "Provide numeric reference_low.");
+        }
+        updated.setReferenceLow(refLow);
+      }
+      auto refHighIt = payload.find("reference_high");
+      if (refHighIt != payload.end() && !refHighIt->second.empty()) {
+        double refHigh = 0.0;
+        if (!parseDoubleValue(refHighIt->second, refHigh)) {
+          return makeError(400, "validation_error", "Invalid reference_high",
+                           "Provide numeric reference_high.");
+        }
+        updated.setReferenceHigh(refHigh);
+      }
+      auto statusIt = payload.find("status");
+      if (statusIt != payload.end() && !statusIt->second.empty()) {
+        try {
+          updated.setStatus(
+              core::TestResult::stringToStatus(statusIt->second));
+        } catch (const std::exception &e) {
+          return makeError(400, "validation_error", "Invalid status",
+                           e.what());
+        }
+      }
+      auto measuredIt = payload.find("measured_date");
+      if (measuredIt != payload.end() && !measuredIt->second.empty()) {
+        std::time_t ts{};
+        if (!parseTimeValue(measuredIt->second, ts)) {
+          return makeError(400, "validation_error", "Invalid measured_date",
+                           "Provide Unix timestamp for measured_date.");
+        }
+        updated.setMeasuredDate(ts);
+      }
+      auto measuredByIt = payload.find("measured_by");
+      if (measuredByIt != payload.end()) {
+        updated.setMeasuredBy(measuredByIt->second);
+      }
+      auto commentIt = payload.find("comment");
+      if (commentIt != payload.end()) {
+        updated.setComment(commentIt->second);
+      }
+      auto flagIt = payload.find("flag");
+      if (flagIt != payload.end() && !flagIt->second.empty()) {
+        try {
+          updated.setFlag(core::TestResult::stringToFlag(flagIt->second));
+        } catch (const std::exception &e) {
+          return makeError(400, "validation_error", "Invalid flag", e.what());
+        }
+      } else {
+        updated.setFlag(updated.evaluateFlag());
+      }
+
+      if (!database_->updateTestResult(updated, actor)) {
+        return makeDbErrorResponse(database_->getLastError());
+      }
+      return ApiResponse{200,
+                         "{\"data\":" + resultToJson(updated) + "}",
+                         "application/json"};
+    }
+  }
 
   if (path == "/api/v1/samples") {
     db::Database::SampleFilter filter;
@@ -572,6 +1346,30 @@ void ApiServer::handleClient(int clientFd) {
     const std::string value = trim(headerLine.substr(sep + 1));
     request.headers[key] = value;
   }
+
+  std::ostringstream bodyStream;
+  bodyStream << requestStream.rdbuf();
+  std::string body = trimLeadingNewlines(bodyStream.str());
+  auto lengthIt = request.headers.find("content-length");
+  if (lengthIt != request.headers.end()) {
+    try {
+      size_t length = static_cast<size_t>(std::stoul(lengthIt->second));
+      while (body.size() < length) {
+        const ssize_t more = recv(clientFd, buffer, sizeof(buffer) - 1, 0);
+        if (more <= 0) {
+          break;
+        }
+        buffer[more] = '\0';
+        body.append(buffer, static_cast<size_t>(more));
+      }
+      if (body.size() > length) {
+        body.resize(length);
+      }
+    } catch (...) {
+      // Ignore invalid content-length and use whatever was read.
+    }
+  }
+  request.body = body;
 
   ApiResponse response = router_.handleRequest(request);
 

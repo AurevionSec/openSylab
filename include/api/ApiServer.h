@@ -17,6 +17,7 @@ struct ApiRequest {
   std::string method;
   std::string path;
   std::unordered_map<std::string, std::string> headers;
+  std::string body;
 };
 
 struct ApiResponse {
