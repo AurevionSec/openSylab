@@ -6,6 +6,7 @@ set(TEST_SOURCES
     unit/test_order.cpp
     unit/test_testresult.cpp
     unit/test_database.cpp
+    unit/test_api.cpp
     unit/test_csvimport.cpp
     unit/test_csvresultimport.cpp
     unit/test_runner.cpp
@@ -30,6 +31,7 @@ target_sources(opensylab_tests PRIVATE
     ${PROJECT_SOURCE_DIR}/src/core/AuditEntry.cpp
     ${PROJECT_SOURCE_DIR}/src/core/User.cpp
     ${PROJECT_SOURCE_DIR}/src/db/Database.cpp
+    ${PROJECT_SOURCE_DIR}/src/api/ApiServer.cpp
     ${PROJECT_SOURCE_DIR}/src/utils/CsvImport.cpp
     ${PROJECT_SOURCE_DIR}/src/utils/CsvResultImport.cpp
 )

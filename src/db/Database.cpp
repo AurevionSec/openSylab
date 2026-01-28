@@ -364,6 +364,12 @@ bool Database::initializeSchema() {
             value TEXT NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS api_keys (
+            key TEXT PRIMARY KEY,
+            active INTEGER NOT NULL DEFAULT 1,
+            created_date INTEGER NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS ldap_directory (
             username TEXT PRIMARY KEY,
             password_hash TEXT NOT NULL,
@@ -3359,6 +3365,88 @@ bool Database::isLdapEnabled() {
     return false;
   }
   return value.value() == "1";
+}
+
+bool Database::upsertApiKey(const std::string &key, bool active) {
+  clearError();
+
+  if (!isOpen_) {
+    setError("Datenbank ist nicht geöffnet");
+    return false;
+  }
+
+  if (key.empty()) {
+    setError("API-Schlüssel darf nicht leer sein");
+    return false;
+  }
+
+  const char *upsertSQL = R"(
+        INSERT INTO api_keys (key, active, created_date)
+        VALUES (?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET active = excluded.active;
+    )";
+
+  sqlite3_stmt *rawStmt = nullptr;
+  int rc = sqlite3_prepare_v2(db_, upsertSQL, -1, &rawStmt, nullptr);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Vorbereiten des API-Key-UPSERT: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+
+  auto stmt = makeStatement(rawStmt);
+  sqlite3_bind_text(stmt.get(), 1, key.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int(stmt.get(), 2, active ? 1 : 0);
+  sqlite3_bind_int64(stmt.get(), 3,
+                     static_cast<sqlite3_int64>(std::time(nullptr)));
+
+  rc = sqlite3_step(stmt.get());
+  if (rc != SQLITE_DONE) {
+    setError("Fehler beim Speichern des API-Schlüssels: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+
+  return true;
+}
+
+bool Database::isApiKeyValid(const std::string &key) {
+  clearError();
+
+  if (!isOpen_) {
+    setError("Datenbank ist nicht geöffnet");
+    return false;
+  }
+
+  if (key.empty()) {
+    return false;
+  }
+
+  const char *selectSQL =
+      "SELECT active FROM api_keys WHERE key = ? LIMIT 1;";
+  sqlite3_stmt *rawStmt = nullptr;
+  int rc = sqlite3_prepare_v2(db_, selectSQL, -1, &rawStmt, nullptr);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Vorbereiten des SELECT: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+
+  auto stmt = makeStatement(rawStmt);
+  sqlite3_bind_text(stmt.get(), 1, key.c_str(), -1, SQLITE_TRANSIENT);
+
+  rc = sqlite3_step(stmt.get());
+  if (rc == SQLITE_ROW) {
+    const int active = sqlite3_column_int(stmt.get(), 0);
+    return active == 1;
+  }
+  if (rc != SQLITE_DONE) {
+    setError("Fehler beim Laden des API-Schlüssels: " +
+             std::string(sqlite3_errmsg(db_)));
+  } else {
+    clearError();
+  }
+  return false;
 }
 
 bool Database::upsertLdapUser(const std::string &username,

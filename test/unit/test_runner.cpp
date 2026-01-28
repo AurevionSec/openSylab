@@ -63,6 +63,7 @@ extern void registerSampleTests();
 extern void registerOrderTests();
 extern void registerTestResultTests();
 extern void registerDatabaseTests();
+extern void registerApiTests();
 extern void registerCsvImportTests();
 extern void registerCsvResultImportTests();
 
@@ -81,6 +82,7 @@ int main() {
   registerOrderTests();
   registerTestResultTests();
   registerDatabaseTests();
+  registerApiTests();
   registerCsvImportTests();
   registerCsvResultImportTests();
 

@@ -150,6 +150,10 @@ public:
                                          const std::string &actor,
                                          int &exportedCount);
 
+  // API Keys
+  [[nodiscard]] bool upsertApiKey(const std::string &key, bool active = true);
+  [[nodiscard]] bool isApiKeyValid(const std::string &key);
+
   // Retention
   [[nodiscard]] int getRetentionDays();
   [[nodiscard]] bool setRetentionDays(int days);

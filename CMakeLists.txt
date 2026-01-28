@@ -70,10 +70,15 @@ set(UTILS_SOURCES
     src/utils/CliInterface.cpp
 )
 
+set(API_SOURCES
+    src/api/ApiServer.cpp
+)
+
 set(ALL_SOURCES
     ${CORE_SOURCES}
     ${DB_SOURCES}
     ${UTILS_SOURCES}
+    ${API_SOURCES}
     src/main.cpp
 )
 
