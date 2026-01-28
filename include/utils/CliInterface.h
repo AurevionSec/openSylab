@@ -56,6 +56,7 @@ private:
   void handleUpdateSample();
   void handleDeleteSample();
   void handleImportCsv();
+  void handleExportSamples();
   void handleStatistics();
   void handleExit();
 

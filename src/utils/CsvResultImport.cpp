@@ -1,8 +1,17 @@
 #include "utils/CsvResultImport.h"
+#include <algorithm>
 #include <cctype>
 #include <fstream>
 #include <iostream>
 #include <sstream>
+
+namespace {
+std::string toLower(std::string value) {
+  std::transform(value.begin(), value.end(), value.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  return value;
+}
+} // namespace
 
 namespace opensylab {
 namespace utils {
@@ -19,6 +28,7 @@ CsvResultImport::importResults(const std::string &filePath) {
   errorCount_ = 0;
   failedRecords_.clear();
   lastError_.clear();
+  headerLine_.clear();
 
   std::ifstream file(filePath);
   if (!file.is_open()) {
@@ -33,7 +43,14 @@ CsvResultImport::importResults(const std::string &filePath) {
 
   // Header überspringen wenn aktiviert
   if (hasHeader_ && std::getline(file, line)) {
+    headerLine_ = line;
     std::cout << "Header: " << line << "\n";
+    if (!validateHeader(headerLine_)) {
+      setError("Ungueltiger CSV-Header. Erwartet: result_id,order_id,"
+               "test_parameter,value,unit,ref_low,ref_high,measured_by");
+      errorCount_++;
+      return results;
+    }
   }
 
   while (std::getline(file, line)) {
@@ -297,8 +314,12 @@ bool CsvResultImport::writeRetryCsv(
     return false;
   }
 
-  file << "result_id,order_id,test_parameter,value,unit,ref_low,ref_high,"
-          "measured_by\n";
+  if (hasHeader_ && !headerLine_.empty()) {
+    file << headerLine_ << "\n";
+  } else {
+    file << "result_id,order_id,test_parameter,value,unit,ref_low,ref_high,"
+            "measured_by\n";
+  }
 
   for (const auto &failed : failedRecords_) {
     file << failed.record << "\n";
@@ -307,6 +328,22 @@ bool CsvResultImport::writeRetryCsv(
     file << failed.record << "\n";
   }
 
+  return true;
+}
+
+bool CsvResultImport::validateHeader(const std::string &header) {
+  const std::vector<std::string> expected = {
+      "result_id", "order_id", "test_parameter", "value",
+      "unit",      "ref_low",  "ref_high",       "measured_by"};
+  auto fields = parseLine(header);
+  if (fields.size() < 4 || fields.size() > expected.size()) {
+    return false;
+  }
+  for (size_t i = 0; i < fields.size(); ++i) {
+    if (toLower(trim(fields[i])) != expected[i]) {
+      return false;
+    }
+  }
   return true;
 }
 

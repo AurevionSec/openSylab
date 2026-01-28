@@ -908,6 +908,47 @@ bool Database::deleteSample(int id, const std::string &actor) {
   return true;
 }
 
+bool Database::exportSamplesToCsv(const std::string &filePath) {
+  clearError();
+
+  if (!isOpen_) {
+    setError("Datenbank ist nicht geöffnet");
+    return false;
+  }
+
+  auto samples = getAllSamples();
+  if (hasError()) {
+    return false;
+  }
+
+  if (samples.empty()) {
+    setError("Keine Proben zum Export");
+    return false;
+  }
+
+  std::ofstream output(filePath);
+  if (!output.is_open()) {
+    setError("Exportdatei konnte nicht geschrieben werden");
+    return false;
+  }
+
+  output << "sample_id,patient_id,patient_name,description,status\n";
+  for (const auto &sample : samples) {
+    output << escapeCsvField(sample->getSampleId()) << ","
+           << escapeCsvField(sample->getPatientId()) << ","
+           << escapeCsvField(sample->getPatientName()) << ","
+           << escapeCsvField(sample->getDescription()) << ","
+           << escapeCsvField(sample->getStatusString()) << "\n";
+  }
+
+  if (!output) {
+    setError("Fehler beim Schreiben der Exportdatei");
+    return false;
+  }
+
+  return true;
+}
+
 // ============================================================================
 // Order-Operationen
 // ============================================================================

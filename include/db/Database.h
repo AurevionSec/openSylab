@@ -99,6 +99,7 @@ public:
   [[nodiscard]] bool updateSample(const core::Sample &sample,
                                   const std::string &actor = "");
   [[nodiscard]] bool deleteSample(int id, const std::string &actor = "");
+  [[nodiscard]] bool exportSamplesToCsv(const std::string &filePath);
 
   // Order-Operationen (CRUD)
   [[nodiscard]] bool createOrder(const core::Order &order,

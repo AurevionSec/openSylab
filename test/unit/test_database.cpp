@@ -1666,6 +1666,45 @@ bool test_database_CancelOrderLogsAudit() {
   return true;
 }
 
+bool test_database_ExportSamples_CsvOutput() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  Sample sample("S_EXP", "P_EXP");
+  sample.setPatientName("Patient X");
+  sample.setDescription("Desc");
+  sample.setStatus(Sample::Status::REGISTERED);
+  ASSERT_TRUE(db.createSample(sample));
+
+  std::string exportPath = "test_export_samples.csv";
+  ASSERT_TRUE(db.exportSamplesToCsv(exportPath));
+
+  std::ifstream input(exportPath);
+  ASSERT_TRUE(input.is_open());
+
+  std::string header;
+  std::getline(input, header);
+  ASSERT_EQ(header,
+            "sample_id,patient_id,patient_name,description,status");
+
+  std::string row;
+  std::getline(input, row);
+  ASSERT_NE(row.find("S_EXP"), std::string::npos);
+  ASSERT_NE(row.find("P_EXP"), std::string::npos);
+
+  std::string extra;
+  ASSERT_FALSE(std::getline(input, extra));
+
+  input.close();
+  std::remove(exportPath.c_str());
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
 void registerDatabaseTests() {
   registerTest("Database::OpenAndClose", test_database_OpenAndClose);
   registerTest("Database::InitializeSchema", test_database_InitializeSchema);
@@ -1740,6 +1779,8 @@ void registerDatabaseTests() {
                test_database_ExportValidatedResults_CsvOutput);
   registerTest("Database::ExportValidatedResults_LogsAudit",
                test_database_ExportValidatedResults_LogsAudit);
+  registerTest("Database::ExportSamples_CsvOutput",
+               test_database_ExportSamples_CsvOutput);
   registerTest("Database::UpdateResultWithAudit_StoresUpdatedFields",
                test_database_UpdateResultWithAudit_StoresUpdatedFields);
   registerTest("Database::UpdateResultWithAudit_LogsChanges",

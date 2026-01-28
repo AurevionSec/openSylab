@@ -110,12 +110,14 @@ private:
   int importedCount_;
   int errorCount_;
   std::vector<FailedRecord> failedRecords_;
+  std::string headerLine_;
 
   // Hilfsfunktionen
   std::vector<std::string> parseLine(const std::string &line);
   bool processRecord(const std::string &record, int recordNumber,
                      std::vector<core::TestResult> &results);
   core::TestResult parseRecord(const std::vector<std::string> &fields);
+  bool validateHeader(const std::string &header);
   void addFailedRecord(int recordNumber, const std::string &record,
                        const std::string &error);
   bool validateOrderExists(int orderId);

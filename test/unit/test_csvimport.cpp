@@ -128,6 +128,22 @@ bool test_csvimport_ImportEmptyFile() {
   return true;
 }
 
+bool test_csvimport_InvalidHeaderRejected() {
+  std::string csvPath = uniqueCsvPath();
+  createTestCsv(csvPath,
+                "sample_id,patient_id,wrong\n"
+                "S001,P001,X\n");
+
+  CsvImport importer;
+  auto samples = importer.importSamples(csvPath);
+
+  ASSERT_EQ(samples.size(), static_cast<size_t>(0));
+  ASSERT_FALSE(importer.getLastError().empty());
+
+  std::remove(csvPath.c_str());
+  return true;
+}
+
 bool test_csvimport_ImportQuotedFields() {
   std::string csvPath = uniqueCsvPath();
   createTestCsv(csvPath,
@@ -297,6 +313,8 @@ void registerCsvImportTests() {
   registerTest("CsvImport::ImportMixedValidAndInvalid",
                test_csvimport_ImportMixedValidAndInvalid);
   registerTest("CsvImport::ImportEmptyFile", test_csvimport_ImportEmptyFile);
+  registerTest("CsvImport::InvalidHeaderRejected",
+               test_csvimport_InvalidHeaderRejected);
   registerTest("CsvImport::ImportQuotedFields",
                test_csvimport_ImportQuotedFields);
   registerTest("CsvImport::ImportMultilineFields",

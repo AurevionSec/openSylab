@@ -1,4 +1,6 @@
 #include "utils/CsvImport.h"
+#include <algorithm>
+#include <cctype>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -11,6 +13,12 @@ std::string trim(const std::string &value) {
   }
   const size_t end = value.find_last_not_of(" \t\r\n");
   return value.substr(start, end - start + 1);
+}
+
+std::string toLower(std::string value) {
+  std::transform(value.begin(), value.end(), value.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  return value;
 }
 
 bool isWhitespaceOnly(const std::string &value) {
@@ -92,6 +100,11 @@ CsvImport::importSamples(const std::string &filePath) {
     if (std::getline(file, headerLine)) {
       headerLine_ = headerLine;
       std::cout << "Header: " << headerLine << std::endl;
+      if (!validateHeader(headerLine_)) {
+        setError("Ungueltiger CSV-Header. Erwartet: sample_id,patient_id,"
+                 "patient_name,description,status");
+        return samples;
+      }
     }
   }
 
@@ -146,6 +159,21 @@ CsvImport::importSamples(const std::string &filePath) {
   }
 
   return samples;
+}
+
+bool CsvImport::validateHeader(const std::string &header) {
+  const std::vector<std::string> expected = {
+      "sample_id", "patient_id", "patient_name", "description", "status"};
+  auto fields = parseLine(header);
+  if (fields.size() < 2 || fields.size() > expected.size()) {
+    return false;
+  }
+  for (size_t i = 0; i < fields.size(); ++i) {
+    if (toLower(trim(fields[i])) != expected[i]) {
+      return false;
+    }
+  }
+  return true;
 }
 
 bool CsvImport::writeRetryCsv(const std::string &filePath) const {

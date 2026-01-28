@@ -111,6 +111,7 @@ private:
   core::Sample parseRecord(const std::vector<std::string> &fields);
   bool processRecord(const std::string &record, int recordNumber,
                      std::vector<core::Sample> &samples);
+  bool validateHeader(const std::string &header);
   void addFailedRecord(int recordNumber, const std::string &record,
                        const std::string &error);
   void setError(const std::string &error);

@@ -71,6 +71,7 @@ void CliInterface::showMainMenu() {
   std::cout << "  [4] Probe aktualisieren\n";
   std::cout << "  [5] Probe löschen\n";
   std::cout << "  [6] CSV-Import\n";
+  std::cout << "  [8] CSV-Export\n";
   std::cout << "\n  === Auftragsverwaltung ===\n";
   std::cout << "  [10] Neuer Auftrag\n";
   std::cout << "  [11] Alle Aufträge anzeigen\n";
@@ -138,6 +139,9 @@ void CliInterface::showMainMenu() {
     break;
   case 6:
     handleImportCsv();
+    break;
+  case 8:
+    handleExportSamples();
     break;
   // Auftragsverwaltung
   case 10:
@@ -750,6 +754,33 @@ void CliInterface::handleImportCsv() {
 
     retryImport = false;
   } while (retryImport);
+
+  waitForEnter();
+}
+
+void CliInterface::handleExportSamples() {
+  clearScreen();
+  printSeparator();
+  std::cout << "                CSV-EXPORT (PROBEN)\n";
+  printSeparator();
+  std::cout << "\n";
+
+  std::string filePath = readInput("Export-Dateipfad");
+  if (!running_)
+    return;
+  filePath = trim(filePath);
+  if (isEmpty(filePath)) {
+    std::cout << "\n✗ Bitte geben Sie einen Dateipfad an.\n";
+    waitForEnter();
+    return;
+  }
+
+  if (database_->exportSamplesToCsv(filePath)) {
+    std::cout << "\n✓ Export erfolgreich!\n";
+  } else {
+    std::cout << "\n✗ Fehler beim Export:\n";
+    std::cout << "  " << database_->getLastError() << "\n";
+  }
 
   waitForEnter();
 }
