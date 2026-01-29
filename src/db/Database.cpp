@@ -1,6 +1,7 @@
 #include "db/Database.h"
 #include <algorithm>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <memory>
 #include <sqlite3.h>
@@ -2352,6 +2353,142 @@ Database::EntityStats Database::getResultStats(const StatsFilter &filter) {
   }
 
   return stats;
+}
+
+bool Database::exportStatsReportToCsv(
+    const std::string &filePath, const StatsFilter &sampleFilter,
+    const StatsFilter &orderFilter, const StatsFilter &resultFilter,
+    const std::string &actor) {
+  clearError();
+
+  if (!isOpen_) {
+    setError("Datenbank ist nicht geöffnet");
+    return false;
+  }
+
+  const auto sampleStats = getSampleStats(sampleFilter);
+  if (hasError()) {
+    return false;
+  }
+  const auto orderStats = getOrderStats(orderFilter);
+  if (hasError()) {
+    return false;
+  }
+  const auto resultStats = getResultStats(resultFilter);
+  if (hasError()) {
+    return false;
+  }
+
+  std::ofstream output(filePath);
+  if (!output.is_open()) {
+    setError("Exportdatei konnte nicht geschrieben werden");
+    return false;
+  }
+
+  auto formatDate = [](const std::optional<std::time_t> &value) {
+    if (!value.has_value()) {
+      return std::string("none");
+    }
+    std::tm tm = *std::localtime(&value.value());
+    std::ostringstream ss;
+    ss << std::put_time(&tm, "%Y-%m-%d");
+    return ss.str();
+  };
+
+  output << "# sample_filter status="
+         << (sampleFilter.status.has_value() ? sampleFilter.status.value()
+                                             : "any")
+         << " from=" << formatDate(sampleFilter.fromDate)
+         << " to=" << formatDate(sampleFilter.toDate) << "\n";
+  output << "# order_filter status="
+         << (orderFilter.status.has_value() ? orderFilter.status.value() : "any")
+         << " from=" << formatDate(orderFilter.fromDate)
+         << " to=" << formatDate(orderFilter.toDate) << "\n";
+  output << "# result_filter status="
+         << (resultFilter.status.has_value() ? resultFilter.status.value()
+                                             : "any")
+         << " from=" << formatDate(resultFilter.fromDate)
+         << " to=" << formatDate(resultFilter.toDate) << "\n";
+
+  output << "entity,status,count\n";
+
+  auto countFor = [](const std::vector<StatusCount> &entries,
+                     const std::string &status) {
+    for (const auto &entry : entries) {
+      if (entry.status == status) {
+        return entry.count;
+      }
+    }
+    return 0;
+  };
+
+  auto writeEntity = [&](const std::string &entity, int total,
+                         const std::vector<std::string> &statuses,
+                         const std::vector<StatusCount> &entries) {
+    output << entity << ",TOTAL," << total << "\n";
+    for (const auto &status : statuses) {
+      output << entity << "," << escapeCsvField(status) << ","
+             << countFor(entries, status) << "\n";
+    }
+  };
+
+  const std::vector<std::string> sampleStatuses = {
+      core::Sample::statusToString(core::Sample::Status::REGISTERED),
+      core::Sample::statusToString(core::Sample::Status::IN_ANALYSIS),
+      core::Sample::statusToString(core::Sample::Status::ANALYZED),
+      core::Sample::statusToString(core::Sample::Status::VALIDATED),
+      core::Sample::statusToString(core::Sample::Status::ARCHIVED)};
+  const std::vector<std::string> orderStatuses = {
+      core::Order::statusToString(core::Order::Status::REQUESTED),
+      core::Order::statusToString(core::Order::Status::IN_PROGRESS),
+      core::Order::statusToString(core::Order::Status::COMPLETED),
+      core::Order::statusToString(core::Order::Status::VALIDATED),
+      core::Order::statusToString(core::Order::Status::CANCELLED)};
+  const std::vector<std::string> resultStatuses = {
+      core::TestResult::statusToString(core::TestResult::Status::PENDING),
+      core::TestResult::statusToString(core::TestResult::Status::ENTERED),
+      core::TestResult::statusToString(core::TestResult::Status::VALIDATED),
+      core::TestResult::statusToString(core::TestResult::Status::REJECTED),
+      core::TestResult::statusToString(core::TestResult::Status::REPEATED)};
+
+  writeEntity("samples", sampleStats.total, sampleStatuses,
+              sampleStats.byStatus);
+  writeEntity("orders", orderStats.total, orderStatuses, orderStats.byStatus);
+  writeEntity("results", resultStats.total, resultStatuses,
+              resultStats.byStatus);
+
+  if (!output) {
+    setError("Fehler beim Schreiben der Exportdatei");
+    return false;
+  }
+
+  std::ostringstream details;
+  details << "Export stats report: " << filePath
+          << "; sample_status="
+          << (sampleFilter.status.has_value() ? sampleFilter.status.value()
+                                              : "any")
+          << "; sample_from=" << formatDate(sampleFilter.fromDate)
+          << "; sample_to=" << formatDate(sampleFilter.toDate)
+          << "; order_status="
+          << (orderFilter.status.has_value() ? orderFilter.status.value()
+                                             : "any")
+          << "; order_from=" << formatDate(orderFilter.fromDate)
+          << "; order_to=" << formatDate(orderFilter.toDate)
+          << "; result_status="
+          << (resultFilter.status.has_value() ? resultFilter.status.value()
+                                              : "any")
+          << "; result_from=" << formatDate(resultFilter.fromDate)
+          << "; result_to=" << formatDate(resultFilter.toDate);
+
+  core::AuditEntry auditEntry(core::AuditEntry::ActionType::UPDATE,
+                              core::AuditEntry::EntityType::SYSTEM,
+                              "stats_report", normalizeActor(actor),
+                              details.str());
+  if (!logAudit(auditEntry)) {
+    return false;
+  }
+
+  return true;
 }
 
 // ============================================================================

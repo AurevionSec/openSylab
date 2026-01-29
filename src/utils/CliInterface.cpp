@@ -1052,6 +1052,28 @@ void CliInterface::handleStatistics() {
       return;
     }
 
+    std::string exportChoice = readInput("Report exportieren? (y/n)");
+    if (!running_)
+      return;
+    exportChoice = trim(exportChoice);
+    if (!exportChoice.empty() &&
+        (exportChoice[0] == 'y' || exportChoice[0] == 'Y')) {
+      std::string filePath = readInput("Export-Dateipfad");
+      if (!running_)
+        return;
+      filePath = trim(filePath);
+      if (isEmpty(filePath)) {
+        std::cout << "\n✗ Bitte geben Sie einen Dateipfad an.\n";
+      } else if (database_->exportStatsReportToCsv(
+                     filePath, sampleFilter, orderFilter, resultFilter,
+                     getCurrentUsername())) {
+        std::cout << "\n✓ Export erfolgreich!\n";
+      } else {
+        std::cout << "\n✗ Fehler beim Export:\n";
+        std::cout << "  " << database_->getLastError() << "\n";
+      }
+    }
+
     std::string resetChoice =
         readInput("Filter zurücksetzen und alle anzeigen? (y/n)");
     if (!running_)

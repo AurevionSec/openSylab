@@ -159,6 +159,10 @@ public:
   [[nodiscard]] EntityStats getOrderStats(const StatsFilter &filter = StatsFilter{});
   [[nodiscard]] EntityStats
   getResultStats(const StatsFilter &filter = StatsFilter{});
+  [[nodiscard]] bool exportStatsReportToCsv(
+      const std::string &filePath, const StatsFilter &sampleFilter,
+      const StatsFilter &orderFilter, const StatsFilter &resultFilter,
+      const std::string &actor);
 
   // Audit-Operationen
   [[nodiscard]] bool logAudit(const core::AuditEntry &entry);

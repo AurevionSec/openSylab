@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
+#include <fstream>
 #include <sstream>
 
 using namespace opensylab::db;
@@ -194,7 +195,53 @@ bool test_statistics_FilteredCounts() {
   return true;
 }
 
+bool test_statistics_ExportReport() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  Sample s1("SX", "PX");
+  ASSERT_TRUE(db.createSample(s1));
+  Order o1("OX", "SX", "GLU");
+  ASSERT_TRUE(db.createOrder(o1));
+  auto order = db.getOrderByOrderId("OX");
+  ASSERT_NOT_NULL(order);
+  TestResult r1("RX", order->getId(), "GLU");
+  r1.setValue("5.0");
+  r1.setUnit("mg/dL");
+  ASSERT_TRUE(db.createTestResult(r1));
+
+  const std::string reportPath = "test_stats_export.csv";
+  Database::StatsFilter sampleFilter;
+  Database::StatsFilter orderFilter;
+  Database::StatsFilter resultFilter;
+  ASSERT_TRUE(db.exportStatsReportToCsv(reportPath, sampleFilter, orderFilter,
+                                        resultFilter, "tester"));
+
+  std::ifstream input(reportPath);
+  ASSERT_TRUE(input.is_open());
+  std::string content((std::istreambuf_iterator<char>(input)),
+                      std::istreambuf_iterator<char>());
+  input.close();
+  ASSERT_NE(content.find("entity,status,count"), std::string::npos);
+  ASSERT_NE(content.find("samples,TOTAL"), std::string::npos);
+  ASSERT_NE(content.find("orders,TOTAL"), std::string::npos);
+  ASSERT_NE(content.find("results,TOTAL"), std::string::npos);
+
+  auto entries =
+      db.getAuditLogByEntity(opensylab::core::AuditEntry::EntityType::SYSTEM,
+                              "stats_report");
+  ASSERT_FALSE(entries.empty());
+
+  std::remove(reportPath.c_str());
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
 void registerStatisticsTests() {
   registerTest("Statistics::StatsCounts", test_statistics_StatsCounts);
   registerTest("Statistics::FilteredCounts", test_statistics_FilteredCounts);
+  registerTest("Statistics::ExportReport", test_statistics_ExportReport);
 }
