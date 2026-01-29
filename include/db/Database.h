@@ -69,6 +69,12 @@ public:
     int total = 0;
     std::vector<StatusCount> byStatus;
   };
+
+  struct StatsFilter {
+    std::optional<std::time_t> fromDate;
+    std::optional<std::time_t> toDate;
+    std::optional<std::string> status;
+  };
   /**
    * @brief Konstruktor
    * @param dbPath Pfad zur SQLite-Datenbankdatei
@@ -148,9 +154,11 @@ public:
   [[nodiscard]] bool deleteTestResult(int id, const std::string &actor = "");
 
   // Statistik-Operationen
-  [[nodiscard]] EntityStats getSampleStats();
-  [[nodiscard]] EntityStats getOrderStats();
-  [[nodiscard]] EntityStats getResultStats();
+  [[nodiscard]] EntityStats
+  getSampleStats(const StatsFilter &filter = StatsFilter{});
+  [[nodiscard]] EntityStats getOrderStats(const StatsFilter &filter = StatsFilter{});
+  [[nodiscard]] EntityStats
+  getResultStats(const StatsFilter &filter = StatsFilter{});
 
   // Audit-Operationen
   [[nodiscard]] bool logAudit(const core::AuditEntry &entry);

@@ -73,6 +73,80 @@ std::string normalizeActor(const std::string &user) {
   return user.empty() ? "system" : user;
 }
 
+struct StatsBindValue {
+  enum class Type { Text, Int64 };
+  Type type = Type::Text;
+  std::string text;
+  sqlite3_int64 number = 0;
+};
+
+struct StatsFilterSql {
+  std::string whereClause;
+  std::vector<StatsBindValue> bindings;
+};
+
+StatsFilterSql buildStatsFilter(const opensylab::db::Database::StatsFilter &filter,
+                                const std::string &dateColumn) {
+  StatsFilterSql result;
+  std::vector<std::string> conditions;
+
+  if (filter.status.has_value()) {
+    conditions.emplace_back("status = ?");
+    StatsBindValue binding;
+    binding.type = StatsBindValue::Type::Text;
+    binding.text = filter.status.value();
+    result.bindings.push_back(std::move(binding));
+  }
+  if (filter.fromDate.has_value()) {
+    conditions.emplace_back(dateColumn + " >= ?");
+    StatsBindValue binding;
+    binding.type = StatsBindValue::Type::Int64;
+    binding.number =
+        static_cast<sqlite3_int64>(filter.fromDate.value());
+    result.bindings.push_back(std::move(binding));
+  }
+  if (filter.toDate.has_value()) {
+    conditions.emplace_back(dateColumn + " <= ?");
+    StatsBindValue binding;
+    binding.type = StatsBindValue::Type::Int64;
+    binding.number =
+        static_cast<sqlite3_int64>(filter.toDate.value());
+    result.bindings.push_back(std::move(binding));
+  }
+
+  if (!conditions.empty()) {
+    std::ostringstream where;
+    where << " WHERE ";
+    for (size_t i = 0; i < conditions.size(); ++i) {
+      if (i > 0) {
+        where << " AND ";
+      }
+      where << conditions[i];
+    }
+    result.whereClause = where.str();
+  }
+
+  return result;
+}
+
+bool bindStatsFilter(sqlite3_stmt *stmt,
+                     const std::vector<StatsBindValue> &bindings) {
+  int index = 1;
+  for (const auto &binding : bindings) {
+    int rc = SQLITE_OK;
+    if (binding.type == StatsBindValue::Type::Text) {
+      rc = sqlite3_bind_text(stmt, index++, binding.text.c_str(), -1,
+                             SQLITE_TRANSIENT);
+    } else {
+      rc = sqlite3_bind_int64(stmt, index++, binding.number);
+    }
+    if (rc != SQLITE_OK) {
+      return false;
+    }
+  }
+  return true;
+}
+
 void appendAuditChange(std::ostringstream &details, bool &hasChanges,
                        const std::string &label, const std::string &oldValue,
                        const std::string &newValue) {
@@ -2094,7 +2168,7 @@ bool Database::deleteTestResult(int id, const std::string &actor) {
 // Statistik-Operationen
 // ============================================================================
 
-Database::EntityStats Database::getSampleStats() {
+Database::EntityStats Database::getSampleStats(const StatsFilter &filter) {
   EntityStats stats;
   clearError();
 
@@ -2103,15 +2177,21 @@ Database::EntityStats Database::getSampleStats() {
     return stats;
   }
 
-  const char *totalSQL = "SELECT COUNT(*) FROM samples;";
+  const auto filterSql = buildStatsFilter(filter, "registration_date");
+  const std::string totalSQL =
+      "SELECT COUNT(*) FROM samples" + filterSql.whereClause + ";";
   sqlite3_stmt *rawStmt = nullptr;
-  int rc = sqlite3_prepare_v2(db_, totalSQL, -1, &rawStmt, nullptr);
+  int rc = sqlite3_prepare_v2(db_, totalSQL.c_str(), -1, &rawStmt, nullptr);
   if (rc != SQLITE_OK) {
     setError("Fehler beim Vorbereiten des COUNT: " +
              std::string(sqlite3_errmsg(db_)));
     return stats;
   }
   auto stmt = makeStatement(rawStmt);
+  if (!bindStatsFilter(stmt.get(), filterSql.bindings)) {
+    setError("Fehler beim Binden der Statistik-Filter");
+    return stats;
+  }
   rc = sqlite3_step(stmt.get());
   if (rc == SQLITE_ROW) {
     stats.total = sqlite3_column_int(stmt.get(), 0);
@@ -2121,16 +2201,21 @@ Database::EntityStats Database::getSampleStats() {
     return stats;
   }
 
-  const char *statusSQL =
-      "SELECT status, COUNT(*) FROM samples GROUP BY status;";
+  const std::string statusSQL =
+      "SELECT status, COUNT(*) FROM samples" + filterSql.whereClause +
+      " GROUP BY status;";
   rawStmt = nullptr;
-  rc = sqlite3_prepare_v2(db_, statusSQL, -1, &rawStmt, nullptr);
+  rc = sqlite3_prepare_v2(db_, statusSQL.c_str(), -1, &rawStmt, nullptr);
   if (rc != SQLITE_OK) {
     setError("Fehler beim Vorbereiten der Status-Statistik: " +
              std::string(sqlite3_errmsg(db_)));
     return stats;
   }
   stmt = makeStatement(rawStmt);
+  if (!bindStatsFilter(stmt.get(), filterSql.bindings)) {
+    setError("Fehler beim Binden der Statistik-Filter");
+    return stats;
+  }
   while ((rc = sqlite3_step(stmt.get())) == SQLITE_ROW) {
     StatusCount entry;
     entry.status = columnText(stmt.get(), 0);
@@ -2145,7 +2230,7 @@ Database::EntityStats Database::getSampleStats() {
   return stats;
 }
 
-Database::EntityStats Database::getOrderStats() {
+Database::EntityStats Database::getOrderStats(const StatsFilter &filter) {
   EntityStats stats;
   clearError();
 
@@ -2154,15 +2239,21 @@ Database::EntityStats Database::getOrderStats() {
     return stats;
   }
 
-  const char *totalSQL = "SELECT COUNT(*) FROM orders;";
+  const auto filterSql = buildStatsFilter(filter, "requested_date");
+  const std::string totalSQL =
+      "SELECT COUNT(*) FROM orders" + filterSql.whereClause + ";";
   sqlite3_stmt *rawStmt = nullptr;
-  int rc = sqlite3_prepare_v2(db_, totalSQL, -1, &rawStmt, nullptr);
+  int rc = sqlite3_prepare_v2(db_, totalSQL.c_str(), -1, &rawStmt, nullptr);
   if (rc != SQLITE_OK) {
     setError("Fehler beim Vorbereiten des COUNT: " +
              std::string(sqlite3_errmsg(db_)));
     return stats;
   }
   auto stmt = makeStatement(rawStmt);
+  if (!bindStatsFilter(stmt.get(), filterSql.bindings)) {
+    setError("Fehler beim Binden der Statistik-Filter");
+    return stats;
+  }
   rc = sqlite3_step(stmt.get());
   if (rc == SQLITE_ROW) {
     stats.total = sqlite3_column_int(stmt.get(), 0);
@@ -2172,16 +2263,21 @@ Database::EntityStats Database::getOrderStats() {
     return stats;
   }
 
-  const char *statusSQL =
-      "SELECT status, COUNT(*) FROM orders GROUP BY status;";
+  const std::string statusSQL =
+      "SELECT status, COUNT(*) FROM orders" + filterSql.whereClause +
+      " GROUP BY status;";
   rawStmt = nullptr;
-  rc = sqlite3_prepare_v2(db_, statusSQL, -1, &rawStmt, nullptr);
+  rc = sqlite3_prepare_v2(db_, statusSQL.c_str(), -1, &rawStmt, nullptr);
   if (rc != SQLITE_OK) {
     setError("Fehler beim Vorbereiten der Status-Statistik: " +
              std::string(sqlite3_errmsg(db_)));
     return stats;
   }
   stmt = makeStatement(rawStmt);
+  if (!bindStatsFilter(stmt.get(), filterSql.bindings)) {
+    setError("Fehler beim Binden der Statistik-Filter");
+    return stats;
+  }
   while ((rc = sqlite3_step(stmt.get())) == SQLITE_ROW) {
     StatusCount entry;
     entry.status = columnText(stmt.get(), 0);
@@ -2196,7 +2292,7 @@ Database::EntityStats Database::getOrderStats() {
   return stats;
 }
 
-Database::EntityStats Database::getResultStats() {
+Database::EntityStats Database::getResultStats(const StatsFilter &filter) {
   EntityStats stats;
   clearError();
 
@@ -2205,15 +2301,21 @@ Database::EntityStats Database::getResultStats() {
     return stats;
   }
 
-  const char *totalSQL = "SELECT COUNT(*) FROM test_results;";
+  const auto filterSql = buildStatsFilter(filter, "measured_date");
+  const std::string totalSQL =
+      "SELECT COUNT(*) FROM test_results" + filterSql.whereClause + ";";
   sqlite3_stmt *rawStmt = nullptr;
-  int rc = sqlite3_prepare_v2(db_, totalSQL, -1, &rawStmt, nullptr);
+  int rc = sqlite3_prepare_v2(db_, totalSQL.c_str(), -1, &rawStmt, nullptr);
   if (rc != SQLITE_OK) {
     setError("Fehler beim Vorbereiten des COUNT: " +
              std::string(sqlite3_errmsg(db_)));
     return stats;
   }
   auto stmt = makeStatement(rawStmt);
+  if (!bindStatsFilter(stmt.get(), filterSql.bindings)) {
+    setError("Fehler beim Binden der Statistik-Filter");
+    return stats;
+  }
   rc = sqlite3_step(stmt.get());
   if (rc == SQLITE_ROW) {
     stats.total = sqlite3_column_int(stmt.get(), 0);
@@ -2223,16 +2325,21 @@ Database::EntityStats Database::getResultStats() {
     return stats;
   }
 
-  const char *statusSQL =
-      "SELECT status, COUNT(*) FROM test_results GROUP BY status;";
+  const std::string statusSQL =
+      "SELECT status, COUNT(*) FROM test_results" + filterSql.whereClause +
+      " GROUP BY status;";
   rawStmt = nullptr;
-  rc = sqlite3_prepare_v2(db_, statusSQL, -1, &rawStmt, nullptr);
+  rc = sqlite3_prepare_v2(db_, statusSQL.c_str(), -1, &rawStmt, nullptr);
   if (rc != SQLITE_OK) {
     setError("Fehler beim Vorbereiten der Status-Statistik: " +
              std::string(sqlite3_errmsg(db_)));
     return stats;
   }
   stmt = makeStatement(rawStmt);
+  if (!bindStatsFilter(stmt.get(), filterSql.bindings)) {
+    setError("Fehler beim Binden der Statistik-Filter");
+    return stats;
+  }
   while ((rc = sqlite3_step(stmt.get())) == SQLITE_ROW) {
     StatusCount entry;
     entry.status = columnText(stmt.get(), 0);
