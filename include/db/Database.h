@@ -75,6 +75,12 @@ public:
     std::optional<std::time_t> toDate;
     std::optional<std::string> status;
   };
+
+  struct HealthStatus {
+    bool dbOpen = false;
+    bool schemaOk = false;
+    std::vector<std::string> missingTables;
+  };
   /**
    * @brief Konstruktor
    * @param dbPath Pfad zur SQLite-Datenbankdatei
@@ -102,6 +108,9 @@ public:
    * @return true bei Erfolg
    */
   [[nodiscard]] bool initializeSchema();
+
+  // Systemstatus
+  [[nodiscard]] HealthStatus getHealthStatus();
 
   // Sample-Operationen (CRUD)
   [[nodiscard]] bool createSample(const core::Sample &sample,

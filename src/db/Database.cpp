@@ -541,6 +541,48 @@ bool Database::initializeSchema() {
   return true;
 }
 
+Database::HealthStatus Database::getHealthStatus() {
+  clearError();
+  HealthStatus status;
+
+  if (!isOpen_ || db_ == nullptr) {
+    setError("Datenbank ist nicht geöffnet");
+    status.dbOpen = false;
+    status.schemaOk = false;
+    return status;
+  }
+
+  status.dbOpen = true;
+
+  auto tableExists = [&](const std::string &table) -> bool {
+    const char *sql =
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=? LIMIT 1;";
+    sqlite3_stmt *stmt = nullptr;
+    int rc = sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+      setError("SQL-Fehler bei Systemstatus: " +
+               std::string(sqlite3_errmsg(db_)));
+      return false;
+    }
+    auto handle = makeStatement(stmt);
+    sqlite3_bind_text(stmt, 1, table.c_str(), -1, SQLITE_TRANSIENT);
+    rc = sqlite3_step(stmt);
+    return rc == SQLITE_ROW;
+  };
+
+  const std::vector<std::string> requiredTables = {
+      "samples", "orders", "test_results", "audit_log", "users"};
+
+  for (const auto &table : requiredTables) {
+    if (!tableExists(table)) {
+      status.missingTables.push_back(table);
+    }
+  }
+
+  status.schemaOk = status.missingTables.empty();
+  return status;
+}
+
 bool Database::createSample(const core::Sample &sample,
                             const std::string &actor) {
   clearError();

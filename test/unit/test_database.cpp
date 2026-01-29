@@ -115,6 +115,36 @@ bool test_database_GetSampleByBarcode() {
   return true;
 }
 
+bool test_database_HealthStatus() {
+  std::string dbPath = uniqueDbPath();
+
+  {
+    Database db(dbPath);
+    auto status = db.getHealthStatus();
+    ASSERT_FALSE(status.dbOpen);
+    ASSERT_FALSE(status.schemaOk);
+  }
+
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+
+  auto statusNoSchema = db.getHealthStatus();
+  ASSERT_TRUE(statusNoSchema.dbOpen);
+  ASSERT_FALSE(statusNoSchema.schemaOk);
+  ASSERT_FALSE(statusNoSchema.missingTables.empty());
+
+  ASSERT_TRUE(db.initializeSchema());
+
+  auto statusWithSchema = db.getHealthStatus();
+  ASSERT_TRUE(statusWithSchema.dbOpen);
+  ASSERT_TRUE(statusWithSchema.schemaOk);
+  ASSERT_TRUE(statusWithSchema.missingTables.empty());
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
 bool test_database_GetAllSamples() {
   std::string dbPath = uniqueDbPath();
   Database db(dbPath);
@@ -1711,6 +1741,7 @@ void registerDatabaseTests() {
   registerTest("Database::CreateSample", test_database_CreateSample);
   registerTest("Database::GetSampleByBarcode",
                test_database_GetSampleByBarcode);
+  registerTest("Database::HealthStatus", test_database_HealthStatus);
   registerTest("Database::GetAllSamples", test_database_GetAllSamples);
   registerTest("Database::GetAllSamples_EmptyDatabase",
                test_database_GetAllSamples_EmptyDatabase);

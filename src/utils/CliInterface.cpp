@@ -10,11 +10,33 @@
 #include <sstream>
 #include <vector>
 
+namespace {
+std::string formatDuration(std::time_t seconds) {
+  if (seconds < 0) {
+    seconds = 0;
+  }
+  const std::time_t days = seconds / 86400;
+  const std::time_t hours = (seconds % 86400) / 3600;
+  const std::time_t minutes = (seconds % 3600) / 60;
+  const std::time_t secs = seconds % 60;
+
+  std::ostringstream out;
+  if (days > 0) {
+    out << days << "d ";
+  }
+  out << std::setw(2) << std::setfill('0') << hours << ":"
+      << std::setw(2) << std::setfill('0') << minutes << ":"
+      << std::setw(2) << std::setfill('0') << secs;
+  return out.str();
+}
+} // namespace
+
 namespace opensylab {
 namespace utils {
 
 CliInterface::CliInterface(std::shared_ptr<db::Database> database)
-    : database_(database), running_(false), currentUser_(nullptr) {}
+    : database_(database), running_(false), currentUser_(nullptr),
+      startTime_(std::time(nullptr)) {}
 
 void CliInterface::run() {
   running_ = true;
@@ -112,6 +134,9 @@ void CliInterface::showMainMenu() {
   }
   std::cout << "\n  === System ===\n";
   std::cout << "  [7] Statistiken\n";
+  if (isAdmin()) {
+    std::cout << "  [9] Systemstatus\n";
+  }
   std::cout << "  [0] Beenden\n";
   std::cout << "\n";
   printSeparator();
@@ -231,6 +256,9 @@ void CliInterface::showMainMenu() {
   // System
   case 7:
     handleStatistics();
+    break;
+  case 9:
+    handleSystemStatus();
     break;
   case 0:
     handleExit();
@@ -1284,6 +1312,42 @@ void CliInterface::handleNewOrder() {
   } else {
     std::cout << "\n✗ Fehler beim Erstellen: " << database_->getLastError()
               << "\n";
+  }
+
+  waitForEnter();
+}
+
+void CliInterface::handleSystemStatus() {
+  clearScreen();
+  printSeparator();
+  std::cout << "              SYSTEMSTATUS\n";
+  printSeparator();
+  std::cout << "\n";
+
+  if (!isAdmin()) {
+    std::cout << "✗ Nur Administratoren dürfen den Systemstatus anzeigen.\n";
+    waitForEnter();
+    return;
+  }
+
+  auto status = database_->getHealthStatus();
+
+  std::cout << "Uptime:           "
+            << formatDuration(std::time(nullptr) - startTime_) << "\n";
+  std::cout << "DB-Verbindung:   "
+            << (status.dbOpen ? "OK" : "FEHLER") << "\n";
+  std::cout << "Schema-Status:   "
+            << (status.schemaOk ? "OK" : "FEHLER") << "\n";
+
+  if (!status.schemaOk && !status.missingTables.empty()) {
+    std::cout << "\nFehlende Tabellen:\n";
+    for (const auto &table : status.missingTables) {
+      std::cout << "  - " << table << "\n";
+    }
+  }
+
+  if (!database_->getLastError().empty()) {
+    std::cout << "\nLetzter Fehler: " << database_->getLastError() << "\n";
   }
 
   waitForEnter();

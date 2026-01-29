@@ -3,6 +3,7 @@
 
 #include "core/User.h"
 #include "db/Database.h"
+#include <ctime>
 #include <memory>
 #include <string>
 #include <vector>
@@ -48,6 +49,7 @@ private:
   std::shared_ptr<db::Database> database_;
   bool running_;
   std::unique_ptr<core::User> currentUser_;
+  std::time_t startTime_;
 
   // Sample-Menü-Aktionen
   void handleNewSample();
@@ -58,6 +60,7 @@ private:
   void handleImportCsv();
   void handleExportSamples();
   void handleStatistics();
+  void handleSystemStatus();
   void handleExit();
 
   // Order-Menü-Aktionen
