@@ -2851,6 +2851,28 @@ bool Database::exportAuditLogToCsv(const std::string &filePath,
   return true;
 }
 
+std::vector<std::unique_ptr<core::AuditEntry>>
+Database::getDiagnosticsLogs(const DiagnosticsFilter &filter) {
+  AuditLogFilter auditFilter;
+  auditFilter.entity = filter.component;
+  auditFilter.fromTime = filter.fromTime;
+  auditFilter.toTime = filter.toTime;
+  auditFilter.limit = filter.limit;
+  return getAuditLogFiltered(auditFilter);
+}
+
+bool Database::exportDiagnosticsLogsToCsv(const std::string &filePath,
+                                          const DiagnosticsFilter &filter,
+                                          const std::string &actor,
+                                          int &exportedCount) {
+  AuditLogFilter auditFilter;
+  auditFilter.entity = filter.component;
+  auditFilter.fromTime = filter.fromTime;
+  auditFilter.toTime = filter.toTime;
+  auditFilter.limit = filter.limit;
+  return exportAuditLogToCsv(filePath, auditFilter, actor, exportedCount);
+}
+
 int Database::getRetentionDays() {
   clearError();
 

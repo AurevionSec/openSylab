@@ -1052,6 +1052,63 @@ bool test_database_RetentionMinEnforced() {
   return true;
 }
 
+bool test_database_DiagnosticsLogs_FilterAndExport() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  std::time_t now = std::time(nullptr);
+
+  AuditEntry e1(AuditEntry::ActionType::CREATE,
+                AuditEntry::EntityType::SAMPLE, "DIA_S1", "userA", "one");
+  e1.setTimestamp(now - 1000);
+  ASSERT_TRUE(db.logAudit(e1));
+
+  AuditEntry e2(AuditEntry::ActionType::UPDATE,
+                AuditEntry::EntityType::RESULT, "DIA_R1", "userB", "two");
+  e2.setTimestamp(now - 100);
+  ASSERT_TRUE(db.logAudit(e2));
+
+  AuditEntry e3(AuditEntry::ActionType::DELETE,
+                AuditEntry::EntityType::USER, "DIA_U1", "userC", "three");
+  e3.setTimestamp(now);
+  ASSERT_TRUE(db.logAudit(e3));
+
+  Database::DiagnosticsFilter filter;
+  filter.component = AuditEntry::EntityType::RESULT;
+  filter.fromTime = now - 200;
+  filter.toTime = now;
+  filter.limit = 50;
+
+  auto entries = db.getDiagnosticsLogs(filter);
+  ASSERT_EQ(entries.size(), 1U);
+  ASSERT_EQ(entries.front()->getEntity(), AuditEntry::EntityType::RESULT);
+
+  std::string exportPath = "test_diag_export.csv";
+  int exported = 0;
+  ASSERT_TRUE(
+      db.exportDiagnosticsLogsToCsv(exportPath, filter, "admin", exported));
+  ASSERT_EQ(exported, 1);
+
+  std::ifstream input(exportPath);
+  ASSERT_TRUE(input.is_open());
+
+  std::string header;
+  std::getline(input, header);
+  ASSERT_EQ(header, "id,action,entity,entity_id,user,timestamp,details");
+
+  std::string row;
+  std::getline(input, row);
+  ASSERT_NE(row.find("DIA_R1"), std::string::npos);
+
+  input.close();
+  std::remove(exportPath.c_str());
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
 bool test_database_AuditRetentionPurgesAndLogs() {
   std::string dbPath = uniqueDbPath();
   Database db(dbPath);
@@ -1786,6 +1843,8 @@ void registerDatabaseTests() {
                test_database_AuditLogExport_CsvOutput);
   registerTest("Database::AuditLogExport_FilteredAndLogged",
                test_database_AuditLogExport_FilteredAndLogged);
+  registerTest("Database::DiagnosticsLogs_FilterAndExport",
+               test_database_DiagnosticsLogs_FilterAndExport);
   registerTest("Database::RetentionMinEnforced",
                test_database_RetentionMinEnforced);
   registerTest("Database::AuditRetentionPurgesAndLogs",

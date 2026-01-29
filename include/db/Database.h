@@ -50,6 +50,13 @@ public:
     int limit = 100;
   };
 
+  struct DiagnosticsFilter {
+    std::optional<core::AuditEntry::EntityType> component;
+    std::optional<std::time_t> fromTime;
+    std::optional<std::time_t> toTime;
+    int limit = 200;
+  };
+
   enum class AuthMethod { LOCAL, LDAP };
 
   struct AuthResult {
@@ -186,6 +193,12 @@ public:
                                          const AuditLogFilter &filter,
                                          const std::string &actor,
                                          int &exportedCount);
+  [[nodiscard]] std::vector<std::unique_ptr<core::AuditEntry>>
+  getDiagnosticsLogs(const DiagnosticsFilter &filter);
+  [[nodiscard]] bool exportDiagnosticsLogsToCsv(const std::string &filePath,
+                                                const DiagnosticsFilter &filter,
+                                                const std::string &actor,
+                                                int &exportedCount);
 
   // API Keys
   [[nodiscard]] bool upsertApiKey(const std::string &key, bool active = true);

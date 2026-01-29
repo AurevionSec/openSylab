@@ -2,6 +2,7 @@
 #include "utils/CsvImport.h"
 #include "utils/CsvResultImport.h"
 #include <algorithm>
+#include <cctype>
 #include <ctime>
 #include <iomanip>
 #include <iostream>
@@ -28,6 +29,12 @@ std::string formatDuration(std::time_t seconds) {
       << std::setw(2) << std::setfill('0') << minutes << ":"
       << std::setw(2) << std::setfill('0') << secs;
   return out.str();
+}
+
+std::string toLowerCopy(std::string value) {
+  std::transform(value.begin(), value.end(), value.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  return value;
 }
 } // namespace
 
@@ -136,6 +143,9 @@ void CliInterface::showMainMenu() {
   std::cout << "  [7] Statistiken\n";
   if (isAdmin()) {
     std::cout << "  [9] Systemstatus\n";
+  }
+  if (canAccessDiagnostics()) {
+    std::cout << "  [35] Diagnose/Logs\n";
   }
   std::cout << "  [0] Beenden\n";
   std::cout << "\n";
@@ -259,6 +269,9 @@ void CliInterface::showMainMenu() {
     break;
   case 9:
     handleSystemStatus();
+    break;
+  case 35:
+    handleDiagnosticsLogs();
     break;
   case 0:
     handleExit();
@@ -1351,6 +1364,198 @@ void CliInterface::handleSystemStatus() {
   }
 
   waitForEnter();
+}
+
+void CliInterface::handleDiagnosticsLogs() {
+  clearScreen();
+  printSeparator();
+  std::cout << "           DIAGNOSE & LOGS\n";
+  printSeparator();
+  std::cout << "\n";
+
+  if (!canAccessDiagnostics()) {
+    std::cout << "✗ Keine Berechtigung für Diagnose/Logs.\n";
+    waitForEnter();
+    return;
+  }
+
+  db::Database::DiagnosticsFilter filter;
+
+  std::string fromInput = readInput("Von-Datum (YYYY-MM-DD, optional)");
+  if (!running_)
+    return;
+  fromInput = trim(fromInput);
+  if (!fromInput.empty()) {
+    std::time_t fromDate;
+    if (!parseDate(fromInput, fromDate)) {
+      std::cout << "\n✗ Ungültiges Von-Datum.\n";
+      waitForEnter();
+      return;
+    }
+    filter.fromTime = fromDate;
+  }
+
+  std::string toInput = readInput("Bis-Datum (YYYY-MM-DD, optional)");
+  if (!running_)
+    return;
+  toInput = trim(toInput);
+  if (!toInput.empty()) {
+    std::time_t toDate;
+    if (!parseDate(toInput, toDate)) {
+      std::cout << "\n✗ Ungültiges Bis-Datum.\n";
+      waitForEnter();
+      return;
+    }
+    toDate += (24 * 60 * 60 - 1);
+    filter.toTime = toDate;
+  }
+
+  if (filter.fromTime.has_value() && filter.toTime.has_value() &&
+      filter.fromTime.value() > filter.toTime.value()) {
+    std::cout << "\n✗ Von-Datum darf nicht nach dem Bis-Datum liegen.\n";
+    waitForEnter();
+    return;
+  }
+
+  std::cout << "\nKomponente filtern:\n";
+  std::cout << "  [0] Alle\n";
+  std::cout << "  [1] Probe\n";
+  std::cout << "  [2] Auftrag\n";
+  std::cout << "  [3] Ergebnis\n";
+  std::cout << "  [4] Benutzer\n";
+  std::cout << "  [5] Rolle\n";
+  std::cout << "  [6] System\n\n";
+
+  int componentChoice = readInteger("Komponente (0-6)");
+  if (!running_)
+    return;
+  switch (componentChoice) {
+  case 0:
+    break;
+  case 1:
+    filter.component = core::AuditEntry::EntityType::SAMPLE;
+    break;
+  case 2:
+    filter.component = core::AuditEntry::EntityType::ORDER;
+    break;
+  case 3:
+    filter.component = core::AuditEntry::EntityType::RESULT;
+    break;
+  case 4:
+    filter.component = core::AuditEntry::EntityType::USER;
+    break;
+  case 5:
+    filter.component = core::AuditEntry::EntityType::ROLE;
+    break;
+  case 6:
+    filter.component = core::AuditEntry::EntityType::SYSTEM;
+    break;
+  default:
+    std::cout << "\n✗ Ungültige Auswahl.\n";
+    waitForEnter();
+    return;
+  }
+
+  std::string limitStr = readInput("Anzahl der Einträge (200)");
+  if (!running_)
+    return;
+  limitStr = trim(limitStr);
+  if (!limitStr.empty()) {
+    try {
+      int limit = std::stoi(limitStr);
+      if (limit > 0) {
+        filter.limit = limit;
+      }
+    } catch (...) {
+      // ignore invalid input
+    }
+  }
+
+  auto entries = database_->getDiagnosticsLogs(filter);
+  if (database_->hasError()) {
+    std::cout << "✗ Fehler beim Abrufen der Diagnose-Logs:\n";
+    std::cout << "  " << database_->getLastError() << "\n";
+    waitForEnter();
+    return;
+  }
+
+  if (entries.empty()) {
+    std::cout << "ℹ Keine Diagnose-Logs vorhanden.\n";
+  } else {
+    std::cout << std::left << std::setw(5) << "ID" << std::setw(20)
+              << "Zeitstempel" << std::setw(14) << "Aktion" << std::setw(12)
+              << "Komponente" << std::setw(12) << "Entität-ID" << std::setw(15)
+              << "Benutzer" << "\n";
+    printSeparator();
+
+    for (const auto &entry : entries) {
+      std::cout << std::left << std::setw(5) << entry->getId()
+                << std::setw(20) << entry->getTimestampString()
+                << std::setw(14) << entry->getActionString() << std::setw(12)
+                << entry->getEntityString() << std::setw(12)
+                << entry->getEntityId() << std::setw(15) << entry->getUser()
+                << "\n";
+      if (!entry->getDetails().empty()) {
+        std::cout << "      Details: " << entry->getDetails() << "\n";
+      }
+    }
+    std::cout << "\nAngezeigt: " << entries.size() << " Einträge\n";
+  }
+
+  std::string exportChoice = readInput("Logs exportieren? (j/n)");
+  if (!running_)
+    return;
+  exportChoice = trim(exportChoice);
+  if (!exportChoice.empty() &&
+      (exportChoice == "j" || exportChoice == "ja" || exportChoice == "y" ||
+       exportChoice == "yes")) {
+    std::string filePath = readInput("Export-Dateipfad");
+    if (!running_)
+      return;
+    filePath = trim(filePath);
+    if (isEmpty(filePath)) {
+      std::cout << "\n✗ Bitte geben Sie einen Dateipfad an.\n";
+      waitForEnter();
+      return;
+    }
+
+    int exported = 0;
+    const std::string actor =
+        currentUser_ ? currentUser_->getUsername() : std::string("system");
+    if (database_->exportDiagnosticsLogsToCsv(filePath, filter, actor,
+                                              exported)) {
+      std::cout << "\n✓ Export erfolgreich! (" << exported << " Einträge)\n";
+    } else {
+      std::cout << "\n✗ Fehler beim Export:\n";
+      std::cout << "  " << database_->getLastError() << "\n";
+    }
+  }
+
+  waitForEnter();
+}
+
+bool CliInterface::canAccessDiagnostics() {
+  if (!currentUser_) {
+    return false;
+  }
+  if (isAdmin()) {
+    return true;
+  }
+  const std::string roleName = currentUser_->getRoleName();
+  if (roleName.empty()) {
+    return false;
+  }
+  if (toLowerCopy(roleName) == "support") {
+    return true;
+  }
+  const auto permissions = database_->getRolePermissions(roleName);
+  for (const auto &perm : permissions) {
+    const std::string lower = toLowerCopy(perm);
+    if (lower == "support" || lower == "diagnostics") {
+      return true;
+    }
+  }
+  return false;
 }
 
 void CliInterface::handleListOrders() {

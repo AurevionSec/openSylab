@@ -87,6 +87,7 @@ private:
   void handleConfigureRetention();
   void handleRunRetention();
   void handleExportAuditLog();
+  void handleDiagnosticsLogs();
 
   // User-Menü-Aktionen (Authentifizierung)
   void handleLogin();
@@ -111,6 +112,7 @@ private:
   std::string getCurrentUsername() const {
     return currentUser_ ? currentUser_->getUsername() : "nicht angemeldet";
   }
+  bool canAccessDiagnostics();
 
   // Hilfsfunktionen
   std::string readInput(const std::string &prompt);
