@@ -592,14 +592,25 @@ bool Database::createSample(const core::Sample &sample,
     return false;
   }
 
+  char *errMsg = nullptr;
+  int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
+                        &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Starten der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    return false;
+  }
+
   const char *insertSQL = R"(
         INSERT INTO samples (sample_id, patient_id, patient_name, description, status, registration_date)
         VALUES (?, ?, ?, ?, ?, ?);
     )";
 
   sqlite3_stmt *rawStmt = nullptr;
-  int rc = sqlite3_prepare_v2(db_, insertSQL, -1, &rawStmt, nullptr);
+  rc = sqlite3_prepare_v2(db_, insertSQL, -1, &rawStmt, nullptr);
   if (rc != SQLITE_OK) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     setError("Fehler beim Vorbereiten des INSERT: " +
              std::string(sqlite3_errmsg(db_)));
     return false;
@@ -622,6 +633,7 @@ bool Database::createSample(const core::Sample &sample,
   rc = sqlite3_step(stmt.get());
 
   if (rc != SQLITE_DONE) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     setError("Fehler beim Einfügen der Probe: " +
              std::string(sqlite3_errmsg(db_)));
     return false;
@@ -634,8 +646,23 @@ bool Database::createSample(const core::Sample &sample,
   if (!sample.getDescription().empty()) {
     details << "; Beschreibung: " << sample.getDescription();
   }
-  logSampleAction(core::AuditEntry::ActionType::CREATE, sample.getSampleId(),
-                  normalizeActor(actor), details.str());
+  core::AuditEntry entry(core::AuditEntry::ActionType::CREATE,
+                         core::AuditEntry::EntityType::SAMPLE,
+                         sample.getSampleId(), normalizeActor(actor),
+                         details.str());
+  if (!logAudit(entry)) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
+
+  rc = sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Commit der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
 
   return true;
 }
@@ -1618,12 +1645,23 @@ bool Database::deleteOrder(int id, const std::string &actor) {
     return false;
   }
 
+  char *errMsg = nullptr;
+  int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
+                        &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Starten der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    return false;
+  }
+
   const char *deleteSQL = "DELETE FROM orders WHERE id = ?;";
 
   sqlite3_stmt *rawStmt = nullptr;
-  int rc = sqlite3_prepare_v2(db_, deleteSQL, -1, &rawStmt, nullptr);
+  rc = sqlite3_prepare_v2(db_, deleteSQL, -1, &rawStmt, nullptr);
 
   if (rc != SQLITE_OK) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     setError("Fehler beim Vorbereiten des DELETE: " +
              std::string(sqlite3_errmsg(db_)));
     return false;
@@ -1635,6 +1673,7 @@ bool Database::deleteOrder(int id, const std::string &actor) {
   rc = sqlite3_step(stmt.get());
 
   if (rc != SQLITE_DONE) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     setError("Fehler beim Löschen des Auftrags: " +
              std::string(sqlite3_errmsg(db_)));
     return false;
@@ -1642,6 +1681,7 @@ bool Database::deleteOrder(int id, const std::string &actor) {
 
   int changes = sqlite3_changes(db_);
   if (changes == 0) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     setError("Auftrag mit ID " + std::to_string(id) + " nicht gefunden");
     return false;
   }
@@ -1650,8 +1690,23 @@ bool Database::deleteOrder(int id, const std::string &actor) {
   details << "Auftrags-ID: " << existing->getOrderId()
           << "; Proben-ID: " << existing->getSampleId()
           << "; Status: " << existing->getStatusString();
-  logOrderAction(core::AuditEntry::ActionType::DELETE,
-                 existing->getOrderId(), normalizeActor(actor), details.str());
+  core::AuditEntry entry(core::AuditEntry::ActionType::DELETE,
+                         core::AuditEntry::EntityType::ORDER,
+                         existing->getOrderId(), normalizeActor(actor),
+                         details.str());
+  if (!logAudit(entry)) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
+
+  rc = sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Commit der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
 
   return true;
 }
@@ -2389,12 +2444,23 @@ bool Database::deleteTestResult(int id, const std::string &actor) {
     return false;
   }
 
+  char *errMsg = nullptr;
+  int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
+                        &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Starten der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    return false;
+  }
+
   const char *deleteSQL = "DELETE FROM test_results WHERE id = ?;";
 
   sqlite3_stmt *rawStmt = nullptr;
-  int rc = sqlite3_prepare_v2(db_, deleteSQL, -1, &rawStmt, nullptr);
+  rc = sqlite3_prepare_v2(db_, deleteSQL, -1, &rawStmt, nullptr);
 
   if (rc != SQLITE_OK) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     setError("Fehler beim Vorbereiten des DELETE: " +
              std::string(sqlite3_errmsg(db_)));
     return false;
@@ -2406,6 +2472,7 @@ bool Database::deleteTestResult(int id, const std::string &actor) {
   rc = sqlite3_step(stmt.get());
 
   if (rc != SQLITE_DONE) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     setError("Fehler beim Löschen des Ergebnisses: " +
              std::string(sqlite3_errmsg(db_)));
     return false;
@@ -2413,6 +2480,7 @@ bool Database::deleteTestResult(int id, const std::string &actor) {
 
   int changes = sqlite3_changes(db_);
   if (changes == 0) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     setError("Ergebnis mit ID " + std::to_string(id) + " nicht gefunden");
     return false;
   }
@@ -2421,9 +2489,23 @@ bool Database::deleteTestResult(int id, const std::string &actor) {
   details << "Ergebnis-ID: " << existing->getResultId()
           << "; Parameter: " << existing->getTestParameter()
           << "; Status: " << existing->getStatusString();
-  logResultAction(core::AuditEntry::ActionType::DELETE,
-                  existing->getResultId(), normalizeActor(actor),
-                  details.str());
+  core::AuditEntry entry(core::AuditEntry::ActionType::DELETE,
+                         core::AuditEntry::EntityType::RESULT,
+                         existing->getResultId(), normalizeActor(actor),
+                         details.str());
+  if (!logAudit(entry)) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
+
+  rc = sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Commit der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
 
   return true;
 }

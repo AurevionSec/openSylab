@@ -383,6 +383,36 @@ bool test_database_DeleteSample() {
   return true;
 }
 
+bool test_database_DeleteOrder_LogsAudit() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  Sample sample("DEL_ORDER_SAMPLE", "P410");
+  ASSERT_TRUE(db.createSample(sample));
+
+  Order order("DEL_ORDER_1", "DEL_ORDER_SAMPLE", "PCR");
+  ASSERT_TRUE(db.createOrder(order));
+
+  auto stored = db.getOrderByOrderId("DEL_ORDER_1");
+  ASSERT_NOT_NULL(stored);
+  ASSERT_TRUE(db.deleteOrder(stored->getId(), "tester"));
+
+  auto entries =
+      db.getAuditLogByEntity(AuditEntry::EntityType::ORDER, "DEL_ORDER_1");
+  ASSERT_FALSE(entries.empty());
+  const AuditEntry *entry =
+      findAuditEntry(entries, AuditEntry::ActionType::DELETE,
+                     AuditEntry::EntityType::ORDER, "DEL_ORDER_1", "tester");
+  ASSERT_NOT_NULL(entry);
+  ASSERT_NE(entry->getDetails().find("Auftrags-ID"), std::string::npos);
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
 bool test_database_DeleteSample_NotFound() {
   std::string dbPath = uniqueDbPath();
   Database db(dbPath);
@@ -392,6 +422,47 @@ bool test_database_DeleteSample_NotFound() {
   // Versuche nicht existierende Probe zu löschen
   ASSERT_FALSE(db.deleteSample(999999));
   ASSERT_TRUE(db.hasError());
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_database_DeleteTestResult_LogsAudit() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  Sample sample("DEL_RES_SAMPLE", "P411");
+  ASSERT_TRUE(db.createSample(sample));
+
+  Order order("DEL_RES_ORDER", "DEL_RES_SAMPLE", "PCR");
+  ASSERT_TRUE(db.createOrder(order));
+
+  auto storedOrder = db.getOrderByOrderId("DEL_RES_ORDER");
+  ASSERT_NOT_NULL(storedOrder);
+
+  TestResult result("DEL_RES_1", storedOrder->getId(), "PCR");
+  result.setValue("1.2");
+  result.setUnit("mg/L");
+  result.setStatus(TestResult::Status::ENTERED);
+  result.setFlag(result.evaluateFlag());
+  ASSERT_TRUE(db.createTestResult(result));
+
+  auto storedResult = db.getTestResultByResultId("DEL_RES_1");
+  ASSERT_NOT_NULL(storedResult);
+
+  ASSERT_TRUE(db.deleteTestResult(storedResult->getId(), "tester"));
+
+  auto entries =
+      db.getAuditLogByEntity(AuditEntry::EntityType::RESULT, "DEL_RES_1");
+  ASSERT_FALSE(entries.empty());
+  const AuditEntry *entry =
+      findAuditEntry(entries, AuditEntry::ActionType::DELETE,
+                     AuditEntry::EntityType::RESULT, "DEL_RES_1", "tester");
+  ASSERT_NOT_NULL(entry);
+  ASSERT_NE(entry->getDetails().find("Ergebnis-ID"), std::string::npos);
 
   db.close();
   std::remove(dbPath.c_str());
@@ -2167,8 +2238,12 @@ void registerDatabaseTests() {
                test_database_UpdateSample_NotFound);
   registerTest("Database::ArchiveSample", test_database_ArchiveSample);
   registerTest("Database::DeleteSample", test_database_DeleteSample);
+  registerTest("Database::DeleteOrder_LogsAudit",
+               test_database_DeleteOrder_LogsAudit);
   registerTest("Database::DeleteSample_NotFound",
                test_database_DeleteSample_NotFound);
+  registerTest("Database::DeleteTestResult_LogsAudit",
+               test_database_DeleteTestResult_LogsAudit);
   registerTest("Database::DeleteUserDeactivates",
                test_database_DeleteUserDeactivates);
 }
