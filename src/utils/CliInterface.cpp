@@ -2014,6 +2014,12 @@ void CliInterface::handleUpdateOrder() {
   printSeparator();
   std::cout << "\n";
 
+  if (!canEdit()) {
+    std::cout << "✗ Keine Berechtigung. Bitte anmelden.\n";
+    waitForEnter();
+    return;
+  }
+
   int id = readInteger("Auftrags-ID (numerisch)");
   if (!running_)
     return;
@@ -2032,39 +2038,33 @@ void CliInterface::handleUpdateOrder() {
   std::cout << "  Status:    " << order->getStatusString() << "\n";
   std::cout << "  Priorität: " << order->getPriorityString() << "\n\n";
 
-  std::cout << "Status-Optionen:\n";
-  std::cout << "  [1] Angefordert\n";
-  std::cout << "  [2] In Bearbeitung\n";
-  std::cout << "  [3] Abgeschlossen\n";
-  std::cout << "  [4] Validiert\n";
-  std::cout << "  [5] Storniert\n\n";
+  const std::vector<core::Order::Status> statusOptions = {
+      core::Order::Status::REQUESTED, core::Order::Status::IN_PROGRESS,
+      core::Order::Status::COMPLETED, core::Order::Status::VALIDATED,
+      core::Order::Status::CANCELLED};
 
-  int statusChoice = readInteger("Neuer Status (1-5)");
+  std::cout << "Status-Optionen:\n";
+  for (size_t i = 0; i < statusOptions.size(); ++i) {
+    std::cout << "  [" << (i + 1) << "] "
+              << core::Order::statusToString(statusOptions[i]) << "\n";
+  }
+  std::cout << "\n";
+
+  int statusChoice =
+      readInteger("Neuer Status (1-" + std::to_string(statusOptions.size()) +
+                  ")");
   if (!running_)
     return;
 
-  core::Order::Status newStatus;
-  switch (statusChoice) {
-  case 1:
-    newStatus = core::Order::Status::REQUESTED;
-    break;
-  case 2:
-    newStatus = core::Order::Status::IN_PROGRESS;
-    break;
-  case 3:
-    newStatus = core::Order::Status::COMPLETED;
-    order->setCompletedDate(std::time(nullptr));
-    break;
-  case 4:
-    newStatus = core::Order::Status::VALIDATED;
-    break;
-  case 5:
-    newStatus = core::Order::Status::CANCELLED;
-    break;
-  default:
+  if (statusChoice < 1 ||
+      static_cast<size_t>(statusChoice) > statusOptions.size()) {
     std::cout << "\nUngültige Auswahl.\n";
     waitForEnter();
     return;
+  }
+  core::Order::Status newStatus = statusOptions[statusChoice - 1];
+  if (newStatus == core::Order::Status::COMPLETED) {
+    order->setCompletedDate(std::time(nullptr));
   }
 
   order->setStatus(newStatus);
