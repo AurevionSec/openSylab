@@ -78,6 +78,20 @@ bool waitForAutoRefresh(int seconds) {
   return true;
 #endif
 }
+
+std::string normalizeStatusInput(const std::string &input,
+                                 const std::vector<std::string> &options) {
+  const std::string cleaned = toLowerCopy(trimCopy(input));
+  if (cleaned.empty()) {
+    return "";
+  }
+  for (const auto &option : options) {
+    if (toLowerCopy(option) == cleaned) {
+      return option;
+    }
+  }
+  return "";
+}
 } // namespace
 
 namespace opensylab {
@@ -1744,6 +1758,28 @@ void CliInterface::handleListOrders() {
   if (!running_)
     return;
 
+  if (!statusFilter.empty()) {
+    statusFilter = normalizeStatusInput(statusFilter,
+                                        {"Angefordert", "In Bearbeitung",
+                                         "Abgeschlossen", "Validiert",
+                                         "Storniert"});
+    if (statusFilter.empty()) {
+      std::cout << "\n✗ Ungültiger Status-Filter.\n";
+      waitForEnter();
+      return;
+    }
+  }
+
+  if (!priorityFilter.empty()) {
+    priorityFilter = normalizeStatusInput(
+        priorityFilter, {"Normal", "Dringend", "Notfall"});
+    if (priorityFilter.empty()) {
+      std::cout << "\n✗ Ungültiger Prioritäts-Filter.\n";
+      waitForEnter();
+      return;
+    }
+  }
+
   db::Database::OrderFilter filter;
   filter.status = statusFilter;
   filter.sampleId = sampleFilter;
@@ -1790,6 +1826,43 @@ void CliInterface::handleListOrders() {
     }
 
     std::cout << "\nGesamt: " << orders.size() << " Aufträge\n";
+  }
+
+  if (activeHasFilters) {
+    std::string reset =
+        readInput("\nFilter zurücksetzen und alle Aufträge anzeigen? (j/n)");
+    if (!running_)
+      return;
+    reset = trim(reset);
+    if (!reset.empty() && (reset == "j" || reset == "ja" || reset == "y" ||
+                           reset == "yes")) {
+      orders = database_->getAllOrders();
+      activeHasFilters = false;
+      activeFilter = db::Database::OrderFilter{};
+      if (database_->hasError()) {
+        std::cout << "✗ Fehler beim Abrufen der Aufträge:\n";
+        std::cout << "  " << database_->getLastError() << "\n";
+      } else if (orders.empty()) {
+        std::cout << "ℹ Keine Aufträge in der Datenbank.\n";
+      } else {
+        std::cout << std::left << std::setw(5) << "ID" << std::setw(12)
+                  << "Auftrags-ID" << std::setw(12) << "Proben-ID"
+                  << std::setw(15) << "Testtyp" << std::setw(14) << "Status"
+                  << std::setw(10) << "Priorität" << "\n";
+        printSeparator();
+
+        for (const auto &order : orders) {
+          std::cout << std::left << std::setw(5) << order->getId()
+                    << std::setw(12) << order->getOrderId() << std::setw(12)
+                    << order->getSampleId() << std::setw(15)
+                    << order->getTestType() << std::setw(14)
+                    << order->getStatusString() << std::setw(10)
+                    << order->getPriorityString() << "\n";
+        }
+
+        std::cout << "\nGesamt: " << orders.size() << " Aufträge\n";
+      }
+    }
   }
 
   std::string autoRefreshInput =
