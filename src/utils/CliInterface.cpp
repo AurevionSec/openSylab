@@ -2837,6 +2837,12 @@ void CliInterface::handleExportResults() {
   printSeparator();
   std::cout << "\n";
 
+  if (!canEdit()) {
+    std::cout << "✗ Keine Berechtigung. Bitte anmelden.\n";
+    waitForEnter();
+    return;
+  }
+
   std::string orderInput =
       readInput("Auftrags-ID (optional, Enter = alle)");
   if (!running_)

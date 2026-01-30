@@ -24,7 +24,8 @@ public:
     DELETE,  // Datensatz gelöscht
     LOGIN,   // Benutzer angemeldet
     LOGOUT,  // Benutzer abgemeldet
-    VALIDATE // Ergebnis validiert
+    VALIDATE, // Ergebnis validiert
+    EXPORT    // Daten exportiert
   };
 
   /**

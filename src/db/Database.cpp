@@ -2288,12 +2288,36 @@ bool Database::exportValidatedResultsToCsv(const std::string &filePath,
     return false;
   }
 
+  char *errMsg = nullptr;
+  int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
+                        &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Starten der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    return false;
+  }
+
   const std::string actor = normalizeActor(user);
   const std::string details = "Export: " + filePath + "; Anzahl: " +
                               std::to_string(validated.size());
   for (const auto *result : validated) {
-    logResultAction(core::AuditEntry::ActionType::UPDATE,
-                    result->getResultId(), actor, details);
+    core::AuditEntry entry(core::AuditEntry::ActionType::EXPORT,
+                           core::AuditEntry::EntityType::RESULT,
+                           result->getResultId(), actor, details);
+    if (!logAudit(entry)) {
+      sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+      return false;
+    }
+  }
+
+  rc = sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Commit der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
   }
 
   return true;

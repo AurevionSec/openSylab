@@ -1626,7 +1626,7 @@ bool test_database_ExportValidatedResults_LogsAudit() {
       db.getAuditLogByEntity(AuditEntry::EntityType::RESULT, "RES_EXP_AUD_1");
   ASSERT_FALSE(entries1.empty());
   const AuditEntry *entry1 =
-      findAuditEntry(entries1, AuditEntry::ActionType::UPDATE,
+      findAuditEntry(entries1, AuditEntry::ActionType::EXPORT,
                      AuditEntry::EntityType::RESULT, "RES_EXP_AUD_1");
   ASSERT_NOT_NULL(entry1);
   ASSERT_EQ(entry1->getDetails(),
@@ -1636,7 +1636,7 @@ bool test_database_ExportValidatedResults_LogsAudit() {
       db.getAuditLogByEntity(AuditEntry::EntityType::RESULT, "RES_EXP_AUD_2");
   ASSERT_FALSE(entries2.empty());
   const AuditEntry *entry2 =
-      findAuditEntry(entries2, AuditEntry::ActionType::UPDATE,
+      findAuditEntry(entries2, AuditEntry::ActionType::EXPORT,
                      AuditEntry::EntityType::RESULT, "RES_EXP_AUD_2");
   ASSERT_NOT_NULL(entry2);
   ASSERT_EQ(entry2->getDetails(),
