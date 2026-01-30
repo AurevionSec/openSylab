@@ -362,11 +362,21 @@ bool test_database_DeleteSample() {
   int sampleId = retrieved->getId();
 
   // Probe löschen
-  ASSERT_TRUE(db.deleteSample(sampleId));
+  ASSERT_TRUE(db.deleteSample(sampleId, "tester"));
 
   // Prüfen dass Probe nicht mehr existiert
   auto deleted = db.getSampleByBarcode("TEST004");
   ASSERT_NULL(deleted);
+
+  auto entries =
+      db.getAuditLogByEntity(AuditEntry::EntityType::SAMPLE, "TEST004");
+  ASSERT_FALSE(db.hasError());
+  ASSERT_FALSE(entries.empty());
+  const AuditEntry *entry =
+      findAuditEntry(entries, AuditEntry::ActionType::DELETE,
+                     AuditEntry::EntityType::SAMPLE, "TEST004", "tester");
+  ASSERT_NOT_NULL(entry);
+  ASSERT_NE(entry->getDetails().find("Proben-ID"), std::string::npos);
 
   db.close();
   std::remove(dbPath.c_str());
@@ -382,33 +392,6 @@ bool test_database_DeleteSample_NotFound() {
   // Versuche nicht existierende Probe zu löschen
   ASSERT_FALSE(db.deleteSample(999999));
   ASSERT_TRUE(db.hasError());
-
-  db.close();
-  std::remove(dbPath.c_str());
-  return true;
-}
-
-bool test_database_LogSampleDelete() {
-  std::string dbPath = uniqueDbPath();
-  Database db(dbPath);
-  ASSERT_TRUE(db.open());
-  ASSERT_TRUE(db.initializeSchema());
-
-  Sample sample("DEL001", "P011");
-  ASSERT_TRUE(db.createSample(sample));
-
-  db.logSampleAction(AuditEntry::ActionType::DELETE, "DEL001", "tester",
-                     "Sample gelöscht");
-
-  auto entries =
-      db.getAuditLogByEntity(AuditEntry::EntityType::SAMPLE, "DEL001");
-  ASSERT_FALSE(db.hasError());
-  ASSERT_FALSE(entries.empty());
-  const AuditEntry *entry =
-      findAuditEntry(entries, AuditEntry::ActionType::DELETE,
-                     AuditEntry::EntityType::SAMPLE, "DEL001");
-  ASSERT_NOT_NULL(entry);
-  ASSERT_EQ(entry->getDetails(), "Sample gelöscht");
 
   db.close();
   std::remove(dbPath.c_str());
@@ -458,6 +441,46 @@ bool test_database_AuditLogsSampleCrud() {
                      AuditEntry::EntityType::SAMPLE, "AUDIT_CRUD", "tester");
   ASSERT_NOT_NULL(deletedEntry);
   ASSERT_NE(deletedEntry->getDetails().find("Proben-ID"), std::string::npos);
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_database_ArchiveSample() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  Sample sample("ARCHIVE001", "P021");
+  ASSERT_TRUE(db.createSample(sample));
+
+  auto retrieved = db.getSampleByBarcode("ARCHIVE001");
+  ASSERT_NOT_NULL(retrieved);
+  retrieved->setStatus(Sample::Status::ARCHIVED);
+  ASSERT_TRUE(db.updateSample(*retrieved, "tester"));
+
+  auto updated = db.getSampleByBarcode("ARCHIVE001");
+  ASSERT_NOT_NULL(updated);
+  ASSERT_EQ(updated->getStatus(), Sample::Status::ARCHIVED);
+
+  Database::SampleFilter excludeArchived;
+  excludeArchived.excludeArchived = true;
+  auto withoutArchived = db.getSamplesByFilter(excludeArchived);
+  ASSERT_FALSE(db.hasError());
+  for (const auto &entry : withoutArchived) {
+    ASSERT_NE(entry->getSampleId(), "ARCHIVE001");
+  }
+
+  auto entries =
+      db.getAuditLogByEntity(AuditEntry::EntityType::SAMPLE, "ARCHIVE001");
+  ASSERT_FALSE(entries.empty());
+  const AuditEntry *auditEntry =
+      findAuditEntry(entries, AuditEntry::ActionType::UPDATE,
+                     AuditEntry::EntityType::SAMPLE, "ARCHIVE001", "tester");
+  ASSERT_NOT_NULL(auditEntry);
+  ASSERT_NE(auditEntry->getDetails().find("Status"), std::string::npos);
 
   db.close();
   std::remove(dbPath.c_str());
@@ -1834,7 +1857,6 @@ void registerDatabaseTests() {
   registerTest("Database::UpdateSample", test_database_UpdateSample);
   registerTest("Database::LogSampleStatusUpdate",
                test_database_LogSampleStatusUpdate);
-  registerTest("Database::LogSampleDelete", test_database_LogSampleDelete);
   registerTest("Database::AuditLogsSampleCrud",
                test_database_AuditLogsSampleCrud);
   registerTest("Database::LogOrderStatusUpdate",
@@ -1910,6 +1932,7 @@ void registerDatabaseTests() {
                test_database_UpdateSample_NoChangesStillSuccess);
   registerTest("Database::UpdateSample_NotFound",
                test_database_UpdateSample_NotFound);
+  registerTest("Database::ArchiveSample", test_database_ArchiveSample);
   registerTest("Database::DeleteSample", test_database_DeleteSample);
   registerTest("Database::DeleteSample_NotFound",
                test_database_DeleteSample_NotFound);

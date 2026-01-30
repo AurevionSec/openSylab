@@ -731,6 +731,12 @@ void CliInterface::handleDeleteSample() {
   printSeparator();
   std::cout << "\n";
 
+  if (!canEdit()) {
+    std::cout << "✗ Keine Berechtigung. Bitte anmelden.\n";
+    waitForEnter();
+    return;
+  }
+
   int id = readInteger("Proben-ID (numerisch)");
   if (!running_)
     return; // EOF
