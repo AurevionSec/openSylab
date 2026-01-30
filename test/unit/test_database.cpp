@@ -1334,6 +1334,32 @@ bool test_database_LdapAuthenticationPath() {
   return true;
 }
 
+bool test_database_LdapAuthenticationRejectsInactiveLocal() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  ASSERT_TRUE(db.setLdapEnabled(true));
+
+  const std::string username = "ldap_inactive_local";
+  const std::string password = "secret";
+  ASSERT_TRUE(db.upsertLdapUser(username, User::hashPassword(password), true,
+                                false, ""));
+
+  User user(username, User::hashPassword(password), User::Role::OPERATOR);
+  user.setActive(false);
+  ASSERT_TRUE(db.createUser(user));
+
+  auto auth = db.authenticateUser(username, password);
+  ASSERT_TRUE(auth == nullptr);
+  ASSERT_FALSE(db.getLastError().empty());
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
 bool test_database_MfaRequiredFlowLocalUser() {
   std::string dbPath = uniqueDbPath();
   Database db(dbPath);
@@ -1357,6 +1383,38 @@ bool test_database_MfaRequiredFlowLocalUser() {
   auto ok = db.authenticateUser(username, password, std::to_string(code));
   ASSERT_NOT_NULL(ok);
   ASSERT_EQ(ok->getUsername(), username);
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_database_DeleteUserDeactivates() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  User user("deactivate_user", User::hashPassword("secret"),
+            User::Role::ADMIN);
+  ASSERT_TRUE(db.createUser(user));
+
+  auto stored = db.getUserByUsername("deactivate_user");
+  ASSERT_NOT_NULL(stored);
+  ASSERT_TRUE(stored->isActive());
+
+  ASSERT_TRUE(db.deleteUser(stored->getId(), "admin"));
+
+  auto updated = db.getUser(stored->getId());
+  ASSERT_NOT_NULL(updated);
+  ASSERT_FALSE(updated->isActive());
+
+  auto entries =
+      db.getAuditLogByEntity(AuditEntry::EntityType::USER, "deactivate_user");
+  const AuditEntry *entry =
+      findAuditEntry(entries, AuditEntry::ActionType::UPDATE,
+                     AuditEntry::EntityType::USER, "deactivate_user", "admin");
+  ASSERT_NOT_NULL(entry);
 
   db.close();
   std::remove(dbPath.c_str());
@@ -1971,6 +2029,8 @@ void registerDatabaseTests() {
                test_database_AuthConfigLdapEnabled);
   registerTest("Database::LdapAuthenticationPath",
                test_database_LdapAuthenticationPath);
+  registerTest("Database::LdapAuthenticationRejectsInactiveLocal",
+               test_database_LdapAuthenticationRejectsInactiveLocal);
   registerTest("Database::MfaRequiredFlowLocalUser",
                test_database_MfaRequiredFlowLocalUser);
   registerTest("Database::AuthAuditLogging", test_database_AuthAuditLogging);
@@ -2001,4 +2061,6 @@ void registerDatabaseTests() {
   registerTest("Database::DeleteSample", test_database_DeleteSample);
   registerTest("Database::DeleteSample_NotFound",
                test_database_DeleteSample_NotFound);
+  registerTest("Database::DeleteUserDeactivates",
+               test_database_DeleteUserDeactivates);
 }

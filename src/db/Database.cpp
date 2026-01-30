@@ -1029,7 +1029,7 @@ bool Database::deleteSample(int id, const std::string &actor) {
 
   if (rc != SQLITE_OK) {
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Vorbereiten des DELETE: " +
+    setError("Fehler beim Vorbereiten des UPDATE: " +
              std::string(sqlite3_errmsg(db_)));
     return false;
   }
@@ -3341,6 +3341,16 @@ bool Database::createUser(const core::User &user, const std::string &actor) {
     return false;
   }
 
+  char *errMsg = nullptr;
+  int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
+                        &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Starten der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    return false;
+  }
+
   const char *insertSQL = R"(
         INSERT INTO users (username, password_hash, role, active, last_login,
                           created_date, full_name, email)
@@ -3348,8 +3358,9 @@ bool Database::createUser(const core::User &user, const std::string &actor) {
     )";
 
   sqlite3_stmt *rawStmt = nullptr;
-  int rc = sqlite3_prepare_v2(db_, insertSQL, -1, &rawStmt, nullptr);
+  rc = sqlite3_prepare_v2(db_, insertSQL, -1, &rawStmt, nullptr);
   if (rc != SQLITE_OK) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     setError("Fehler beim Vorbereiten des INSERT: " +
              std::string(sqlite3_errmsg(db_)));
     return false;
@@ -3375,6 +3386,7 @@ bool Database::createUser(const core::User &user, const std::string &actor) {
   rc = sqlite3_step(stmt.get());
 
   if (rc != SQLITE_DONE) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     setError("Fehler beim Einfügen des Benutzers: " +
              std::string(sqlite3_errmsg(db_)));
     return false;
@@ -3389,8 +3401,23 @@ bool Database::createUser(const core::User &user, const std::string &actor) {
   if (!user.getEmail().empty()) {
     details << "; Email: " << user.getEmail();
   }
-  logUserAction(core::AuditEntry::ActionType::CREATE, user.getUsername(),
-                normalizeActor(actor), details.str());
+  core::AuditEntry entry(core::AuditEntry::ActionType::CREATE,
+                         core::AuditEntry::EntityType::USER,
+                         user.getUsername(), normalizeActor(actor),
+                         details.str());
+  if (!logAudit(entry)) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
+
+  rc = sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Commit der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
 
   return true;
 }
@@ -3544,6 +3571,16 @@ bool Database::updateUser(const core::User &user, const std::string &actor) {
     return false;
   }
 
+  char *errMsg = nullptr;
+  int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
+                        &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Starten der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    return false;
+  }
+
   const char *updateSQL = R"(
         UPDATE users SET
             username = ?,
@@ -3558,9 +3595,10 @@ bool Database::updateUser(const core::User &user, const std::string &actor) {
     )";
 
   sqlite3_stmt *rawStmt = nullptr;
-  int rc = sqlite3_prepare_v2(db_, updateSQL, -1, &rawStmt, nullptr);
+  rc = sqlite3_prepare_v2(db_, updateSQL, -1, &rawStmt, nullptr);
 
   if (rc != SQLITE_OK) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     setError("Fehler beim Vorbereiten des UPDATE: " +
              std::string(sqlite3_errmsg(db_)));
     return false;
@@ -3588,6 +3626,7 @@ bool Database::updateUser(const core::User &user, const std::string &actor) {
   rc = sqlite3_step(stmt.get());
 
   if (rc != SQLITE_DONE) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     setError("Fehler beim Aktualisieren des Benutzers: " +
              std::string(sqlite3_errmsg(db_)));
     return false;
@@ -3612,8 +3651,24 @@ bool Database::updateUser(const core::User &user, const std::string &actor) {
 
   const std::string detailText =
       hasChanges ? details.str() : "Keine Änderungen";
-  logUserAction(core::AuditEntry::ActionType::UPDATE, user.getUsername(),
-                normalizeActor(actor), detailText);
+
+  core::AuditEntry entry(core::AuditEntry::ActionType::UPDATE,
+                         core::AuditEntry::EntityType::USER,
+                         user.getUsername(), normalizeActor(actor),
+                         detailText);
+  if (!logAudit(entry)) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
+
+  rc = sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Commit der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
 
   return true;
 }
@@ -3631,12 +3686,29 @@ bool Database::deleteUser(int id, const std::string &actor) {
     return false;
   }
 
-  const char *deleteSQL = "DELETE FROM users WHERE id = ?;";
+  if (!existing->isActive()) {
+    setError("Benutzer mit ID " + std::to_string(id) +
+             " ist bereits deaktiviert");
+    return false;
+  }
+
+  char *errMsg = nullptr;
+  int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
+                        &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Starten der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    return false;
+  }
+
+  const char *deleteSQL = "UPDATE users SET active = 0 WHERE id = ?;";
 
   sqlite3_stmt *rawStmt = nullptr;
-  int rc = sqlite3_prepare_v2(db_, deleteSQL, -1, &rawStmt, nullptr);
+  rc = sqlite3_prepare_v2(db_, deleteSQL, -1, &rawStmt, nullptr);
 
   if (rc != SQLITE_OK) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     setError("Fehler beim Vorbereiten des DELETE: " +
              std::string(sqlite3_errmsg(db_)));
     return false;
@@ -3648,13 +3720,15 @@ bool Database::deleteUser(int id, const std::string &actor) {
   rc = sqlite3_step(stmt.get());
 
   if (rc != SQLITE_DONE) {
-    setError("Fehler beim Löschen des Benutzers: " +
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    setError("Fehler beim Deaktivieren des Benutzers: " +
              std::string(sqlite3_errmsg(db_)));
     return false;
   }
 
   int changes = sqlite3_changes(db_);
   if (changes == 0) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     setError("Benutzer mit ID " + std::to_string(id) + " nicht gefunden");
     return false;
   }
@@ -3662,9 +3736,25 @@ bool Database::deleteUser(int id, const std::string &actor) {
   std::ostringstream details;
   details << "Benutzername: " << existing->getUsername()
           << "; Rolle: " << existing->getRoleString()
-          << "; Status: " << formatActive(existing->isActive());
-  logUserAction(core::AuditEntry::ActionType::DELETE, existing->getUsername(),
-                normalizeActor(actor), details.str());
+          << "; Status: " << formatActive(existing->isActive()) << " -> "
+          << formatActive(false);
+  core::AuditEntry entry(core::AuditEntry::ActionType::UPDATE,
+                         core::AuditEntry::EntityType::USER,
+                         existing->getUsername(), normalizeActor(actor),
+                         details.str());
+  if (!logAudit(entry)) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
+
+  rc = sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Commit der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
 
   return true;
 }
@@ -4767,6 +4857,15 @@ Database::AuthResult Database::authenticatePrimary(const std::string &username,
           setError(msg);
           logUserAction(core::AuditEntry::ActionType::UPDATE, actor, actor,
                         "Login fehlgeschlagen (LDAP, lokaler Benutzer fehlt)");
+          setError(msg);
+          return result;
+        }
+
+        if (!localUser->isActive()) {
+          const std::string msg = "Benutzer ist deaktiviert";
+          setError(msg);
+          logUserAction(core::AuditEntry::ActionType::UPDATE, actor, actor,
+                        "Login fehlgeschlagen (LDAP, deaktiviert)");
           setError(msg);
           return result;
         }
