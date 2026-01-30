@@ -230,9 +230,10 @@ public:
                                       const std::string &entityId,
                                       const std::string &user,
                                       const std::string &details = "");
-  void logResultRetryImport(const std::vector<std::string> &resultIds,
-                            const std::string &user,
-                            const std::string &filePath);
+  [[nodiscard]] bool
+  logResultRetryImport(const std::vector<std::string> &resultIds,
+                       const std::string &user,
+                       const std::string &filePath);
 
   // User-Operationen (CRUD)
   [[nodiscard]] bool createUser(const core::User &user,

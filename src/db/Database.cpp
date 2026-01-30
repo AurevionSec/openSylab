@@ -3286,11 +3286,21 @@ bool Database::logSupportAccess(core::AuditEntry::EntityType entity,
   return logAudit(entry);
 }
 
-void Database::logResultRetryImport(const std::vector<std::string> &resultIds,
+bool Database::logResultRetryImport(const std::vector<std::string> &resultIds,
                                     const std::string &user,
                                     const std::string &filePath) {
   if (resultIds.empty()) {
-    return;
+    return true;
+  }
+
+  char *errMsg = nullptr;
+  int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
+                        &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Starten der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    return false;
   }
 
   const std::string actor = user.empty() ? "system" : user;
@@ -3298,9 +3308,25 @@ void Database::logResultRetryImport(const std::vector<std::string> &resultIds,
                               std::to_string(resultIds.size());
 
   for (const auto &resultId : resultIds) {
-    logResultAction(core::AuditEntry::ActionType::UPDATE, resultId, actor,
-                    details);
+    core::AuditEntry entry(core::AuditEntry::ActionType::UPDATE,
+                           core::AuditEntry::EntityType::RESULT, resultId,
+                           actor, details);
+    if (!logAudit(entry)) {
+      sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+      return false;
+    }
   }
+
+  rc = sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Commit der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
+
+  return true;
 }
 
 // ============================================================================

@@ -783,7 +783,8 @@ bool test_database_LogResultRetryImportAudit() {
   ASSERT_TRUE(db.createTestResult(r2));
 
   std::vector<std::string> resultIds = {"RES_RETRY_1", "RES_RETRY_2"};
-  db.logResultRetryImport(resultIds, "tester", "retry_results.csv");
+  ASSERT_TRUE(
+      db.logResultRetryImport(resultIds, "tester", "retry_results.csv"));
 
   auto entries =
       db.getAuditLogByEntity(AuditEntry::EntityType::RESULT, "RES_RETRY_1");

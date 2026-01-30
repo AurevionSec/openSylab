@@ -2704,6 +2704,12 @@ void CliInterface::handleImportResultsCsv() {
   printSeparator();
   std::cout << "\n";
 
+  if (!canEdit()) {
+    std::cout << "✗ Keine Berechtigung. Bitte anmelden.\n";
+    waitForEnter();
+    return;
+  }
+
   std::cout << "Erwartetes CSV-Format:\n";
   std::cout << "result_id,order_id,test_parameter,value,unit,ref_low,ref_high,"
                "measured_by\n\n";
@@ -2773,7 +2779,11 @@ void CliInterface::handleImportResultsCsv() {
       if (isRetryAttempt && !storedResultIds.empty()) {
         const std::string actor =
             currentUser_ ? currentUser_->getUsername() : std::string("system");
-        database_->logResultRetryImport(storedResultIds, actor, currentPath);
+        if (!database_->logResultRetryImport(storedResultIds, actor,
+                                             currentPath)) {
+          std::cout << "\n✗ Hinweis: Audit-Logging für Retry fehlgeschlagen: "
+                    << database_->getLastError() << "\n";
+        }
       }
 
       std::cout << "\n✓ " << stored << " Ergebnisse erfolgreich in Datenbank "
