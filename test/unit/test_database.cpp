@@ -666,6 +666,46 @@ bool test_database_CreateTestResult_MissingFieldsRejected() {
   return true;
 }
 
+bool test_database_UpdateTestResult_RecalculatesFlag() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  Sample sample("RES_FLAG_SAMPLE", "P333");
+  ASSERT_TRUE(db.createSample(sample));
+
+  Order order("ORD_FLAG", "RES_FLAG_SAMPLE", "Glucose");
+  ASSERT_TRUE(db.createOrder(order));
+
+  auto storedOrder = db.getOrderByOrderId("ORD_FLAG");
+  ASSERT_NOT_NULL(storedOrder);
+  int orderDbId = storedOrder->getId();
+
+  TestResult result("RES_FLAG_1", orderDbId, "Glucose");
+  result.setValue("90");
+  result.setUnit("mg/dL");
+  result.setReferenceLow(70);
+  result.setReferenceHigh(100);
+  result.setStatus(TestResult::Status::ENTERED);
+  result.setFlag(TestResult::Flag::NORMAL);
+  ASSERT_TRUE(db.createTestResult(result, "tester"));
+
+  auto stored = db.getTestResultByResultId("RES_FLAG_1");
+  ASSERT_NOT_NULL(stored);
+  stored->setValue("200");
+  stored->setFlag(TestResult::Flag::NORMAL);
+  ASSERT_TRUE(db.updateTestResultWithAudit(*stored, "tester"));
+
+  auto updated = db.getTestResultByResultId("RES_FLAG_1");
+  ASSERT_NOT_NULL(updated);
+  ASSERT_EQ(updated->getFlag(), TestResult::Flag::CRITICAL);
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
 bool test_database_ValidateResultLogsAudit() {
   std::string dbPath = uniqueDbPath();
   Database db(dbPath);
@@ -1895,6 +1935,8 @@ void registerDatabaseTests() {
                test_database_CreateTestResult_Valid);
   registerTest("Database::CreateTestResult_MissingFieldsRejected",
                test_database_CreateTestResult_MissingFieldsRejected);
+  registerTest("Database::UpdateTestResult_RecalculatesFlag",
+               test_database_UpdateTestResult_RecalculatesFlag);
   registerTest("Database::ValidateResultLogsAudit",
                test_database_ValidateResultLogsAudit);
   registerTest("Database::LogResultRetryImportAudit",

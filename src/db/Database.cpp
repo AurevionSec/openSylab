@@ -1695,6 +1695,9 @@ bool Database::createTestResult(const core::TestResult &result,
     return false;
   }
 
+  const std::string computedFlag =
+      core::TestResult::flagToString(result.evaluateFlag());
+
   char *errMsg = nullptr;
   int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
                         &errMsg);
@@ -1737,7 +1740,7 @@ bool Database::createTestResult(const core::TestResult &result,
   sqlite3_bind_double(stmt.get(), 8, result.getReferenceHigh());
   sqlite3_bind_text(stmt.get(), 9, result.getStatusString().c_str(), -1,
                     SQLITE_TRANSIENT);
-  sqlite3_bind_text(stmt.get(), 10, result.getFlagString().c_str(), -1,
+  sqlite3_bind_text(stmt.get(), 10, computedFlag.c_str(), -1,
                     SQLITE_TRANSIENT);
   sqlite3_bind_int64(stmt.get(), 11,
                      static_cast<sqlite3_int64>(result.getMeasuredDate()));
@@ -1994,6 +1997,9 @@ bool Database::updateTestResult(const core::TestResult &result,
     return false;
   }
 
+  const std::string computedFlag =
+      core::TestResult::flagToString(result.evaluateFlag());
+
   std::ostringstream details;
   bool hasChanges = false;
   appendAuditChange(details, hasChanges, "Parameter",
@@ -2014,7 +2020,7 @@ bool Database::updateTestResult(const core::TestResult &result,
   appendAuditChange(details, hasChanges, "Status",
                     existing->getStatusString(), result.getStatusString());
   appendAuditChange(details, hasChanges, "Flag", existing->getFlagString(),
-                    result.getFlagString());
+                    computedFlag);
   appendAuditChange(details, hasChanges, "Gemessen am",
                     std::to_string(existing->getMeasuredDate()),
                     std::to_string(result.getMeasuredDate()));
@@ -2032,6 +2038,8 @@ bool Database::updateTestResult(const core::TestResult &result,
 }
 
 bool Database::updateTestResultCore(const core::TestResult &result) {
+  const std::string computedFlag =
+      core::TestResult::flagToString(result.evaluateFlag());
   const char *updateSQL = R"(
         UPDATE test_results SET
             result_id = ?,
@@ -2076,7 +2084,7 @@ bool Database::updateTestResultCore(const core::TestResult &result) {
   sqlite3_bind_double(stmt.get(), 8, result.getReferenceHigh());
   sqlite3_bind_text(stmt.get(), 9, result.getStatusString().c_str(), -1,
                     SQLITE_TRANSIENT);
-  sqlite3_bind_text(stmt.get(), 10, result.getFlagString().c_str(), -1,
+  sqlite3_bind_text(stmt.get(), 10, computedFlag.c_str(), -1,
                     SQLITE_TRANSIENT);
   sqlite3_bind_int64(stmt.get(), 11,
                      static_cast<sqlite3_int64>(result.getMeasuredDate()));
@@ -2148,6 +2156,9 @@ bool Database::updateTestResultWithAudit(const core::TestResult &result,
     return false;
   }
 
+  const std::string computedFlag =
+      core::TestResult::flagToString(result.evaluateFlag());
+
   std::ostringstream details;
   bool hasChanges = false;
   appendAuditChange(details, hasChanges, "Parameter",
@@ -2168,7 +2179,7 @@ bool Database::updateTestResultWithAudit(const core::TestResult &result,
   appendAuditChange(details, hasChanges, "Status",
                     existing->getStatusString(), result.getStatusString());
   appendAuditChange(details, hasChanges, "Flag", existing->getFlagString(),
-                    result.getFlagString());
+                    computedFlag);
   appendAuditChange(details, hasChanges, "Gemessen am",
                     std::to_string(existing->getMeasuredDate()),
                     std::to_string(result.getMeasuredDate()));
