@@ -88,6 +88,16 @@ public:
     bool schemaOk = false;
     std::vector<std::string> missingTables;
   };
+
+  struct SessionInfo {
+    int id = 0;
+    int userId = 0;
+    std::string username;
+    std::string method;
+    std::time_t loginTs = 0;
+    std::optional<std::time_t> logoutTs;
+    std::string details;
+  };
   /**
    * @brief Konstruktor
    * @param dbPath Pfad zur SQLite-Datenbankdatei
@@ -290,6 +300,8 @@ public:
   [[nodiscard]] int getActiveSessionCount(int userId);
   [[nodiscard]] int getSessionCount(int userId);
   [[nodiscard]] bool hasActiveSession(int userId);
+  [[nodiscard]] std::optional<SessionInfo> getSessionById(int sessionId);
+  [[nodiscard]] std::optional<SessionInfo> getLatestSessionForUser(int userId);
 
   // Authentifizierung
   [[nodiscard]] AuthResult authenticatePrimary(const std::string &username,

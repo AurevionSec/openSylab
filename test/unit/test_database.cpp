@@ -1529,11 +1529,22 @@ bool test_database_SessionStartAndEnd() {
   ASSERT_TRUE(db.hasActiveSession(userId));
   ASSERT_EQ(db.getActiveSessionCount(userId), 1);
   ASSERT_EQ(db.getSessionCount(userId), 1);
-  ASSERT_TRUE(db.getActiveSessionId(userId).has_value());
+  auto sessionId = db.getActiveSessionId(userId);
+  ASSERT_TRUE(sessionId.has_value());
+
+  auto sessionInfo = db.getSessionById(sessionId.value());
+  ASSERT_TRUE(sessionInfo.has_value());
+  ASSERT_EQ(sessionInfo->userId, userId);
+  ASSERT_EQ(sessionInfo->method, "Lokal");
+  ASSERT_TRUE(sessionInfo->logoutTs == std::nullopt);
 
   ASSERT_TRUE(db.endSession(userId, username, "logout"));
   ASSERT_EQ(db.getActiveSessionCount(userId), 0);
   ASSERT_EQ(db.getSessionCount(userId), 1);
+
+  auto latest = db.getLatestSessionForUser(userId);
+  ASSERT_TRUE(latest.has_value());
+  ASSERT_TRUE(latest->logoutTs.has_value());
 
   db.close();
   std::remove(dbPath.c_str());

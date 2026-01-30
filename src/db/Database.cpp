@@ -4722,6 +4722,16 @@ bool Database::endSession(int userId, const std::string &username,
     return false;
   }
 
+  char *errMsg = nullptr;
+  int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
+                        &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Starten der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    return false;
+  }
+
   const std::time_t now = std::time(nullptr);
   const char *updateSQL = R"(
         UPDATE sessions
@@ -4730,8 +4740,9 @@ bool Database::endSession(int userId, const std::string &username,
     )";
 
   sqlite3_stmt *rawStmt = nullptr;
-  int rc = sqlite3_prepare_v2(db_, updateSQL, -1, &rawStmt, nullptr);
+  rc = sqlite3_prepare_v2(db_, updateSQL, -1, &rawStmt, nullptr);
   if (rc != SQLITE_OK) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     setError("Fehler beim Vorbereiten des Session-UPDATE: " +
              std::string(sqlite3_errmsg(db_)));
     return false;
@@ -4743,6 +4754,7 @@ bool Database::endSession(int userId, const std::string &username,
 
   rc = sqlite3_step(stmt.get());
   if (rc != SQLITE_DONE) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     setError("Fehler beim Beenden der Sitzung: " +
              std::string(sqlite3_errmsg(db_)));
     return false;
@@ -4752,14 +4764,21 @@ bool Database::endSession(int userId, const std::string &username,
   const std::string details =
       closedCount > 0 ? "Sitzung beendet" : "Keine aktive Sitzung gefunden";
 
-  // Audit-Logging soll keine erfolgreichen Operationen in Fehler verwandeln.
-  const std::string prevError = lastError_;
-  logUserAction(core::AuditEntry::ActionType::LOGOUT, username, username,
-                details + (reason.empty() ? "" : " (" + reason + ")"));
-  if (!prevError.empty()) {
-    lastError_ = prevError;
-  } else if (!lastError_.empty()) {
-    clearError();
+  core::AuditEntry entry(
+      core::AuditEntry::ActionType::LOGOUT, core::AuditEntry::EntityType::USER,
+      username, username, details + (reason.empty() ? "" : " (" + reason + ")"));
+  if (!logAudit(entry)) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
+
+  rc = sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Commit der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
   }
 
   return true;
@@ -4780,11 +4799,25 @@ bool Database::startSession(int userId, const std::string &username,
   }
 
   // Bestehende aktive Sitzungen schließen, ohne den Aufrufer zu blockieren.
-  (void)endSession(userId, username, "relogin");
-  clearError();
+  const bool closed = endSession(userId, username, "relogin");
+  if (!closed) {
+    // Fehler behalten, aber Login nicht blockieren.
+  } else {
+    clearError();
+  }
 
   const std::time_t now = std::time(nullptr);
   const std::string methodStr = method == AuthMethod::LDAP ? "LDAP" : "Lokal";
+
+  char *errMsg = nullptr;
+  int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
+                        &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Starten der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    return false;
+  }
 
   const char *insertSQL = R"(
         INSERT INTO sessions (user_id, username, method, login_ts, details)
@@ -4792,8 +4825,9 @@ bool Database::startSession(int userId, const std::string &username,
     )";
 
   sqlite3_stmt *rawStmt = nullptr;
-  int rc = sqlite3_prepare_v2(db_, insertSQL, -1, &rawStmt, nullptr);
+  rc = sqlite3_prepare_v2(db_, insertSQL, -1, &rawStmt, nullptr);
   if (rc != SQLITE_OK) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     setError("Fehler beim Vorbereiten des Session-INSERT: " +
              std::string(sqlite3_errmsg(db_)));
     return false;
@@ -4808,6 +4842,7 @@ bool Database::startSession(int userId, const std::string &username,
 
   rc = sqlite3_step(stmt.get());
   if (rc != SQLITE_DONE) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     setError("Fehler beim Starten der Sitzung: " +
              std::string(sqlite3_errmsg(db_)));
     return false;
@@ -4818,16 +4853,116 @@ bool Database::startSession(int userId, const std::string &username,
       "Login erfolgreich (Methode: " + methodStr +
       ", Session: " + std::to_string(sessionId) + ")";
 
-  const std::string prevError = lastError_;
-  logUserAction(core::AuditEntry::ActionType::LOGIN, username, username,
-                auditDetails);
-  if (!prevError.empty()) {
-    lastError_ = prevError;
-  } else if (!lastError_.empty()) {
-    clearError();
+  core::AuditEntry entry(core::AuditEntry::ActionType::LOGIN,
+                         core::AuditEntry::EntityType::USER, username,
+                         username, auditDetails);
+  if (!logAudit(entry)) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
+
+  rc = sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Commit der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
   }
 
   return true;
+}
+
+std::optional<Database::SessionInfo> Database::getSessionById(int sessionId) {
+  clearError();
+
+  if (!isOpen_) {
+    setError("Datenbank ist nicht geöffnet");
+    return std::nullopt;
+  }
+
+  const char *selectSQL = R"(
+        SELECT id, user_id, username, method, login_ts, logout_ts, details
+        FROM sessions
+        WHERE id = ?
+        LIMIT 1;
+    )";
+
+  sqlite3_stmt *rawStmt = nullptr;
+  int rc = sqlite3_prepare_v2(db_, selectSQL, -1, &rawStmt, nullptr);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Vorbereiten des Session-SELECT: " +
+             std::string(sqlite3_errmsg(db_)));
+    return std::nullopt;
+  }
+
+  auto stmt = makeStatement(rawStmt);
+  sqlite3_bind_int(stmt.get(), 1, sessionId);
+  rc = sqlite3_step(stmt.get());
+  if (rc == SQLITE_DONE) {
+    setError("Sitzung mit ID " + std::to_string(sessionId) + " nicht gefunden");
+    return std::nullopt;
+  }
+  if (rc != SQLITE_ROW) {
+    setError("Fehler beim Laden der Sitzung: " +
+             std::string(sqlite3_errmsg(db_)));
+    return std::nullopt;
+  }
+
+  SessionInfo info;
+  info.id = sqlite3_column_int(stmt.get(), 0);
+  info.userId = sqlite3_column_int(stmt.get(), 1);
+  info.username = columnText(stmt.get(), 2);
+  info.method = columnText(stmt.get(), 3);
+  info.loginTs = static_cast<std::time_t>(sqlite3_column_int64(stmt.get(), 4));
+  if (sqlite3_column_type(stmt.get(), 5) != SQLITE_NULL) {
+    info.logoutTs =
+        static_cast<std::time_t>(sqlite3_column_int64(stmt.get(), 5));
+  }
+  info.details = columnText(stmt.get(), 6);
+  return info;
+}
+
+std::optional<Database::SessionInfo>
+Database::getLatestSessionForUser(int userId) {
+  clearError();
+
+  if (!isOpen_) {
+    setError("Datenbank ist nicht geöffnet");
+    return std::nullopt;
+  }
+
+  const char *selectSQL = R"(
+        SELECT id
+        FROM sessions
+        WHERE user_id = ?
+        ORDER BY login_ts DESC
+        LIMIT 1;
+    )";
+
+  sqlite3_stmt *rawStmt = nullptr;
+  int rc = sqlite3_prepare_v2(db_, selectSQL, -1, &rawStmt, nullptr);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Vorbereiten des Session-SELECT: " +
+             std::string(sqlite3_errmsg(db_)));
+    return std::nullopt;
+  }
+
+  auto stmt = makeStatement(rawStmt);
+  sqlite3_bind_int(stmt.get(), 1, userId);
+  rc = sqlite3_step(stmt.get());
+  if (rc == SQLITE_DONE) {
+    setError("Keine Sitzung für Benutzer " + std::to_string(userId));
+    return std::nullopt;
+  }
+  if (rc != SQLITE_ROW) {
+    setError("Fehler beim Laden der Sitzung: " +
+             std::string(sqlite3_errmsg(db_)));
+    return std::nullopt;
+  }
+
+  const int sessionId = sqlite3_column_int(stmt.get(), 0);
+  return getSessionById(sessionId);
 }
 
 Database::AuthResult Database::authenticatePrimary(const std::string &username,
