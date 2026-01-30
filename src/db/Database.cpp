@@ -1145,6 +1145,16 @@ bool Database::createOrder(const core::Order &order, const std::string &actor) {
     return false;
   }
 
+  char *errMsg = nullptr;
+  int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
+                        &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Starten der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    return false;
+  }
+
   const char *insertSQL = R"(
         INSERT INTO orders (order_id, sample_id, test_type, status, priority,
                            requested_date, completed_date, requested_by, notes)
@@ -1152,8 +1162,9 @@ bool Database::createOrder(const core::Order &order, const std::string &actor) {
     )";
 
   sqlite3_stmt *rawStmt = nullptr;
-  int rc = sqlite3_prepare_v2(db_, insertSQL, -1, &rawStmt, nullptr);
+  rc = sqlite3_prepare_v2(db_, insertSQL, -1, &rawStmt, nullptr);
   if (rc != SQLITE_OK) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     setError("Fehler beim Vorbereiten des INSERT: " +
              std::string(sqlite3_errmsg(db_)));
     return false;
@@ -1182,6 +1193,7 @@ bool Database::createOrder(const core::Order &order, const std::string &actor) {
   rc = sqlite3_step(stmt.get());
 
   if (rc != SQLITE_DONE) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     setError("Fehler beim Einfügen des Auftrags: " +
              std::string(sqlite3_errmsg(db_)));
     return false;
@@ -1192,8 +1204,23 @@ bool Database::createOrder(const core::Order &order, const std::string &actor) {
           << "; Testtyp: " << order.getTestType()
           << "; Status: " << order.getStatusString()
           << "; Priorität: " << order.getPriorityString();
-  logOrderAction(core::AuditEntry::ActionType::CREATE, order.getOrderId(),
-                 normalizeActor(actor), details.str());
+  core::AuditEntry entry(core::AuditEntry::ActionType::CREATE,
+                         core::AuditEntry::EntityType::ORDER,
+                         order.getOrderId(), normalizeActor(actor),
+                         details.str());
+  if (!logAudit(entry)) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
+
+  rc = sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Commit der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
 
   return true;
 }

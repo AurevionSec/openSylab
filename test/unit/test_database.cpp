@@ -504,11 +504,19 @@ bool test_database_CreateOrder_RequestedDateStored() {
   std::time_t requestedDate = std::mktime(&tm);
   order.setRequestedDate(requestedDate);
 
-  ASSERT_TRUE(db.createOrder(order));
+  ASSERT_TRUE(db.createOrder(order, "tester"));
 
   auto stored = db.getOrderByOrderId("ORD001");
   ASSERT_NOT_NULL(stored);
   ASSERT_EQ(stored->getRequestedDate(), requestedDate);
+
+  auto entries =
+      db.getAuditLogByEntity(AuditEntry::EntityType::ORDER, "ORD001");
+  ASSERT_FALSE(entries.empty());
+  const AuditEntry *entry =
+      findAuditEntry(entries, AuditEntry::ActionType::CREATE,
+                     AuditEntry::EntityType::ORDER, "ORD001", "tester");
+  ASSERT_NOT_NULL(entry);
 
   db.close();
   std::remove(dbPath.c_str());

@@ -1364,6 +1364,12 @@ void CliInterface::handleNewOrder() {
   printSeparator();
   std::cout << "\n";
 
+  if (!canEdit()) {
+    std::cout << "✗ Keine Berechtigung. Bitte anmelden.\n";
+    waitForEnter();
+    return;
+  }
+
   // Auftrags-ID
   std::string orderId = readValidatedInput("Auftrags-ID", "Auftrags-ID");
   if (!running_)
@@ -1383,10 +1389,18 @@ void CliInterface::handleNewOrder() {
   }
 
   // Testtyp
-  std::string testType =
-      readValidatedInput("Testtyp (z.B. Blutbild)", "Testtyp");
-  if (!running_)
-    return;
+  std::string testType;
+  while (true) {
+    testType = readInput("Testtyp (z.B. Blutbild)");
+    if (!running_)
+      return;
+    testType = trim(testType);
+    if (isEmpty(testType)) {
+      std::cout << "✗ Testtyp darf nicht leer sein!\n";
+      continue;
+    }
+    break;
+  }
 
   // Gewünschtes Datum (YYYY-MM-DD)
   std::time_t requestedDate = 0;
