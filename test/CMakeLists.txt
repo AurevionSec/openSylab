@@ -12,6 +12,7 @@ set(TEST_SOURCES
     unit/test_hl7.cpp
     unit/test_fhir.cpp
     unit/test_statistics.cpp
+    unit/test_utils.cpp
     unit/test_runner.cpp
 )
 

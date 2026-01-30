@@ -69,6 +69,7 @@ extern void registerCsvResultImportTests();
 extern void registerHl7Tests();
 extern void registerFhirTests();
 extern void registerStatisticsTests();
+extern void registerUtilsTests();
 
 int main() {
   std::cout << "\n";
@@ -91,6 +92,7 @@ int main() {
   registerHl7Tests();
   registerFhirTests();
   registerStatisticsTests();
+  registerUtilsTests();
 
   int passed = 0;
   int failed = 0;

@@ -44,6 +44,7 @@ public:
    * @brief Zeigt Hauptmenü
    */
   void showMainMenu();
+  static int autoRefreshIntervalSeconds() { return 5; }
 
 private:
   std::shared_ptr<db::Database> database_;
