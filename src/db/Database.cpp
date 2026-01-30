@@ -3844,6 +3844,16 @@ bool Database::createRole(const std::string &name,
     }
   }
 
+  std::ostringstream details;
+  details << "Berechtigungen: [" << joinList(permissions) << "]";
+  core::AuditEntry entry(core::AuditEntry::ActionType::CREATE,
+                         core::AuditEntry::EntityType::ROLE, name,
+                         normalizeActor(actor), details.str());
+  if (!logAudit(entry)) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
+
   rc = sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &errMsg);
   if (rc != SQLITE_OK) {
     setError("Fehler beim Commit der Transaktion: " +
@@ -3852,11 +3862,6 @@ bool Database::createRole(const std::string &name,
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     return false;
   }
-
-  std::ostringstream details;
-  details << "Berechtigungen: [" << joinList(permissions) << "]";
-  logRoleAction(core::AuditEntry::ActionType::CREATE, name,
-                normalizeActor(actor), details.str());
 
   return true;
 }
@@ -3964,6 +3969,17 @@ bool Database::updateRole(const std::string &name,
     }
   }
 
+  std::ostringstream details;
+  details << "Berechtigungen: [" << joinList(existingPerms) << "] -> ["
+          << joinList(permissions) << "]";
+  core::AuditEntry entry(core::AuditEntry::ActionType::UPDATE,
+                         core::AuditEntry::EntityType::ROLE, name,
+                         normalizeActor(actor), details.str());
+  if (!logAudit(entry)) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
+
   rc = sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &errMsg);
   if (rc != SQLITE_OK) {
     setError("Fehler beim Commit der Transaktion: " +
@@ -3972,12 +3988,6 @@ bool Database::updateRole(const std::string &name,
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     return false;
   }
-
-  std::ostringstream details;
-  details << "Berechtigungen: [" << joinList(existingPerms) << "] -> ["
-          << joinList(permissions) << "]";
-  logRoleAction(core::AuditEntry::ActionType::UPDATE, name,
-                normalizeActor(actor), details.str());
 
   return true;
 }
@@ -4102,10 +4112,21 @@ bool Database::assignUserRole(int userId, const std::string &roleName,
     return false;
   }
 
+  char *errMsg = nullptr;
+  rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
+                    &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Starten der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    return false;
+  }
+
   const char *updateSQL = "UPDATE users SET role = ? WHERE id = ?;";
   sqlite3_stmt *updateStmtRaw = nullptr;
   rc = sqlite3_prepare_v2(db_, updateSQL, -1, &updateStmtRaw, nullptr);
   if (rc != SQLITE_OK) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     setError("Fehler beim Vorbereiten des UPDATE: " +
              std::string(sqlite3_errmsg(db_)));
     return false;
@@ -4118,19 +4139,36 @@ bool Database::assignUserRole(int userId, const std::string &roleName,
 
   rc = sqlite3_step(updateStmt.get());
   if (rc != SQLITE_DONE) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     setError("Fehler beim Zuweisen der Rolle: " +
              std::string(sqlite3_errmsg(db_)));
     return false;
   }
 
   if (sqlite3_changes(db_) == 0) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     setError("Benutzer mit ID " + std::to_string(userId) + " nicht gefunden");
     return false;
   }
 
-  logUserAction(core::AuditEntry::ActionType::UPDATE,
-                existing->getUsername(), normalizeActor(actor),
-                "Rolle: " + existing->getRoleString() + " -> " + roleName);
+  core::AuditEntry entry(
+      core::AuditEntry::ActionType::UPDATE,
+      core::AuditEntry::EntityType::USER, existing->getUsername(),
+      normalizeActor(actor),
+      "Rolle: " + existing->getRoleString() + " -> " + roleName);
+  if (!logAudit(entry)) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
+
+  rc = sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Commit der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
 
   return true;
 }

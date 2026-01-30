@@ -849,6 +849,13 @@ bool test_database_CreateRoleAndPermissions() {
   ASSERT_EQ(storedPerms[0], expected[0]);
   ASSERT_EQ(storedPerms[1], expected[1]);
 
+  auto entries = db.getAuditLogByEntity(AuditEntry::EntityType::ROLE, roleName);
+  ASSERT_FALSE(entries.empty());
+  const AuditEntry *entry =
+      findAuditEntry(entries, AuditEntry::ActionType::CREATE,
+                     AuditEntry::EntityType::ROLE, roleName, "system");
+  ASSERT_NOT_NULL(entry);
+
   db.close();
   std::remove(dbPath.c_str());
   return true;
@@ -874,6 +881,13 @@ bool test_database_UpdateRolePermissions() {
   ASSERT_EQ(storedPerms.size(), expected.size());
   ASSERT_EQ(storedPerms[0], expected[0]);
   ASSERT_EQ(storedPerms[1], expected[1]);
+
+  auto entries = db.getAuditLogByEntity(AuditEntry::EntityType::ROLE, roleName);
+  ASSERT_FALSE(entries.empty());
+  const AuditEntry *entry =
+      findAuditEntry(entries, AuditEntry::ActionType::UPDATE,
+                     AuditEntry::EntityType::ROLE, roleName, "system");
+  ASSERT_NOT_NULL(entry);
 
   db.close();
   std::remove(dbPath.c_str());
@@ -901,6 +915,14 @@ bool test_database_AssignUserRoleCustom() {
   ASSERT_NOT_NULL(updated);
   ASSERT_EQ(updated->getRoleString(), roleName);
   ASSERT_EQ(updated->getRole(), User::Role::CUSTOM);
+
+  auto entries =
+      db.getAuditLogByEntity(AuditEntry::EntityType::USER, "qa_user");
+  ASSERT_FALSE(entries.empty());
+  const AuditEntry *entry =
+      findAuditEntry(entries, AuditEntry::ActionType::UPDATE,
+                     AuditEntry::EntityType::USER, "qa_user", "system");
+  ASSERT_NOT_NULL(entry);
 
   db.close();
   std::remove(dbPath.c_str());
