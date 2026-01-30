@@ -2558,6 +2558,12 @@ void CliInterface::handleValidateResult() {
   printSeparator();
   std::cout << "\n";
 
+  if (!canEdit()) {
+    std::cout << "✗ Keine Berechtigung. Bitte anmelden.\n";
+    waitForEnter();
+    return;
+  }
+
   int id = readInteger("Ergebnis-ID (Datenbank-ID)");
   if (!running_)
     return;
