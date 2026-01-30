@@ -2152,7 +2152,18 @@ bool Database::updateTestResultWithAudit(const core::TestResult &result,
     return false;
   }
 
+  char *errMsg = nullptr;
+  int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
+                        &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Starten der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    return false;
+  }
+
   if (!updateTestResultCore(result)) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     return false;
   }
 
@@ -2190,8 +2201,23 @@ bool Database::updateTestResultWithAudit(const core::TestResult &result,
 
   const std::string detailText =
       hasChanges ? details.str() : "Keine Änderungen";
-  logResultAction(core::AuditEntry::ActionType::UPDATE, result.getResultId(),
-                  normalizeActor(user), detailText);
+  core::AuditEntry entry(core::AuditEntry::ActionType::UPDATE,
+                         core::AuditEntry::EntityType::RESULT,
+                         result.getResultId(), normalizeActor(user),
+                         detailText);
+  if (!logAudit(entry)) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
+
+  rc = sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Commit der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
 
   return true;
 }
