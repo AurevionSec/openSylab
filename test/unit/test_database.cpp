@@ -589,7 +589,7 @@ bool test_database_CreateTestResult_Valid() {
   result.setFlag(TestResult::Flag::NORMAL);
   result.setMeasuredDate(123456789);
 
-  ASSERT_TRUE(db.createTestResult(result));
+  ASSERT_TRUE(db.createTestResult(result, "tester"));
 
   auto stored = db.getTestResultByResultId("RES001");
   ASSERT_NOT_NULL(stored);
@@ -600,6 +600,15 @@ bool test_database_CreateTestResult_Valid() {
   ASSERT_EQ(stored->getReferenceRange(), "70-100");
   ASSERT_EQ(stored->getReferenceLow(), 70);
   ASSERT_EQ(stored->getReferenceHigh(), 100);
+
+  auto entries =
+      db.getAuditLogByEntity(AuditEntry::EntityType::RESULT, "RES001");
+  ASSERT_FALSE(db.hasError());
+  ASSERT_FALSE(entries.empty());
+  const AuditEntry *entry =
+      findAuditEntry(entries, AuditEntry::ActionType::CREATE,
+                     AuditEntry::EntityType::RESULT, "RES001", "tester");
+  ASSERT_NOT_NULL(entry);
 
   db.close();
   std::remove(dbPath.c_str());

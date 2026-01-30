@@ -2200,6 +2200,12 @@ void CliInterface::handleNewResult() {
   printSeparator();
   std::cout << "\n";
 
+  if (!canEdit()) {
+    std::cout << "✗ Keine Berechtigung. Bitte anmelden.\n";
+    waitForEnter();
+    return;
+  }
+
   // Auftrag-ID als Referenz
   int orderId = readInteger("Auftrags-ID (Datenbank-ID)");
   if (!running_)
