@@ -393,18 +393,30 @@ void CliInterface::handleListSamples() {
     query = trim(query);
     filter.query = query;
 
-    std::cout << "\nStatus-Filter:\n";
-    std::cout << "  [0] Alle\n";
-    std::cout << "  [1] Erfasst\n";
-    std::cout << "  [2] In Analyse\n";
-    std::cout << "  [3] Analysiert\n";
-    std::cout << "  [4] Validiert\n";
-    std::cout << "  [5] Archiviert\n";
-    std::string statusChoice = readInput("Status-Auswahl (0-5, optional)");
-    if (!running_)
-      return;
-    statusChoice = trim(statusChoice);
-    if (!statusChoice.empty() && statusChoice != "0") {
+    while (true) {
+      std::cout << "\nStatus-Filter:\n";
+      std::cout << "  [0] Alle\n";
+      std::cout << "  [1] Erfasst\n";
+      std::cout << "  [2] In Analyse\n";
+      std::cout << "  [3] Analysiert\n";
+      std::cout << "  [4] Validiert\n";
+      std::cout << "  [5] Archiviert\n";
+      std::string statusChoice = readInput("Status-Auswahl (0-5, optional)");
+      if (!running_)
+        return;
+      statusChoice = trim(statusChoice);
+      if (statusChoice.empty() || statusChoice == "0") {
+        std::string excludeInput =
+            readInput("Archivierte ausblenden? (j/n)");
+        if (!running_)
+          return;
+        excludeInput = trim(excludeInput);
+        filter.excludeArchived =
+            (!excludeInput.empty() &&
+             (excludeInput == "j" || excludeInput == "ja" ||
+              excludeInput == "y" || excludeInput == "yes"));
+        break;
+      }
       if (statusChoice == "1") {
         filter.status = "Erfasst";
       } else if (statusChoice == "2") {
@@ -417,47 +429,46 @@ void CliInterface::handleListSamples() {
         filter.status = "Archiviert";
       } else {
         std::cout << "\n✗ Ungültige Status-Auswahl.\n";
-        waitForEnter();
-        return;
+        continue;
       }
-    } else {
-      filter.excludeArchived = true;
+      break;
     }
 
-    std::string fromDateInput =
-        readInput("Von-Datum (YYYY-MM-DD, optional)");
-    if (!running_)
-      return;
-    fromDateInput = trim(fromDateInput);
-    if (!fromDateInput.empty()) {
-      std::time_t fromDate;
-      if (!parseDate(fromDateInput, fromDate)) {
-        std::cout << "\n✗ Ungültiges Von-Datum.\n";
-        waitForEnter();
+    while (true) {
+      std::string fromDateInput =
+          readInput("Von-Datum (YYYY-MM-DD, optional)");
+      if (!running_)
         return;
+      fromDateInput = trim(fromDateInput);
+      if (!fromDateInput.empty()) {
+        std::time_t fromDate;
+        if (!parseDate(fromDateInput, fromDate)) {
+          std::cout << "\n✗ Ungültiges Von-Datum.\n";
+          continue;
+        }
+        filter.fromDate = fromDate;
       }
-      filter.fromDate = fromDate;
-    }
 
-    std::string toDateInput = readInput("Bis-Datum (YYYY-MM-DD, optional)");
-    if (!running_)
-      return;
-    toDateInput = trim(toDateInput);
-    if (!toDateInput.empty()) {
-      std::time_t toDate;
-      if (!parseDate(toDateInput, toDate)) {
-        std::cout << "\n✗ Ungültiges Bis-Datum.\n";
-        waitForEnter();
+      std::string toDateInput = readInput("Bis-Datum (YYYY-MM-DD, optional)");
+      if (!running_)
         return;
+      toDateInput = trim(toDateInput);
+      if (!toDateInput.empty()) {
+        std::time_t toDate;
+        if (!parseDate(toDateInput, toDate)) {
+          std::cout << "\n✗ Ungültiges Bis-Datum.\n";
+          continue;
+        }
+        filter.toDate = toDate + (24 * 60 * 60 - 1);
       }
-      filter.toDate = toDate + (24 * 60 * 60 - 1);
-    }
 
-    if (filter.fromDate.has_value() && filter.toDate.has_value() &&
-        filter.fromDate.value() > filter.toDate.value()) {
-      std::cout << "\n✗ Von-Datum darf nicht nach dem Bis-Datum liegen.\n";
-      waitForEnter();
-      return;
+      if (filter.fromDate.has_value() && filter.toDate.has_value() &&
+          filter.fromDate.value() > filter.toDate.value()) {
+        std::cout << "\n✗ Von-Datum darf nicht nach dem Bis-Datum liegen.\n";
+        filter.toDate.reset();
+        continue;
+      }
+      break;
     }
   }
 
@@ -669,39 +680,31 @@ void CliInterface::handleUpdateSample() {
   std::cout << "  Status: " << oldStatus << "\n";
   std::cout << "  Beschreibung: " << sample->getDescription() << "\n\n";
 
-  std::cout << "Status-Optionen:\n";
-  std::cout << "  [1] Erfasst\n";
-  std::cout << "  [2] In Analyse\n";
-  std::cout << "  [3] Analysiert\n";
-  std::cout << "  [4] Validiert\n";
-  std::cout << "  [5] Archiviert\n\n";
+  const std::vector<core::Sample::Status> statusOptions = {
+      core::Sample::Status::REGISTERED, core::Sample::Status::IN_ANALYSIS,
+      core::Sample::Status::ANALYZED, core::Sample::Status::VALIDATED,
+      core::Sample::Status::ARCHIVED};
 
-  int statusChoice = readInteger("Neuer Status (1-5)");
+  std::cout << "Status-Optionen:\n";
+  for (size_t i = 0; i < statusOptions.size(); ++i) {
+    std::cout << "  [" << (i + 1) << "] "
+              << core::Sample::statusToString(statusOptions[i]) << "\n";
+  }
+  std::cout << "\n";
+
+  int statusChoice =
+      readInteger("Neuer Status (1-" + std::to_string(statusOptions.size()) +
+                  ")");
   if (!running_)
     return; // EOF
 
-  core::Sample::Status newStatus;
-  switch (statusChoice) {
-  case 1:
-    newStatus = core::Sample::Status::REGISTERED;
-    break;
-  case 2:
-    newStatus = core::Sample::Status::IN_ANALYSIS;
-    break;
-  case 3:
-    newStatus = core::Sample::Status::ANALYZED;
-    break;
-  case 4:
-    newStatus = core::Sample::Status::VALIDATED;
-    break;
-  case 5:
-    newStatus = core::Sample::Status::ARCHIVED;
-    break;
-  default:
+  if (statusChoice < 1 ||
+      static_cast<size_t>(statusChoice) > statusOptions.size()) {
     std::cout << "\nUngültige Auswahl.\n";
     waitForEnter();
     return;
   }
+  core::Sample::Status newStatus = statusOptions[statusChoice - 1];
 
   if (newStatus == oldStatusEnum) {
     std::cout << "\nℹ Status bleibt unverändert.\n";

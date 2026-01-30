@@ -904,6 +904,16 @@ bool Database::updateSample(const core::Sample &sample,
     return false;
   }
 
+  char *errMsg = nullptr;
+  int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
+                        &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Starten der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    return false;
+  }
+
   const char *updateSQL = R"(
         UPDATE samples SET
             sample_id = ?,
@@ -916,9 +926,10 @@ bool Database::updateSample(const core::Sample &sample,
     )";
 
   sqlite3_stmt *rawStmt = nullptr;
-  int rc = sqlite3_prepare_v2(db_, updateSQL, -1, &rawStmt, nullptr);
+  rc = sqlite3_prepare_v2(db_, updateSQL, -1, &rawStmt, nullptr);
 
   if (rc != SQLITE_OK) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     setError("Fehler beim Vorbereiten des UPDATE: " +
              std::string(sqlite3_errmsg(db_)));
     return false;
@@ -943,6 +954,7 @@ bool Database::updateSample(const core::Sample &sample,
   rc = sqlite3_step(stmt.get());
 
   if (rc != SQLITE_DONE) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     setError("Fehler beim Aktualisieren der Probe: " +
              std::string(sqlite3_errmsg(db_)));
     return false;
@@ -966,8 +978,23 @@ bool Database::updateSample(const core::Sample &sample,
 
   const std::string detailText =
       hasChanges ? details.str() : "Keine Änderungen";
-  logSampleAction(core::AuditEntry::ActionType::UPDATE, sample.getSampleId(),
-                  normalizeActor(actor), detailText);
+  core::AuditEntry entry(core::AuditEntry::ActionType::UPDATE,
+                         core::AuditEntry::EntityType::SAMPLE,
+                         sample.getSampleId(), normalizeActor(actor),
+                         detailText);
+  if (!logAudit(entry)) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
+
+  rc = sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Commit der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
 
   return true;
 }

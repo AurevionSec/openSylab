@@ -285,10 +285,7 @@ bool test_database_LogSampleStatusUpdate() {
   auto retrieved = db.getSampleByBarcode("AUDIT001");
   ASSERT_NOT_NULL(retrieved);
   retrieved->setStatus(Sample::Status::VALIDATED);
-  ASSERT_TRUE(db.updateSample(*retrieved));
-
-  db.logSampleAction(AuditEntry::ActionType::UPDATE, "AUDIT001", "tester",
-                     "Status: Erfasst -> Validiert");
+  ASSERT_TRUE(db.updateSample(*retrieved, "tester"));
 
   auto entries = db.getAuditLogByEntity(AuditEntry::EntityType::SAMPLE,
                                         "AUDIT001");
@@ -298,7 +295,15 @@ bool test_database_LogSampleStatusUpdate() {
       findAuditEntry(entries, AuditEntry::ActionType::UPDATE,
                      AuditEntry::EntityType::SAMPLE, "AUDIT001", "tester");
   ASSERT_NOT_NULL(entry);
-  ASSERT_EQ(entry->getDetails(), "Status: Erfasst -> Validiert");
+  ASSERT_NE(entry->getDetails().find("Status"), std::string::npos);
+  ASSERT_NE(entry->getDetails().find("Erfasst"), std::string::npos);
+  ASSERT_NE(entry->getDetails().find("Validiert"), std::string::npos);
+
+  Database::SampleFilter statusFilter;
+  statusFilter.status = Sample::statusToString(Sample::Status::VALIDATED);
+  auto filtered = db.getSamplesByFilter(statusFilter);
+  ASSERT_FALSE(db.hasError());
+  ASSERT_FALSE(filtered.empty());
 
   db.close();
   std::remove(dbPath.c_str());
