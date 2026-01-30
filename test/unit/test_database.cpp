@@ -1382,6 +1382,36 @@ bool test_database_LdapAuthenticationRejectsInactiveLocal() {
   return true;
 }
 
+bool test_database_LdapAuthenticationRejectsWrongPassword() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  ASSERT_TRUE(db.setLdapEnabled(true));
+
+  const std::string username = "ldap_bad_pw";
+  const std::string password = "secret";
+  ASSERT_TRUE(db.upsertLdapUser(username, User::hashPassword(password), true,
+                                false, ""));
+
+  auto auth = db.authenticateUser(username, "wrong");
+  ASSERT_TRUE(auth == nullptr);
+  ASSERT_FALSE(db.getLastError().empty());
+
+  auto entries =
+      db.getAuditLogByEntity(AuditEntry::EntityType::USER, username);
+  const AuditEntry *entry =
+      findAuditEntry(entries, AuditEntry::ActionType::UPDATE,
+                     AuditEntry::EntityType::USER, username, username);
+  ASSERT_NOT_NULL(entry);
+  ASSERT_NE(entry->getDetails().find("LDAP"), std::string::npos);
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
 bool test_database_MfaRequiredFlowLocalUser() {
   std::string dbPath = uniqueDbPath();
   Database db(dbPath);
@@ -1465,6 +1495,16 @@ bool test_database_AuthAuditLogging() {
       db.getAuditLogByEntity(AuditEntry::EntityType::USER, username);
   ASSERT_FALSE(entries.empty());
 
+  bool foundLogin = false;
+  for (const auto &entry : entries) {
+    if (entry && entry->getAction() == AuditEntry::ActionType::LOGIN) {
+      foundLogin = true;
+      ASSERT_NE(entry->getDetails().find("Methode"), std::string::npos);
+      break;
+    }
+  }
+  ASSERT_TRUE(foundLogin);
+
   db.close();
   std::remove(dbPath.c_str());
   return true;
@@ -1494,6 +1534,37 @@ bool test_database_SessionStartAndEnd() {
   ASSERT_TRUE(db.endSession(userId, username, "logout"));
   ASSERT_EQ(db.getActiveSessionCount(userId), 0);
   ASSERT_EQ(db.getSessionCount(userId), 1);
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_database_MfaRequiredLogsAuditOnMissingCode() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  const std::string username = "mfa_missing";
+  const std::string password = "secret";
+  const std::string secret = "MISSING_MFA_SECRET";
+
+  User user(username, User::hashPassword(password), User::Role::OPERATOR);
+  ASSERT_TRUE(db.createUser(user));
+  ASSERT_TRUE(db.setUserMfaRequirement(username, true, secret));
+
+  auto missing = db.authenticateUser(username, password);
+  ASSERT_TRUE(missing == nullptr);
+  ASSERT_NE(db.getLastError().find("MFA"), std::string::npos);
+
+  auto entries =
+      db.getAuditLogByEntity(AuditEntry::EntityType::USER, username);
+  const AuditEntry *entry =
+      findAuditEntry(entries, AuditEntry::ActionType::UPDATE,
+                     AuditEntry::EntityType::USER, username, username);
+  ASSERT_NOT_NULL(entry);
+  ASSERT_NE(entry->getDetails().find("MFA erforderlich"), std::string::npos);
 
   db.close();
   std::remove(dbPath.c_str());
@@ -2051,11 +2122,15 @@ void registerDatabaseTests() {
                test_database_AuthConfigLdapEnabled);
   registerTest("Database::LdapAuthenticationPath",
                test_database_LdapAuthenticationPath);
+  registerTest("Database::LdapAuthenticationRejectsWrongPassword",
+               test_database_LdapAuthenticationRejectsWrongPassword);
   registerTest("Database::LdapAuthenticationRejectsInactiveLocal",
                test_database_LdapAuthenticationRejectsInactiveLocal);
   registerTest("Database::MfaRequiredFlowLocalUser",
                test_database_MfaRequiredFlowLocalUser);
   registerTest("Database::AuthAuditLogging", test_database_AuthAuditLogging);
+  registerTest("Database::MfaRequiredLogsAuditOnMissingCode",
+               test_database_MfaRequiredLogsAuditOnMissingCode);
   registerTest("Database::SessionStartAndEnd", test_database_SessionStartAndEnd);
   registerTest("Database::NoSessionOnFailedAuth",
                test_database_NoSessionOnFailedAuth);

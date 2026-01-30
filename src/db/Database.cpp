@@ -4919,6 +4919,21 @@ Database::AuthResult Database::authenticatePrimary(const std::string &username,
         result.mfaSecret = ldapSecret;
         return result;
       }
+      if (rc != SQLITE_DONE) {
+        const std::string msg = "LDAP-Abfrage fehlgeschlagen";
+        setError(msg);
+        logUserAction(core::AuditEntry::ActionType::UPDATE, actor, actor,
+                      "Login fehlgeschlagen (LDAP, Abfragefehler)");
+        setError(msg);
+        return result;
+      }
+    } else {
+      const std::string msg = "LDAP-Abfrage konnte nicht vorbereitet werden";
+      setError(msg);
+      logUserAction(core::AuditEntry::ActionType::UPDATE, actor, actor,
+                    "Login fehlgeschlagen (LDAP, Abfragefehler)");
+      setError(msg);
+      return result;
     }
     clearError();
   }
@@ -5014,7 +5029,17 @@ Database::authenticateUser(const std::string &username,
       pendingAuth_.username = actor;
       pendingAuth_.method = result.method;
       pendingAuth_.mfaSecret = result.mfaSecret;
-      setError("MFA erforderlich. Bitte MFA-Code eingeben.");
+      const std::string msg = "MFA erforderlich. Bitte MFA-Code eingeben.";
+      const std::string prevError = lastError_;
+      logUserAction(core::AuditEntry::ActionType::UPDATE, actor, actor,
+                    "Login fehlgeschlagen (" + methodStr +
+                        ", MFA erforderlich)");
+      if (!prevError.empty()) {
+        lastError_ = prevError;
+      } else if (!lastError_.empty()) {
+        clearError();
+      }
+      setError(msg);
       return nullptr;
     }
 
