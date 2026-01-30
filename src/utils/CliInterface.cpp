@@ -2086,6 +2086,12 @@ void CliInterface::handleDeleteOrder() {
   printSeparator();
   std::cout << "\n";
 
+  if (!canEdit()) {
+    std::cout << "✗ Keine Berechtigung. Bitte anmelden.\n";
+    waitForEnter();
+    return;
+  }
+
   int id = readInteger("Auftrags-ID (numerisch)");
   if (!running_)
     return;
@@ -2116,6 +2122,7 @@ void CliInterface::handleDeleteOrder() {
   if (confirmLower == "ja" || confirmLower == "j" || confirmLower == "yes" ||
       confirmLower == "y") {
     order->setStatus(core::Order::Status::CANCELLED);
+    order->setCompletedDate(0);
     if (database_->updateOrder(*order, getCurrentUsername())) {
       std::cout << "\n✓ Auftrag erfolgreich storniert!\n";
     } else {

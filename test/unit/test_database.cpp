@@ -1793,8 +1793,13 @@ bool test_database_CancelOrderLogsAudit() {
 
   auto stored = db.getOrderByOrderId("ORD_CANCEL");
   ASSERT_NOT_NULL(stored);
+  stored->setCompletedDate(std::time(nullptr));
   stored->setStatus(Order::Status::CANCELLED);
   ASSERT_TRUE(db.updateOrder(*stored, "tester"));
+
+  auto updated = db.getOrderByOrderId("ORD_CANCEL");
+  ASSERT_NOT_NULL(updated);
+  ASSERT_EQ(updated->getStatus(), Order::Status::CANCELLED);
 
   auto entries =
       db.getAuditLogByEntity(AuditEntry::EntityType::ORDER, "ORD_CANCEL");
