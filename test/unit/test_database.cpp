@@ -846,6 +846,29 @@ bool test_database_LogRoleAction() {
   return true;
 }
 
+bool test_database_LogSupportAccess() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  ASSERT_TRUE(
+      db.logSupportAccess(AuditEntry::EntityType::SAMPLE, "SUP_S1", "support",
+                          "support_view"));
+
+  auto entries =
+      db.getAuditLogByEntity(AuditEntry::EntityType::SAMPLE, "SUP_S1");
+  const AuditEntry *entry =
+      findAuditEntry(entries, AuditEntry::ActionType::UPDATE,
+                     AuditEntry::EntityType::SAMPLE, "SUP_S1", "support");
+  ASSERT_NOT_NULL(entry);
+  ASSERT_NE(entry->getDetails().find("support"), std::string::npos);
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
 bool test_database_AuditLogFiltering() {
   std::string dbPath = uniqueDbPath();
   Database db(dbPath);
@@ -1835,6 +1858,7 @@ void registerDatabaseTests() {
   registerTest("Database::AssignUserRoleCustom",
                test_database_AssignUserRoleCustom);
   registerTest("Database::LogRoleAction", test_database_LogRoleAction);
+  registerTest("Database::LogSupportAccess", test_database_LogSupportAccess);
   registerTest("Database::AuditLogFiltering",
                test_database_AuditLogFiltering);
   registerTest("Database::AuditLogFilterReset",

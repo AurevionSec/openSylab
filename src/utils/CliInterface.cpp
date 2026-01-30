@@ -502,13 +502,25 @@ void CliInterface::handleSearchSample() {
   auto sample = database_->getSampleByBarcode(sampleId);
 
   if (sample) {
+    const bool supportView = canAccessSupportData() && !isAdmin();
+    if (supportView) {
+      const std::string actor =
+          currentUser_ ? currentUser_->getUsername() : std::string("system");
+      if (!database_->logSupportAccess(core::AuditEntry::EntityType::SAMPLE,
+                                       sample->getSampleId(), actor)) {
+        std::cout << "\n⚠ Zugriff konnte nicht protokolliert werden: "
+                  << database_->getLastError() << "\n";
+      }
+    }
     printSeparator();
     std::cout << "\nProbe gefunden:\n\n";
     std::cout << "  ID:                " << sample->getId() << "\n";
     std::cout << "  Proben-ID:         " << sample->getSampleId() << "\n";
     std::cout << "  Patienten-ID:      " << sample->getPatientId() << "\n";
-    std::cout << "  Patientenname:     " << sample->getPatientName() << "\n";
-    std::cout << "  Beschreibung:      " << sample->getDescription() << "\n";
+    if (!supportView) {
+      std::cout << "  Patientenname:     " << sample->getPatientName() << "\n";
+      std::cout << "  Beschreibung:      " << sample->getDescription() << "\n";
+    }
     std::cout << "  Status:            " << sample->getStatusString() << "\n";
 
     std::time_t regDate = sample->getRegistrationDate();
@@ -1558,6 +1570,31 @@ bool CliInterface::canAccessDiagnostics() {
   return false;
 }
 
+bool CliInterface::canAccessSupportData() {
+  if (!currentUser_) {
+    return false;
+  }
+  if (isAdmin()) {
+    return true;
+  }
+  const std::string roleName = currentUser_->getRoleName();
+  if (roleName.empty()) {
+    return false;
+  }
+  if (toLowerCopy(roleName) == "support") {
+    return true;
+  }
+  const auto permissions = database_->getRolePermissions(roleName);
+  for (const auto &perm : permissions) {
+    const std::string lower = toLowerCopy(perm);
+    if (lower == "support" || lower == "support_data" ||
+        lower == "support-data") {
+      return true;
+    }
+  }
+  return false;
+}
+
 void CliInterface::handleListOrders() {
   clearScreen();
   printSeparator();
@@ -1649,6 +1686,16 @@ void CliInterface::handleSearchOrder() {
   auto order = database_->getOrderByOrderId(orderId);
 
   if (order) {
+    const bool supportView = canAccessSupportData() && !isAdmin();
+    if (supportView) {
+      const std::string actor =
+          currentUser_ ? currentUser_->getUsername() : std::string("system");
+      if (!database_->logSupportAccess(core::AuditEntry::EntityType::ORDER,
+                                       order->getOrderId(), actor)) {
+        std::cout << "\n⚠ Zugriff konnte nicht protokolliert werden: "
+                  << database_->getLastError() << "\n";
+      }
+    }
     printSeparator();
     std::cout << "\nAuftrag gefunden:\n\n";
     std::cout << "  ID:              " << order->getId() << "\n";
@@ -1657,7 +1704,9 @@ void CliInterface::handleSearchOrder() {
     std::cout << "  Testtyp:         " << order->getTestType() << "\n";
     std::cout << "  Status:          " << order->getStatusString() << "\n";
     std::cout << "  Priorität:       " << order->getPriorityString() << "\n";
-    std::cout << "  Notizen:         " << order->getNotes() << "\n";
+    if (!supportView) {
+      std::cout << "  Notizen:         " << order->getNotes() << "\n";
+    }
 
     std::time_t reqDate = order->getRequestedDate();
     std::cout << "  Angefordert am:  " << std::ctime(&reqDate);
@@ -2050,6 +2099,16 @@ void CliInterface::handleSearchResult() {
   if (database_->hasError() || !result) {
     std::cout << "\n✗ Ergebnis nicht gefunden.\n";
   } else {
+    const bool supportView = canAccessSupportData() && !isAdmin();
+    if (supportView) {
+      const std::string actor =
+          currentUser_ ? currentUser_->getUsername() : std::string("system");
+      if (!database_->logSupportAccess(core::AuditEntry::EntityType::RESULT,
+                                       result->getResultId(), actor)) {
+        std::cout << "\n⚠ Zugriff konnte nicht protokolliert werden: "
+                  << database_->getLastError() << "\n";
+      }
+    }
     std::cout << "\n✓ Ergebnis gefunden:\n";
     printSeparator();
     std::cout << "  ID:              " << result->getId() << "\n";
@@ -2058,13 +2117,15 @@ void CliInterface::handleSearchResult() {
     std::cout << "  Testparameter:   " << result->getTestParameter() << "\n";
     std::cout << "  Messwert:        " << result->getValue() << " "
               << result->getUnit() << "\n";
-    std::cout << "  Referenzbereich: " << result->getReferenceRange() << "\n";
-    std::cout << "  Ref. niedrig:    " << result->getReferenceLow() << "\n";
-    std::cout << "  Ref. hoch:       " << result->getReferenceHigh() << "\n";
     std::cout << "  Status:          " << result->getStatusString() << "\n";
     std::cout << "  Flag:            " << result->getFlagString() << "\n";
-    std::cout << "  Gemessen von:    " << result->getMeasuredBy() << "\n";
-    std::cout << "  Kommentar:       " << result->getComment() << "\n";
+    if (!supportView) {
+      std::cout << "  Referenzbereich: " << result->getReferenceRange() << "\n";
+      std::cout << "  Ref. niedrig:    " << result->getReferenceLow() << "\n";
+      std::cout << "  Ref. hoch:       " << result->getReferenceHigh() << "\n";
+      std::cout << "  Gemessen von:    " << result->getMeasuredBy() << "\n";
+      std::cout << "  Kommentar:       " << result->getComment() << "\n";
+    }
   }
 
   waitForEnter();

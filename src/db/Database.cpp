@@ -3054,6 +3054,17 @@ void Database::logRoleAction(core::AuditEntry::ActionType action,
   (void)logAudit(entry);
 }
 
+bool Database::logSupportAccess(core::AuditEntry::EntityType entity,
+                                const std::string &entityId,
+                                const std::string &user,
+                                const std::string &details) {
+  const std::string actor = normalizeActor(user);
+  const std::string info = details.empty() ? "support_access" : details;
+  core::AuditEntry entry(core::AuditEntry::ActionType::UPDATE, entity, entityId,
+                         actor, info);
+  return logAudit(entry);
+}
+
 void Database::logResultRetryImport(const std::vector<std::string> &resultIds,
                                     const std::string &user,
                                     const std::string &filePath) {

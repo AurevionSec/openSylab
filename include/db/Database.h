@@ -226,6 +226,10 @@ public:
   void logRoleAction(core::AuditEntry::ActionType action,
                      const std::string &roleName, const std::string &user,
                      const std::string &details = "");
+  [[nodiscard]] bool logSupportAccess(core::AuditEntry::EntityType entity,
+                                      const std::string &entityId,
+                                      const std::string &user,
+                                      const std::string &details = "");
   void logResultRetryImport(const std::vector<std::string> &resultIds,
                             const std::string &user,
                             const std::string &filePath);
