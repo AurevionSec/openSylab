@@ -562,13 +562,13 @@ void CliInterface::handleListSamples() {
   }
 
   std::string autoRefreshInput =
-      readInput("\nAuto-Refresh alle 5s aktivieren? (j/n)");
+      readInput("\nAuto-Refresh alle 5s aktivieren? (j/n, Enter=ja)");
   if (!running_)
     return;
   autoRefreshInput = trim(autoRefreshInput);
-  if (!autoRefreshInput.empty() &&
-      (autoRefreshInput == "j" || autoRefreshInput == "ja" ||
-       autoRefreshInput == "y" || autoRefreshInput == "yes")) {
+  if (autoRefreshInput.empty() ||
+      autoRefreshInput == "j" || autoRefreshInput == "ja" ||
+      autoRefreshInput == "y" || autoRefreshInput == "yes") {
     const int refreshSeconds = autoRefreshIntervalSeconds();
     std::cout << "\nAuto-Refresh aktiv. 'q' + Enter beendet.\n";
     while (waitForAutoRefresh(refreshSeconds)) {
@@ -640,13 +640,13 @@ void CliInterface::handleSearchSample() {
     printSampleDetail(*sample, supportView);
 
     std::string autoRefreshInput =
-        readInput("\nAuto-Refresh alle 5s aktivieren? (j/n)");
+        readInput("\nAuto-Refresh alle 5s aktivieren? (j/n, Enter=ja)");
     if (!running_)
       return;
     autoRefreshInput = trim(autoRefreshInput);
-    if (!autoRefreshInput.empty() &&
-        (autoRefreshInput == "j" || autoRefreshInput == "ja" ||
-         autoRefreshInput == "y" || autoRefreshInput == "yes")) {
+    if (autoRefreshInput.empty() ||
+        autoRefreshInput == "j" || autoRefreshInput == "ja" ||
+        autoRefreshInput == "y" || autoRefreshInput == "yes") {
       const int refreshSeconds = autoRefreshIntervalSeconds();
       std::cout << "\nAuto-Refresh aktiv. 'q' + Enter beendet.\n";
       while (waitForAutoRefresh(refreshSeconds)) {
@@ -1911,13 +1911,13 @@ void CliInterface::handleListOrders() {
   }
 
   std::string autoRefreshInput =
-      readInput("\nAuto-Refresh alle 5s aktivieren? (j/n)");
+      readInput("\nAuto-Refresh alle 5s aktivieren? (j/n, Enter=ja)");
   if (!running_)
     return;
   autoRefreshInput = trim(autoRefreshInput);
-  if (!autoRefreshInput.empty() &&
-      (autoRefreshInput == "j" || autoRefreshInput == "ja" ||
-       autoRefreshInput == "y" || autoRefreshInput == "yes")) {
+  if (autoRefreshInput.empty() ||
+      autoRefreshInput == "j" || autoRefreshInput == "ja" ||
+      autoRefreshInput == "y" || autoRefreshInput == "yes") {
     const int refreshSeconds = autoRefreshIntervalSeconds();
     std::cout << "\nAuto-Refresh aktiv. 'q' + Enter beendet.\n";
     while (waitForAutoRefresh(refreshSeconds)) {
@@ -2018,13 +2018,13 @@ void CliInterface::handleSearchOrder() {
     printOrderDetail(*order, supportView);
 
     std::string autoRefreshInput =
-        readInput("\nAuto-Refresh alle 5s aktivieren? (j/n)");
+        readInput("\nAuto-Refresh alle 5s aktivieren? (j/n, Enter=ja)");
     if (!running_)
       return;
     autoRefreshInput = trim(autoRefreshInput);
-    if (!autoRefreshInput.empty() &&
-        (autoRefreshInput == "j" || autoRefreshInput == "ja" ||
-         autoRefreshInput == "y" || autoRefreshInput == "yes")) {
+    if (autoRefreshInput.empty() ||
+        autoRefreshInput == "j" || autoRefreshInput == "ja" ||
+        autoRefreshInput == "y" || autoRefreshInput == "yes") {
       const int refreshSeconds = autoRefreshIntervalSeconds();
       std::cout << "\nAuto-Refresh aktiv. 'q' + Enter beendet.\n";
       while (waitForAutoRefresh(refreshSeconds)) {
@@ -2231,6 +2231,49 @@ void CliInterface::handleOrdersForSample() {
     std::cout << "\nGesamt: " << orders.size() << " Aufträge\n";
   }
 
+  std::string autoRefreshInput =
+      readInput("\nAuto-Refresh alle 5s aktivieren? (j/n, Enter=ja)");
+  if (!running_)
+    return;
+  autoRefreshInput = trim(autoRefreshInput);
+  if (autoRefreshInput.empty() || autoRefreshInput == "j" ||
+      autoRefreshInput == "ja" || autoRefreshInput == "y" ||
+      autoRefreshInput == "yes") {
+    const int refreshSeconds = autoRefreshIntervalSeconds();
+    std::cout << "\nAuto-Refresh aktiv. 'q' + Enter beendet.\n";
+    while (waitForAutoRefresh(refreshSeconds)) {
+      clearScreen();
+      printSeparator();
+      std::cout << "        AUFTRÄGE ZU PROBE ANZEIGEN\n";
+      printSeparator();
+      std::cout << "\n";
+      std::cout << "Probe: " << sampleId << "\n\n";
+      auto refreshed = database_->getOrdersBySampleId(sampleId);
+      if (database_->hasError()) {
+        std::cout << "✗ Fehler beim Abrufen der Aufträge:\n";
+        std::cout << "  " << database_->getLastError() << "\n";
+      } else if (refreshed.empty()) {
+        std::cout << "\nℹ Keine Aufträge für diese Probe vorhanden.\n";
+      } else {
+        std::cout << std::left << std::setw(5) << "ID" << std::setw(12)
+                  << "Auftrags-ID" << std::setw(15) << "Testtyp"
+                  << std::setw(14) << "Status" << std::setw(10)
+                  << "Priorität" << "\n";
+        printSeparator();
+        for (const auto &order : refreshed) {
+          std::cout << std::left << std::setw(5) << order->getId()
+                    << std::setw(12) << order->getOrderId() << std::setw(15)
+                    << order->getTestType() << std::setw(14)
+                    << order->getStatusString() << std::setw(10)
+                    << order->getPriorityString() << "\n";
+        }
+        std::cout << "\nGesamt: " << refreshed.size() << " Aufträge\n";
+      }
+      std::cout << "\nAuto-Refresh aktiv. 'q' + Enter beendet.\n";
+    }
+    return;
+  }
+
   waitForEnter();
 }
 
@@ -2430,13 +2473,13 @@ void CliInterface::handleListResults() {
   printResults(results, supportView);
 
   std::string autoRefreshInput =
-      readInput("\nAuto-Refresh alle 5s aktivieren? (j/n)");
+      readInput("\nAuto-Refresh alle 5s aktivieren? (j/n, Enter=ja)");
   if (!running_)
     return;
   autoRefreshInput = trim(autoRefreshInput);
-  if (!autoRefreshInput.empty() &&
-      (autoRefreshInput == "j" || autoRefreshInput == "ja" ||
-       autoRefreshInput == "y" || autoRefreshInput == "yes")) {
+  if (autoRefreshInput.empty() ||
+      autoRefreshInput == "j" || autoRefreshInput == "ja" ||
+      autoRefreshInput == "y" || autoRefreshInput == "yes") {
     const int refreshSeconds = autoRefreshIntervalSeconds();
     std::cout << "\nAuto-Refresh aktiv. 'q' + Enter beendet.\n";
     while (waitForAutoRefresh(refreshSeconds)) {
@@ -2512,13 +2555,13 @@ void CliInterface::handleSearchResult() {
     printResultDetail(*result, supportView);
 
     std::string autoRefreshInput =
-        readInput("\nAuto-Refresh alle 5s aktivieren? (j/n)");
+        readInput("\nAuto-Refresh alle 5s aktivieren? (j/n, Enter=ja)");
     if (!running_)
       return;
     autoRefreshInput = trim(autoRefreshInput);
-    if (!autoRefreshInput.empty() &&
-        (autoRefreshInput == "j" || autoRefreshInput == "ja" ||
-         autoRefreshInput == "y" || autoRefreshInput == "yes")) {
+    if (autoRefreshInput.empty() ||
+        autoRefreshInput == "j" || autoRefreshInput == "ja" ||
+        autoRefreshInput == "y" || autoRefreshInput == "yes") {
       const int refreshSeconds = autoRefreshIntervalSeconds();
       std::cout << "\nAuto-Refresh aktiv. 'q' + Enter beendet.\n";
       while (waitForAutoRefresh(refreshSeconds)) {
@@ -2747,6 +2790,53 @@ void CliInterface::handleResultsForOrder() {
     }
 
     std::cout << "\nGesamt: " << results.size() << " Ergebnisse\n";
+  }
+
+  std::string autoRefreshInput =
+      readInput("\nAuto-Refresh alle 5s aktivieren? (j/n, Enter=ja)");
+  if (!running_)
+    return;
+  autoRefreshInput = trim(autoRefreshInput);
+  if (autoRefreshInput.empty() || autoRefreshInput == "j" ||
+      autoRefreshInput == "ja" || autoRefreshInput == "y" ||
+      autoRefreshInput == "yes") {
+    const int refreshSeconds = autoRefreshIntervalSeconds();
+    std::cout << "\nAuto-Refresh aktiv. 'q' + Enter beendet.\n";
+    while (waitForAutoRefresh(refreshSeconds)) {
+      clearScreen();
+      printSeparator();
+      std::cout << "      ERGEBNISSE ZU AUFTRAG ANZEIGEN\n";
+      printSeparator();
+      std::cout << "\n";
+      std::cout << "Auftrag: " << order->getOrderId() << " - "
+                << order->getTestType() << "\n\n";
+      auto refreshed = database_->getTestResultsByOrderId(orderId);
+      if (database_->hasError()) {
+        std::cout << "✗ Fehler beim Abrufen der Ergebnisse:\n";
+        std::cout << "  " << database_->getLastError() << "\n";
+      } else if (refreshed.empty()) {
+        std::cout << "ℹ Keine Ergebnisse für diesen Auftrag vorhanden.\n";
+      } else {
+        std::cout << std::left << std::setw(5) << "ID" << std::setw(12)
+                  << "Ergebnis-ID" << std::setw(15) << "Parameter"
+                  << std::setw(10) << "Wert" << std::setw(8) << "Einheit"
+                  << std::setw(12) << "Status" << std::setw(10) << "Flag"
+                  << "\n";
+        printSeparator();
+        for (const auto &result : refreshed) {
+          std::cout << std::left << std::setw(5) << result->getId()
+                    << std::setw(12) << result->getResultId()
+                    << std::setw(15) << result->getTestParameter()
+                    << std::setw(10) << result->getValue() << std::setw(8)
+                    << result->getUnit() << std::setw(12)
+                    << result->getStatusString() << std::setw(10)
+                    << result->getFlagString() << "\n";
+        }
+        std::cout << "\nGesamt: " << refreshed.size() << " Ergebnisse\n";
+      }
+      std::cout << "\nAuto-Refresh aktiv. 'q' + Enter beendet.\n";
+    }
+    return;
   }
 
   waitForEnter();
