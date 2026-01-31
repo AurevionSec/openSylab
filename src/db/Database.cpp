@@ -571,7 +571,8 @@ Database::HealthStatus Database::getHealthStatus() {
   };
 
   const std::vector<std::string> requiredTables = {
-      "samples", "orders", "test_results", "audit_log", "users"};
+      "samples", "orders", "test_results", "audit_log", "users",
+      "retention_settings"};
 
   for (const auto &table : requiredTables) {
     if (!tableExists(table)) {
