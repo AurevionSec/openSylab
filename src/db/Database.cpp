@@ -3449,7 +3449,7 @@ bool Database::logSupportAccess(core::AuditEntry::EntityType entity,
                                 const std::string &details) {
   const std::string actor = normalizeActor(user);
   const std::string info = details.empty() ? "support_access" : details;
-  core::AuditEntry entry(core::AuditEntry::ActionType::UPDATE, entity, entityId,
+  core::AuditEntry entry(core::AuditEntry::ActionType::ACCESS, entity, entityId,
                          actor, info);
   return logAudit(entry);
 }

@@ -25,7 +25,8 @@ public:
     LOGIN,   // Benutzer angemeldet
     LOGOUT,  // Benutzer abgemeldet
     VALIDATE, // Ergebnis validiert
-    EXPORT    // Daten exportiert
+    EXPORT,   // Daten exportiert
+    ACCESS    // Zugriff (z.B. Support)
   };
 
   /**

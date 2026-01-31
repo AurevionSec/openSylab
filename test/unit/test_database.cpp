@@ -1038,7 +1038,7 @@ bool test_database_LogSupportAccess() {
   auto entries =
       db.getAuditLogByEntity(AuditEntry::EntityType::SAMPLE, "SUP_S1");
   const AuditEntry *entry =
-      findAuditEntry(entries, AuditEntry::ActionType::UPDATE,
+      findAuditEntry(entries, AuditEntry::ActionType::ACCESS,
                      AuditEntry::EntityType::SAMPLE, "SUP_S1", "support");
   ASSERT_NOT_NULL(entry);
   ASSERT_NE(entry->getDetails().find("support"), std::string::npos);

@@ -39,6 +39,8 @@ std::string AuditEntry::actionToString(ActionType action) {
     return "Validiert";
   case ActionType::EXPORT:
     return "Exportiert";
+  case ActionType::ACCESS:
+    return "Zugriff";
   default:
     return "Unbekannt";
   }
@@ -53,6 +55,7 @@ AuditEntry::ActionType AuditEntry::stringToAction(const std::string &str) {
       {"Abgemeldet", ActionType::LOGOUT},   {"LOGOUT", ActionType::LOGOUT},
       {"Validiert", ActionType::VALIDATE},  {"VALIDATE", ActionType::VALIDATE},
       {"Exportiert", ActionType::EXPORT},   {"EXPORT", ActionType::EXPORT},
+      {"Zugriff", ActionType::ACCESS},      {"ACCESS", ActionType::ACCESS},
   };
 
   auto it = actionMap.find(str);

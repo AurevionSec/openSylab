@@ -486,9 +486,11 @@ void CliInterface::handleListSamples() {
     }
   }
 
+  const bool supportView = canAccessSupportData() && !isAdmin();
   auto printSamples = [&](const std::string &title,
                           const std::vector<std::unique_ptr<core::Sample>>
-                              &samplesToPrint) {
+                              &samplesToPrint,
+                          bool logAccess) {
     std::cout << "\n" << title << "\n";
     printSeparator();
     if (database_->hasError()) {
@@ -501,6 +503,15 @@ void CliInterface::handleListSamples() {
       return;
     }
 
+    if (logAccess) {
+      const std::string actor =
+          currentUser_ ? currentUser_->getUsername() : std::string("system");
+      for (const auto &sample : samplesToPrint) {
+        (void)database_->logSupportAccess(core::AuditEntry::EntityType::SAMPLE,
+                                          sample->getSampleId(), actor);
+      }
+    }
+
     std::cout << std::left << std::setw(5) << "ID" << std::setw(15)
               << "Proben-ID" << std::setw(15) << "Patienten-ID" << std::setw(25)
               << "Name" << std::setw(15) << "Status" << "\n";
@@ -510,7 +521,7 @@ void CliInterface::handleListSamples() {
       std::cout << std::left << std::setw(5) << sample->getId() << std::setw(15)
                 << sample->getSampleId() << std::setw(15)
                 << sample->getPatientId() << std::setw(25)
-                << sample->getPatientName() << std::setw(15)
+                << (supportView ? "-" : sample->getPatientName()) << std::setw(15)
                 << sample->getStatusString() << "\n";
     }
 
@@ -525,7 +536,8 @@ void CliInterface::handleListSamples() {
                      filter.fromDate.has_value() || filter.toDate.has_value();
   auto samples = database_->getSamplesByFilter(filter);
 
-  printSamples(hasCriteria ? "Suchergebnisse" : "Alle Proben", samples);
+  printSamples(hasCriteria ? "Suchergebnisse" : "Alle Proben", samples,
+               supportView);
 
   db::Database::SampleFilter activeFilter = filter;
   std::string activeTitle = hasCriteria ? "Suchergebnisse" : "Alle Proben";
@@ -543,7 +555,7 @@ void CliInterface::handleListSamples() {
       db::Database::SampleFilter resetFilter;
       resetFilter.excludeArchived = true;
       auto allSamples = database_->getSamplesByFilter(resetFilter);
-      printSamples("Alle Proben", allSamples);
+      printSamples("Alle Proben", allSamples, supportView);
       activeFilter = resetFilter;
       activeTitle = "Alle Proben";
     }
@@ -566,7 +578,7 @@ void CliInterface::handleListSamples() {
       printSeparator();
       std::cout << "\n";
       auto refreshed = database_->getSamplesByFilter(activeFilter);
-      printSamples(activeTitle, refreshed);
+      printSamples(activeTitle, refreshed, false);
       std::cout << "\nAuto-Refresh aktiv. 'q' + Enter beendet.\n";
     }
     return;
@@ -1801,6 +1813,7 @@ void CliInterface::handleListOrders() {
   filter.sampleId = sampleFilter;
   filter.priority = priorityFilter;
 
+  const bool supportView = canAccessSupportData() && !isAdmin();
   auto orders = (statusFilter.empty() && sampleFilter.empty() &&
                  priorityFilter.empty())
                     ? database_->getAllOrders()
@@ -1827,6 +1840,14 @@ void CliInterface::handleListOrders() {
   } else if (orders.empty()) {
     std::cout << "ℹ Keine Aufträge in der Datenbank.\n";
   } else {
+    if (supportView) {
+      const std::string actor =
+          currentUser_ ? currentUser_->getUsername() : std::string("system");
+      for (const auto &order : orders) {
+        (void)database_->logSupportAccess(core::AuditEntry::EntityType::ORDER,
+                                          order->getOrderId(), actor);
+      }
+    }
     std::cout << std::left << std::setw(5) << "ID" << std::setw(12)
               << "Auftrags-ID" << std::setw(12) << "Proben-ID" << std::setw(15)
               << "Testtyp" << std::setw(14) << "Status" << std::setw(10)
@@ -1861,6 +1882,14 @@ void CliInterface::handleListOrders() {
       } else if (orders.empty()) {
         std::cout << "ℹ Keine Aufträge in der Datenbank.\n";
       } else {
+        if (supportView) {
+          const std::string actor =
+              currentUser_ ? currentUser_->getUsername() : std::string("system");
+          for (const auto &order : orders) {
+            (void)database_->logSupportAccess(
+                core::AuditEntry::EntityType::ORDER, order->getOrderId(), actor);
+          }
+        }
         std::cout << std::left << std::setw(5) << "ID" << std::setw(12)
                   << "Auftrags-ID" << std::setw(12) << "Proben-ID"
                   << std::setw(15) << "Testtyp" << std::setw(14) << "Status"
@@ -2356,14 +2385,24 @@ void CliInterface::handleListResults() {
   printSeparator();
   std::cout << "\n";
 
+  const bool supportView = canAccessSupportData() && !isAdmin();
   auto printResults =
-      [&](const std::vector<std::unique_ptr<core::TestResult>> &entries) {
+      [&](const std::vector<std::unique_ptr<core::TestResult>> &entries,
+          bool logAccess) {
         if (database_->hasError()) {
           std::cout << "✗ Fehler beim Abrufen der Ergebnisse:\n";
           std::cout << "  " << database_->getLastError() << "\n";
         } else if (entries.empty()) {
           std::cout << "ℹ Keine Ergebnisse in der Datenbank vorhanden.\n";
         } else {
+          if (logAccess) {
+            const std::string actor =
+                currentUser_ ? currentUser_->getUsername() : std::string("system");
+            for (const auto &result : entries) {
+              (void)database_->logSupportAccess(core::AuditEntry::EntityType::RESULT,
+                                                result->getResultId(), actor);
+            }
+          }
           std::cout << std::left << std::setw(5) << "ID" << std::setw(12)
                     << "Ergebnis-ID" << std::setw(10) << "Auftrag"
                     << std::setw(15) << "Parameter" << std::setw(10) << "Wert"
@@ -2388,7 +2427,7 @@ void CliInterface::handleListResults() {
 
   auto results = database_->getAllTestResults();
 
-  printResults(results);
+  printResults(results, supportView);
 
   std::string autoRefreshInput =
       readInput("\nAuto-Refresh alle 5s aktivieren? (j/n)");
@@ -2407,7 +2446,7 @@ void CliInterface::handleListResults() {
       printSeparator();
       std::cout << "\n";
       auto refreshed = database_->getAllTestResults();
-      printResults(refreshed);
+      printResults(refreshed, false);
       std::cout << "\nAuto-Refresh aktiv. 'q' + Enter beendet.\n";
     }
     return;
