@@ -26,6 +26,7 @@ CsvResultImport::importResults(const std::string &filePath) {
   std::vector<core::TestResult> results;
   importedCount_ = 0;
   errorCount_ = 0;
+  importedRecords_.clear();
   failedRecords_.clear();
   lastError_.clear();
   headerLine_.clear();
@@ -37,7 +38,7 @@ CsvResultImport::importResults(const std::string &filePath) {
   }
 
   std::string line;
-  int lineNumber = 0;
+  int lineNumber = hasHeader_ ? 1 : 0;
   bool inQuotedField = false;
   std::string currentRecord;
 
@@ -237,6 +238,7 @@ bool CsvResultImport::processRecord(const std::string &record, int recordNumber,
   result.setFlag(result.evaluateFlag());
 
   results.push_back(result);
+  importedRecords_.push_back({result, recordNumber, record});
   return true;
 }
 

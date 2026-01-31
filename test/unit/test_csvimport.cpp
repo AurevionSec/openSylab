@@ -217,7 +217,7 @@ bool test_csvimport_FailedRowsTracked() {
   ASSERT_EQ(importer.getImportedCount(), 2);
   ASSERT_EQ(importer.getFailedCount(), 1);
   ASSERT_EQ(importer.getFailedRecords().size(), static_cast<size_t>(1));
-  ASSERT_EQ(importer.getFailedRecords()[0].recordNumber, 2);
+  ASSERT_EQ(importer.getFailedRecords()[0].recordNumber, 3);
 
   std::remove(csvPath.c_str());
   return true;

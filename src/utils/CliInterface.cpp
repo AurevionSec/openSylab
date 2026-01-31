@@ -2745,10 +2745,11 @@ void CliInterface::handleImportResultsCsv() {
 
     CsvResultImport importer(database_);
     auto results = importer.importResults(currentPath);
+    const auto &importedRecords = importer.getImportedRecords();
     std::vector<CsvResultImport::FailedRecord> dbFailedRecords;
     const bool isRetryAttempt = (currentPath != filePath);
 
-    if (results.empty()) {
+    if (importedRecords.empty()) {
       std::cout << "\n✗ Keine Ergebnisse importiert: "
                 << importer.getLastError() << "\n";
     } else {
@@ -2756,23 +2757,15 @@ void CliInterface::handleImportResultsCsv() {
       int failed = 0;
       std::vector<std::string> storedResultIds;
 
-      for (const auto &result : results) {
-        if (database_->createTestResult(result, getCurrentUsername())) {
+      for (const auto &record : importedRecords) {
+        if (database_->createTestResult(record.result, getCurrentUsername())) {
           stored++;
-          storedResultIds.push_back(result.getResultId());
+          storedResultIds.push_back(record.result.getResultId());
         } else {
           failed++;
           const std::string error = database_->getLastError();
-          dbFailedRecords.push_back({-1, result.getResultId() + "," +
-                                             std::to_string(result.getOrderId()) +
-                                             "," + result.getTestParameter() +
-                                             "," + result.getValue() + "," +
-                                             result.getUnit() + "," +
-                                             std::to_string(result.getReferenceLow()) +
-                                             "," +
-                                             std::to_string(result.getReferenceHigh()) +
-                                             "," + result.getMeasuredBy(),
-                                     error});
+          dbFailedRecords.push_back(
+              {record.recordNumber, record.record, error});
         }
       }
 

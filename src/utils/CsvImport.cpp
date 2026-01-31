@@ -92,6 +92,7 @@ CsvImport::importSamples(const std::string &filePath) {
   }
 
   int recordNumber = 0;
+  int lineNumber = hasHeader_ ? 1 : 0;
   int errorCount = 0;
 
   // Header-Zeile überspringen wenn vorhanden
@@ -118,7 +119,8 @@ CsvImport::importSamples(const std::string &filePath) {
       inQuotes = !inQuotes;
       record += c;
     } else if (c == '\n' && !inQuotes) {
-      recordNumber++;
+      lineNumber++;
+      recordNumber = lineNumber;
       if (!isEmptyRecord(record)) {
         if (!processRecord(record, recordNumber, samples)) {
           errorCount++;
@@ -139,7 +141,7 @@ CsvImport::importSamples(const std::string &filePath) {
 
   // Letzten Record verarbeiten (falls Datei nicht mit Newline endet)
   if (!isEmptyRecord(record)) {
-    recordNumber++;
+    recordNumber = lineNumber + 1;
     if (!processRecord(record, recordNumber, samples)) {
       errorCount++;
     }

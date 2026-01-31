@@ -27,6 +27,11 @@ public:
     std::string error;
   };
 
+  struct ImportedRecord {
+    core::TestResult result;
+    int recordNumber;
+    std::string record;
+  };
   /**
    * @brief Konstruktor
    * @param database Zeiger auf Datenbank für Validierung
@@ -93,6 +98,13 @@ public:
   }
 
   /**
+   * @brief Gibt alle erfolgreich importierten Records mit Metadaten zurück
+   */
+  const std::vector<ImportedRecord> &getImportedRecords() const {
+    return importedRecords_;
+  }
+
+  /**
    * @brief Schreibt fehlgeschlagene Records in eine Retry-CSV
    * @param filePath Zielpfad für Retry-Datei
    * @return true wenn Datei geschrieben wurde
@@ -109,6 +121,7 @@ private:
   std::string lastError_;
   int importedCount_;
   int errorCount_;
+  std::vector<ImportedRecord> importedRecords_;
   std::vector<FailedRecord> failedRecords_;
   std::string headerLine_;
 
