@@ -1298,11 +1298,20 @@ bool test_database_DiagnosticsLogs_FilterAndExport() {
   ASSERT_EQ(entries.size(), 1U);
   ASSERT_EQ(entries.front()->getEntity(), AuditEntry::EntityType::RESULT);
 
+  Database::DiagnosticsFilter orderingFilter;
+  orderingFilter.fromTime = now - 2000;
+  orderingFilter.toTime = now;
+  orderingFilter.limit = 10;
+  auto orderedEntries = db.getDiagnosticsLogs(orderingFilter);
+  ASSERT_EQ(orderedEntries.size(), 3U);
+  ASSERT_TRUE(orderedEntries[0]->getTimestamp() >= orderedEntries[1]->getTimestamp());
+  ASSERT_TRUE(orderedEntries[1]->getTimestamp() >= orderedEntries[2]->getTimestamp());
+
   std::string exportPath = "test_diag_export.csv";
   int exported = 0;
-  ASSERT_TRUE(
-      db.exportDiagnosticsLogsToCsv(exportPath, filter, "admin", exported));
-  ASSERT_EQ(exported, 1);
+  ASSERT_TRUE(db.exportDiagnosticsLogsToCsv(exportPath, orderingFilter, "admin",
+                                            exported));
+  ASSERT_EQ(exported, 3);
 
   std::ifstream input(exportPath);
   ASSERT_TRUE(input.is_open());
@@ -1313,7 +1322,10 @@ bool test_database_DiagnosticsLogs_FilterAndExport() {
 
   std::string row;
   std::getline(input, row);
-  ASSERT_NE(row.find("DIA_R1"), std::string::npos);
+  ASSERT_NE(row.find("DIA_U1"), std::string::npos);
+  std::string row2;
+  std::getline(input, row2);
+  ASSERT_NE(row2.find("DIA_R1"), std::string::npos);
 
   input.close();
   std::remove(exportPath.c_str());
