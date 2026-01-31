@@ -351,6 +351,12 @@ bool CsvResultImport::validateHeader(const std::string &header) {
   if (fields.size() < 4 || fields.size() > expected.size()) {
     return false;
   }
+  if (!fields.empty()) {
+    const std::string bom = "\xEF\xBB\xBF";
+    if (fields[0].rfind(bom, 0) == 0) {
+      fields[0] = fields[0].substr(bom.size());
+    }
+  }
   for (size_t i = 0; i < fields.size(); ++i) {
     if (toLower(trim(fields[i])) != expected[i]) {
       return false;

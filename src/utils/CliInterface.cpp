@@ -627,13 +627,11 @@ void CliInterface::handleListSamples() {
   }
 
   std::string autoRefreshInput =
-      readInput("\nAuto-Refresh alle 5s aktivieren? (j/n, Enter=ja)");
+      readInput("\nAuto-Refresh alle 5s aktivieren? (j/n, Enter=nein)");
   if (!running_)
     return;
   autoRefreshInput = trim(autoRefreshInput);
-  if (autoRefreshInput.empty() ||
-      autoRefreshInput == "j" || autoRefreshInput == "ja" ||
-      autoRefreshInput == "y" || autoRefreshInput == "yes") {
+  if (CliInterface::isAutoRefreshEnabled(autoRefreshInput)) {
     const int refreshSeconds = autoRefreshIntervalSeconds();
     std::cout << "\nAuto-Refresh aktiv. 'q' + Enter beendet.\n";
     while (waitForAutoRefresh(refreshSeconds)) {
@@ -707,13 +705,11 @@ void CliInterface::handleSearchSample() {
     printSampleDetail(*sample, supportView);
 
     std::string autoRefreshInput =
-        readInput("\nAuto-Refresh alle 5s aktivieren? (j/n, Enter=ja)");
+        readInput("\nAuto-Refresh alle 5s aktivieren? (j/n, Enter=nein)");
     if (!running_)
       return;
     autoRefreshInput = trim(autoRefreshInput);
-    if (autoRefreshInput.empty() ||
-        autoRefreshInput == "j" || autoRefreshInput == "ja" ||
-        autoRefreshInput == "y" || autoRefreshInput == "yes") {
+    if (CliInterface::isAutoRefreshEnabled(autoRefreshInput)) {
       const int refreshSeconds = autoRefreshIntervalSeconds();
       std::cout << "\nAuto-Refresh aktiv. 'q' + Enter beendet.\n";
       while (waitForAutoRefresh(refreshSeconds)) {
@@ -2058,13 +2054,11 @@ void CliInterface::handleListOrders() {
   }
 
   std::string autoRefreshInput =
-      readInput("\nAuto-Refresh alle 5s aktivieren? (j/n, Enter=ja)");
+      readInput("\nAuto-Refresh alle 5s aktivieren? (j/n, Enter=nein)");
   if (!running_)
     return;
   autoRefreshInput = trim(autoRefreshInput);
-  if (autoRefreshInput.empty() ||
-      autoRefreshInput == "j" || autoRefreshInput == "ja" ||
-      autoRefreshInput == "y" || autoRefreshInput == "yes") {
+  if (CliInterface::isAutoRefreshEnabled(autoRefreshInput)) {
     const int refreshSeconds = autoRefreshIntervalSeconds();
     std::cout << "\nAuto-Refresh aktiv. 'q' + Enter beendet.\n";
     while (waitForAutoRefresh(refreshSeconds)) {
@@ -2171,13 +2165,11 @@ void CliInterface::handleSearchOrder() {
     printOrderDetail(*order, supportView);
 
     std::string autoRefreshInput =
-        readInput("\nAuto-Refresh alle 5s aktivieren? (j/n, Enter=ja)");
+        readInput("\nAuto-Refresh alle 5s aktivieren? (j/n, Enter=nein)");
     if (!running_)
       return;
     autoRefreshInput = trim(autoRefreshInput);
-    if (autoRefreshInput.empty() ||
-        autoRefreshInput == "j" || autoRefreshInput == "ja" ||
-        autoRefreshInput == "y" || autoRefreshInput == "yes") {
+    if (CliInterface::isAutoRefreshEnabled(autoRefreshInput)) {
       const int refreshSeconds = autoRefreshIntervalSeconds();
       std::cout << "\nAuto-Refresh aktiv. 'q' + Enter beendet.\n";
       while (waitForAutoRefresh(refreshSeconds)) {
@@ -2400,13 +2392,11 @@ void CliInterface::handleOrdersForSample() {
   }
 
   std::string autoRefreshInput =
-      readInput("\nAuto-Refresh alle 5s aktivieren? (j/n, Enter=ja)");
+      readInput("\nAuto-Refresh alle 5s aktivieren? (j/n, Enter=nein)");
   if (!running_)
     return;
   autoRefreshInput = trim(autoRefreshInput);
-  if (autoRefreshInput.empty() || autoRefreshInput == "j" ||
-      autoRefreshInput == "ja" || autoRefreshInput == "y" ||
-      autoRefreshInput == "yes") {
+  if (CliInterface::isAutoRefreshEnabled(autoRefreshInput)) {
     const int refreshSeconds = autoRefreshIntervalSeconds();
     std::cout << "\nAuto-Refresh aktiv. 'q' + Enter beendet.\n";
     while (waitForAutoRefresh(refreshSeconds)) {
@@ -2701,13 +2691,11 @@ void CliInterface::handleListResults() {
   }
 
   std::string autoRefreshInput =
-      readInput("\nAuto-Refresh alle 5s aktivieren? (j/n, Enter=ja)");
+      readInput("\nAuto-Refresh alle 5s aktivieren? (j/n, Enter=nein)");
   if (!running_)
     return;
   autoRefreshInput = trim(autoRefreshInput);
-  if (autoRefreshInput.empty() ||
-      autoRefreshInput == "j" || autoRefreshInput == "ja" ||
-      autoRefreshInput == "y" || autoRefreshInput == "yes") {
+  if (CliInterface::isAutoRefreshEnabled(autoRefreshInput)) {
     const int refreshSeconds = autoRefreshIntervalSeconds();
     std::cout << "\nAuto-Refresh aktiv. 'q' + Enter beendet.\n";
     while (waitForAutoRefresh(refreshSeconds)) {
@@ -2789,13 +2777,11 @@ void CliInterface::handleSearchResult() {
     printResultDetail(*result, supportView);
 
     std::string autoRefreshInput =
-        readInput("\nAuto-Refresh alle 5s aktivieren? (j/n, Enter=ja)");
+        readInput("\nAuto-Refresh alle 5s aktivieren? (j/n, Enter=nein)");
     if (!running_)
       return;
     autoRefreshInput = trim(autoRefreshInput);
-    if (autoRefreshInput.empty() ||
-        autoRefreshInput == "j" || autoRefreshInput == "ja" ||
-        autoRefreshInput == "y" || autoRefreshInput == "yes") {
+    if (CliInterface::isAutoRefreshEnabled(autoRefreshInput)) {
       const int refreshSeconds = autoRefreshIntervalSeconds();
       std::cout << "\nAuto-Refresh aktiv. 'q' + Enter beendet.\n";
       while (waitForAutoRefresh(refreshSeconds)) {
@@ -3043,13 +3029,11 @@ void CliInterface::handleResultsForOrder() {
   }
 
   std::string autoRefreshInput =
-      readInput("\nAuto-Refresh alle 5s aktivieren? (j/n, Enter=ja)");
+      readInput("\nAuto-Refresh alle 5s aktivieren? (j/n, Enter=nein)");
   if (!running_)
     return;
   autoRefreshInput = trim(autoRefreshInput);
-  if (autoRefreshInput.empty() || autoRefreshInput == "j" ||
-      autoRefreshInput == "ja" || autoRefreshInput == "y" ||
-      autoRefreshInput == "yes") {
+  if (CliInterface::isAutoRefreshEnabled(autoRefreshInput)) {
     const int refreshSeconds = autoRefreshIntervalSeconds();
     std::cout << "\nAuto-Refresh aktiv. 'q' + Enter beendet.\n";
     while (waitForAutoRefresh(refreshSeconds)) {

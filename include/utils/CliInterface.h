@@ -3,6 +3,8 @@
 
 #include "core/User.h"
 #include "db/Database.h"
+#include <algorithm>
+#include <cctype>
 #include <ctime>
 #include <memory>
 #include <string>
@@ -45,6 +47,20 @@ public:
    */
   void showMainMenu();
   static int autoRefreshIntervalSeconds() { return 5; }
+  static bool isAutoRefreshEnabled(const std::string &input) {
+    std::string value = input;
+    size_t start = value.find_first_not_of(" \t\r\n");
+    if (start == std::string::npos) {
+      return false;
+    }
+    size_t end = value.find_last_not_of(" \t\r\n");
+    value = value.substr(start, end - start + 1);
+    std::transform(value.begin(), value.end(), value.begin(),
+                   [](unsigned char c) {
+                     return static_cast<char>(std::tolower(c));
+                   });
+    return value == "j" || value == "ja" || value == "y" || value == "yes";
+  }
 
 private:
   std::shared_ptr<db::Database> database_;

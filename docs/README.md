@@ -145,6 +145,15 @@ OpenSylab/
 - Ergebniswerte/Einheit werden in Support-Ansichten ausgeblendet.
 - Zugriff wird beim ersten Anzeigen protokolliert (Auto-Refresh erzeugt keine neuen Logs).
 
+### Auto-Refresh & Systemlast
+- Auto-Refresh ist opt-in (Standard: aus).
+- Mehrere parallele Nutzer mit Auto-Refresh erhöhen die DB-Last.
+- Empfehlung: nur bei Bedarf aktivieren und Intervall stabil halten.
+
+### Audit-Log-Integrität (Assessment)
+- Aktuell kein hash-chain / WORM-Speicher implementiert.
+- Für strengere Compliance: Hash-Ketten, Append-only Storage oder externe Audit-Sinks prüfen.
+
 ✅ **Datenbank**
 - SQLite-Integration mit Foreign Key Enforcement
 - CRUD-Operationen für alle Entitäten

@@ -288,6 +288,75 @@ bool test_statistics_FilteredCounts() {
   return true;
 }
 
+bool test_statistics_ExportOrderConsistency() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  Sample s1("S_ORDER", "P1");
+  ASSERT_TRUE(db.createSample(s1));
+  Order o1("O_ORDER", "S_ORDER", "PCR");
+  ASSERT_TRUE(db.createOrder(o1));
+  auto storedOrder = db.getOrderByOrderId("O_ORDER");
+  ASSERT_NOT_NULL(storedOrder);
+  TestResult r1("R_ORDER", storedOrder->getId(), "GLU");
+  r1.setValue("1.0");
+  r1.setUnit("mg/L");
+  ASSERT_TRUE(db.createTestResult(r1));
+
+  const std::string exportPath = "test_stats_export_order.csv";
+  Database::StatsFilter sampleFilter;
+  Database::StatsFilter orderFilter;
+  Database::StatsFilter resultFilter;
+  ASSERT_TRUE(db.exportStatsReportToCsv(exportPath, sampleFilter, orderFilter,
+                                        resultFilter, "admin"));
+
+  std::ifstream input(exportPath);
+  ASSERT_TRUE(input.is_open());
+  std::vector<std::string> lines;
+  std::string line;
+  while (std::getline(input, line)) {
+    lines.push_back(line);
+  }
+  input.close();
+
+  auto findLineIndex = [&](const std::string &prefix) -> int {
+    for (size_t i = 0; i < lines.size(); ++i) {
+      if (lines[i].rfind(prefix, 0) == 0) {
+        return static_cast<int>(i);
+      }
+    }
+    return -1;
+  };
+
+  const int samplesIndex = findLineIndex("samples,TOTAL");
+  const int ordersIndex = findLineIndex("orders,TOTAL");
+  const int resultsIndex = findLineIndex("results,TOTAL");
+  ASSERT_TRUE(samplesIndex >= 0);
+  ASSERT_TRUE(ordersIndex > samplesIndex);
+  ASSERT_TRUE(resultsIndex > ordersIndex);
+
+  const std::vector<std::string> sampleStatuses = {
+      "samples,Erfasst,",
+      "samples,In Analyse,",
+      "samples,Analysiert,",
+      "samples,Validiert,",
+      "samples,Archiviert,"};
+
+  int lastIndex = samplesIndex;
+  for (const auto &statusPrefix : sampleStatuses) {
+    const int idx = findLineIndex(statusPrefix);
+    ASSERT_TRUE(idx > lastIndex);
+    lastIndex = idx;
+  }
+
+  std::remove(exportPath.c_str());
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
 bool test_statistics_ExportReport() {
   std::string dbPath = uniqueDbPath();
   Database db(dbPath);
@@ -360,4 +429,6 @@ void registerStatisticsTests() {
   registerTest("Statistics::StatsCounts", test_statistics_StatsCounts);
   registerTest("Statistics::FilteredCounts", test_statistics_FilteredCounts);
   registerTest("Statistics::ExportReport", test_statistics_ExportReport);
+  registerTest("Statistics::ExportOrderConsistency",
+               test_statistics_ExportOrderConsistency);
 }

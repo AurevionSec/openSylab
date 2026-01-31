@@ -1102,6 +1102,61 @@ bool test_database_AuditFailureBlocksCreateSample() {
   return true;
 }
 
+bool test_database_CreateSamplesBatch_DuplicateIds() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  Sample s1("S_DUP", "P1");
+  Sample s2("S_DUP", "P2");
+  std::vector<Sample> samples = {s1, s2};
+
+  auto batch = db.createSamplesBatch(samples, "tester");
+  ASSERT_EQ(batch.inserted, static_cast<size_t>(1));
+  ASSERT_EQ(batch.failures.size(), static_cast<size_t>(1));
+
+  auto stored = db.getSampleByBarcode("S_DUP");
+  ASSERT_NOT_NULL(stored);
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_database_CreateResultsBatch_DuplicateIds() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  Sample sample("S_BAT", "P1");
+  ASSERT_TRUE(db.createSample(sample));
+  Order order("O_BAT", "S_BAT", "PCR");
+  ASSERT_TRUE(db.createOrder(order));
+  auto storedOrder = db.getOrderByOrderId("O_BAT");
+  ASSERT_NOT_NULL(storedOrder);
+
+  TestResult r1("R_DUP", storedOrder->getId(), "GLU");
+  r1.setValue("1.0");
+  r1.setUnit("mg/L");
+  TestResult r2("R_DUP", storedOrder->getId(), "GLU");
+  r2.setValue("2.0");
+  r2.setUnit("mg/L");
+  std::vector<TestResult> results = {r1, r2};
+
+  auto batch = db.createTestResultsBatch(results, "tester");
+  ASSERT_EQ(batch.inserted, static_cast<size_t>(1));
+  ASSERT_EQ(batch.failures.size(), static_cast<size_t>(1));
+
+  auto stored = db.getTestResultByResultId("R_DUP");
+  ASSERT_NOT_NULL(stored);
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
 bool test_database_AuditLogFiltering() {
   std::string dbPath = uniqueDbPath();
   Database db(dbPath);
@@ -1440,6 +1495,58 @@ bool test_database_AuditRetentionPurgesAndLogs() {
                      AuditEntry::EntityType::SAMPLE, "RET_OLD_1", "tester");
   ASSERT_TRUE(oldEntry == nullptr);
 
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_database_AuditExportAfterRetention() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+  ASSERT_TRUE(db.setRetentionDays(180));
+
+  const std::time_t now = std::time(nullptr);
+  const std::time_t oldTs =
+      now - static_cast<std::time_t>(200 * 24 * 60 * 60);
+  const std::time_t recentTs =
+      now - static_cast<std::time_t>(5 * 24 * 60 * 60);
+
+  AuditEntry old1(AuditEntry::ActionType::CREATE,
+                  AuditEntry::EntityType::SAMPLE, "RET_EXP_OLD_1", "tester",
+                  "old");
+  old1.setTimestamp(oldTs);
+  ASSERT_TRUE(db.logAudit(old1));
+
+  AuditEntry recent(AuditEntry::ActionType::UPDATE,
+                    AuditEntry::EntityType::ORDER, "RET_EXP_NEW_1", "tester",
+                    "recent");
+  recent.setTimestamp(recentTs);
+  ASSERT_TRUE(db.logAudit(recent));
+
+  int purged = 0;
+  ASSERT_TRUE(db.applyAuditRetention("admin", purged));
+  ASSERT_EQ(purged, 1);
+
+  Database::AuditLogFilter filter;
+  filter.limit = 100;
+  int exported = 0;
+  const std::string exportPath = "test_audit_after_retention.csv";
+  ASSERT_TRUE(db.exportAuditLogToCsv(exportPath, filter, "admin", exported));
+  ASSERT_TRUE(exported >= 2);
+
+  std::ifstream input(exportPath);
+  ASSERT_TRUE(input.is_open());
+  std::string content((std::istreambuf_iterator<char>(input)),
+                      std::istreambuf_iterator<char>());
+  input.close();
+
+  ASSERT_EQ(content.find("RET_EXP_OLD_1"), std::string::npos);
+  ASSERT_NE(content.find("RET_EXP_NEW_1"), std::string::npos);
+  ASSERT_NE(content.find("audit_log"), std::string::npos);
+
+  std::remove(exportPath.c_str());
   db.close();
   std::remove(dbPath.c_str());
   return true;
@@ -2265,6 +2372,10 @@ void registerDatabaseTests() {
                test_database_LogSupportAccessOrderResult);
   registerTest("Database::AuditFailureBlocksCreateSample",
                test_database_AuditFailureBlocksCreateSample);
+  registerTest("Database::CreateSamplesBatch_DuplicateIds",
+               test_database_CreateSamplesBatch_DuplicateIds);
+  registerTest("Database::CreateResultsBatch_DuplicateIds",
+               test_database_CreateResultsBatch_DuplicateIds);
   registerTest("Database::AuditLogFiltering",
                test_database_AuditLogFiltering);
   registerTest("Database::AuditLogFilterReset",
@@ -2279,6 +2390,8 @@ void registerDatabaseTests() {
                test_database_RetentionMinEnforced);
   registerTest("Database::AuditRetentionPurgesAndLogs",
                test_database_AuditRetentionPurgesAndLogs);
+  registerTest("Database::AuditExportAfterRetention",
+               test_database_AuditExportAfterRetention);
   registerTest("Database::AuthenticateUserRejectsInactive",
                test_database_AuthenticateUserRejectsInactive);
   registerTest("Database::AuthConfigLdapEnabled",

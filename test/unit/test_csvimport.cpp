@@ -25,6 +25,21 @@ void createTestCsv(const std::string &path, const std::string &content) {
   file << content;
   file.close();
 }
+
+void createLargeCsv(const std::string &path, size_t bytes) {
+  std::ofstream file(path, std::ios::binary);
+  std::string chunk(1024, 'a');
+  size_t written = 0;
+  while (written + chunk.size() <= bytes) {
+    file.write(chunk.data(), static_cast<std::streamsize>(chunk.size()));
+    written += chunk.size();
+  }
+  if (written < bytes) {
+    const size_t remaining = bytes - written;
+    file.write(chunk.data(), static_cast<std::streamsize>(remaining));
+  }
+  file.close();
+}
 } // namespace
 
 bool test_csvimport_ImportValidCsv() {
@@ -133,6 +148,52 @@ bool test_csvimport_InvalidHeaderRejected() {
   createTestCsv(csvPath,
                 "sample_id,patient_id,wrong\n"
                 "S001,P001,X\n");
+
+  CsvImport importer;
+  auto samples = importer.importSamples(csvPath);
+
+  ASSERT_EQ(samples.size(), static_cast<size_t>(0));
+  ASSERT_FALSE(importer.getLastError().empty());
+
+  std::remove(csvPath.c_str());
+  return true;
+}
+
+bool test_csvimport_HeaderWithBomAccepted() {
+  std::string csvPath = uniqueCsvPath();
+  createTestCsv(csvPath,
+                "\xEF\xBB\xBFsample_id,patient_id,patient_name,description,status\n"
+                "S001,P001,Test Patient 1,Test,Erfasst\n");
+
+  CsvImport importer;
+  auto samples = importer.importSamples(csvPath);
+
+  ASSERT_EQ(samples.size(), static_cast<size_t>(1));
+  ASSERT_EQ(importer.getImportedCount(), 1);
+
+  std::remove(csvPath.c_str());
+  return true;
+}
+
+bool test_csvimport_HeaderWithExtraColumnsRejected() {
+  std::string csvPath = uniqueCsvPath();
+  createTestCsv(csvPath,
+                "sample_id,patient_id,patient_name,description,status,extra\n"
+                "S001,P001,Test Patient 1,Test,Erfasst,X\n");
+
+  CsvImport importer;
+  auto samples = importer.importSamples(csvPath);
+
+  ASSERT_EQ(samples.size(), static_cast<size_t>(0));
+  ASSERT_FALSE(importer.getLastError().empty());
+
+  std::remove(csvPath.c_str());
+  return true;
+}
+
+bool test_csvimport_LargeFileRejected() {
+  std::string csvPath = uniqueCsvPath();
+  createLargeCsv(csvPath, 10 * 1024 * 1024 + 1);
 
   CsvImport importer;
   auto samples = importer.importSamples(csvPath);
@@ -315,6 +376,12 @@ void registerCsvImportTests() {
   registerTest("CsvImport::ImportEmptyFile", test_csvimport_ImportEmptyFile);
   registerTest("CsvImport::InvalidHeaderRejected",
                test_csvimport_InvalidHeaderRejected);
+  registerTest("CsvImport::HeaderWithBomAccepted",
+               test_csvimport_HeaderWithBomAccepted);
+  registerTest("CsvImport::HeaderWithExtraColumnsRejected",
+               test_csvimport_HeaderWithExtraColumnsRejected);
+  registerTest("CsvImport::LargeFileRejected",
+               test_csvimport_LargeFileRejected);
   registerTest("CsvImport::ImportQuotedFields",
                test_csvimport_ImportQuotedFields);
   registerTest("CsvImport::ImportMultilineFields",
