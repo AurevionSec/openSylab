@@ -250,6 +250,39 @@ bool test_statistics_FilteredCounts() {
                      TestResult::statusToString(TestResult::Status::ENTERED)),
             0);
 
+  Database::StatsFilter combinedSampleFilter;
+  combinedSampleFilter.fromDate = 1500;
+  combinedSampleFilter.toDate = 2500;
+  combinedSampleFilter.status =
+      Sample::statusToString(Sample::Status::VALIDATED);
+  const auto combinedSampleStats = db.getSampleStats(combinedSampleFilter);
+  ASSERT_EQ(combinedSampleStats.total, 1);
+  ASSERT_EQ(countFor(combinedSampleStats.byStatus,
+                     Sample::statusToString(Sample::Status::VALIDATED)),
+            1);
+
+  Database::StatsFilter combinedOrderFilter;
+  combinedOrderFilter.fromDate = 1500;
+  combinedOrderFilter.toDate = 2500;
+  combinedOrderFilter.status =
+      Order::statusToString(Order::Status::IN_PROGRESS);
+  const auto combinedOrderStats = db.getOrderStats(combinedOrderFilter);
+  ASSERT_EQ(combinedOrderStats.total, 1);
+  ASSERT_EQ(countFor(combinedOrderStats.byStatus,
+                     Order::statusToString(Order::Status::IN_PROGRESS)),
+            1);
+
+  Database::StatsFilter combinedResultFilter;
+  combinedResultFilter.fromDate = 1500;
+  combinedResultFilter.toDate = 2500;
+  combinedResultFilter.status =
+      TestResult::statusToString(TestResult::Status::VALIDATED);
+  const auto combinedResultStats = db.getResultStats(combinedResultFilter);
+  ASSERT_EQ(combinedResultStats.total, 1);
+  ASSERT_EQ(countFor(combinedResultStats.byStatus,
+                     TestResult::statusToString(TestResult::Status::VALIDATED)),
+            1);
+
   db.close();
   std::remove(dbPath.c_str());
   return true;
