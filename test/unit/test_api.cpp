@@ -1,6 +1,6 @@
 /**
  * @file test_api.cpp
- * @brief Unit-Tests für die REST-API Read Access
+ * @brief Unit-Tests für die REST-API Read/Write Access
  */
 
 #include "api/ApiServer.h"
@@ -302,6 +302,230 @@ bool test_api_ReadResultByIdAudits() {
   return true;
 }
 
+bool test_api_WriteAuthRequired() {
+  std::string dbPath = uniqueDbPath();
+  auto db = std::make_shared<Database>(dbPath);
+  ASSERT_TRUE(db->open());
+  ASSERT_TRUE(db->initializeSchema());
+
+  ApiRouter router(db);
+  ApiRequest req;
+  req.method = "POST";
+  req.path = "/api/v1/samples";
+  req.body = "{}";
+
+  ApiResponse res = router.handleRequest(req);
+  ASSERT_EQ(res.status, 401);
+
+  db->close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_api_WriteSampleMissingFields() {
+  std::string dbPath = uniqueDbPath();
+  auto db = std::make_shared<Database>(dbPath);
+  ASSERT_TRUE(db->open());
+  ASSERT_TRUE(db->initializeSchema());
+  ASSERT_TRUE(db->upsertApiKey("testkey", true));
+
+  ApiRouter router(db);
+  ApiRequest req;
+  req.method = "POST";
+  req.path = "/api/v1/samples";
+  req.headers["x-api-key"] = "testkey";
+  req.body = "{}";
+
+  ApiResponse res = router.handleRequest(req);
+  ASSERT_EQ(res.status, 400);
+  ASSERT_NE(res.body.find("\"code\":\"validation_error\""),
+            std::string::npos);
+
+  db->close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_api_WriteOrderMissingFields() {
+  std::string dbPath = uniqueDbPath();
+  auto db = std::make_shared<Database>(dbPath);
+  ASSERT_TRUE(db->open());
+  ASSERT_TRUE(db->initializeSchema());
+  ASSERT_TRUE(db->upsertApiKey("testkey", true));
+
+  ApiRouter router(db);
+  ApiRequest req;
+  req.method = "POST";
+  req.path = "/api/v1/orders";
+  req.headers["x-api-key"] = "testkey";
+  req.body = "{\"order_id\":\"O-1\"}";
+
+  ApiResponse res = router.handleRequest(req);
+  ASSERT_EQ(res.status, 400);
+  ASSERT_NE(res.body.find("\"code\":\"validation_error\""),
+            std::string::npos);
+
+  db->close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_api_WriteResultMissingFields() {
+  std::string dbPath = uniqueDbPath();
+  auto db = std::make_shared<Database>(dbPath);
+  ASSERT_TRUE(db->open());
+  ASSERT_TRUE(db->initializeSchema());
+  ASSERT_TRUE(db->upsertApiKey("testkey", true));
+
+  ApiRouter router(db);
+  ApiRequest req;
+  req.method = "POST";
+  req.path = "/api/v1/results";
+  req.headers["x-api-key"] = "testkey";
+  req.body = "{\"result_id\":\"R-1\",\"order_id\":1}";
+
+  ApiResponse res = router.handleRequest(req);
+  ASSERT_EQ(res.status, 400);
+  ASSERT_NE(res.body.find("\"code\":\"validation_error\""),
+            std::string::npos);
+
+  db->close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_api_WriteSampleCreateAndUpdate() {
+  std::string dbPath = uniqueDbPath();
+  auto db = std::make_shared<Database>(dbPath);
+  ASSERT_TRUE(db->open());
+  ASSERT_TRUE(db->initializeSchema());
+  ASSERT_TRUE(db->upsertApiKey("testkey", true));
+
+  ApiRouter router(db);
+  ApiRequest createReq;
+  createReq.method = "POST";
+  createReq.path = "/api/v1/samples";
+  createReq.headers["x-api-key"] = "testkey";
+  createReq.body =
+      "{\"sample_id\":\"S_API_WRITE\",\"patient_id\":\"P1\",\"patient_name\":\""
+      "Alice\"}";
+
+  ApiResponse createRes = router.handleRequest(createReq);
+  ASSERT_EQ(createRes.status, 200);
+  ASSERT_NE(createRes.body.find("\"sample_id\":\"S_API_WRITE\""),
+            std::string::npos);
+
+  ApiRequest updateReq;
+  updateReq.method = "PUT";
+  updateReq.path = "/api/v1/samples/S_API_WRITE";
+  updateReq.headers["x-api-key"] = "testkey";
+  updateReq.body = "{\"patient_id\":\"P2\",\"patient_name\":\"Bob\"}";
+
+  ApiResponse updateRes = router.handleRequest(updateReq);
+  ASSERT_EQ(updateRes.status, 200);
+
+  auto updated = db->getSampleByBarcode("S_API_WRITE");
+  ASSERT_TRUE(updated != nullptr);
+  ASSERT_EQ(updated->getPatientId(), "P2");
+  ASSERT_EQ(updated->getPatientName(), "Bob");
+
+  db->close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_api_WriteOrderCreateAndUpdate() {
+  std::string dbPath = uniqueDbPath();
+  auto db = std::make_shared<Database>(dbPath);
+  ASSERT_TRUE(db->open());
+  ASSERT_TRUE(db->initializeSchema());
+  ASSERT_TRUE(db->upsertApiKey("testkey", true));
+
+  Sample sample("S_API_ORDER", "P9");
+  ASSERT_TRUE(db->createSample(sample));
+
+  ApiRouter router(db);
+  ApiRequest createReq;
+  createReq.method = "POST";
+  createReq.path = "/api/v1/orders";
+  createReq.headers["x-api-key"] = "testkey";
+  createReq.body =
+      "{\"order_id\":\"O_API_WRITE\",\"sample_id\":\"S_API_ORDER\",\"test_type\":\""
+      "PCR\"}";
+
+  ApiResponse createRes = router.handleRequest(createReq);
+  ASSERT_EQ(createRes.status, 200);
+  ASSERT_NE(createRes.body.find("\"order_id\":\"O_API_WRITE\""),
+            std::string::npos);
+
+  ApiRequest updateReq;
+  updateReq.method = "PUT";
+  updateReq.path = "/api/v1/orders/O_API_WRITE";
+  updateReq.headers["x-api-key"] = "testkey";
+  updateReq.body =
+      "{\"sample_id\":\"S_API_ORDER\",\"test_type\":\"ELISA\"}";
+
+  ApiResponse updateRes = router.handleRequest(updateReq);
+  ASSERT_EQ(updateRes.status, 200);
+
+  auto updated = db->getOrderByOrderId("O_API_WRITE");
+  ASSERT_TRUE(updated != nullptr);
+  ASSERT_EQ(updated->getTestType(), "ELISA");
+
+  db->close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_api_WriteResultCreateAndUpdate() {
+  std::string dbPath = uniqueDbPath();
+  auto db = std::make_shared<Database>(dbPath);
+  ASSERT_TRUE(db->open());
+  ASSERT_TRUE(db->initializeSchema());
+  ASSERT_TRUE(db->upsertApiKey("testkey", true));
+
+  Sample sample("S_API_RES", "P3");
+  ASSERT_TRUE(db->createSample(sample));
+  Order order("O_API_RES", "S_API_RES", "PCR");
+  ASSERT_TRUE(db->createOrder(order));
+  auto createdOrder = db->getOrderByOrderId("O_API_RES");
+  ASSERT_TRUE(createdOrder != nullptr);
+
+  ApiRouter router(db);
+  ApiRequest createReq;
+  createReq.method = "POST";
+  createReq.path = "/api/v1/results";
+  createReq.headers["x-api-key"] = "testkey";
+  std::ostringstream payload;
+  payload << "{\"result_id\":\"R_API_WRITE\",\"order_id\":"
+          << createdOrder->getId()
+          << ",\"test_parameter\":\"GLU\",\"value\":\"1.2\",\"unit\":\"mg/L\"}";
+  createReq.body = payload.str();
+
+  ApiResponse createRes = router.handleRequest(createReq);
+  ASSERT_EQ(createRes.status, 200);
+  ASSERT_NE(createRes.body.find("\"result_id\":\"R_API_WRITE\""),
+            std::string::npos);
+
+  ApiRequest updateReq;
+  updateReq.method = "PUT";
+  updateReq.path = "/api/v1/results/R_API_WRITE";
+  updateReq.headers["x-api-key"] = "testkey";
+  updateReq.body =
+      "{\"test_parameter\":\"GLU\",\"value\":\"2.4\",\"unit\":\"mg/L\"}";
+
+  ApiResponse updateRes = router.handleRequest(updateReq);
+  ASSERT_EQ(updateRes.status, 200);
+
+  auto updated = db->getTestResultByResultId("R_API_WRITE");
+  ASSERT_TRUE(updated != nullptr);
+  ASSERT_EQ(updated->getValue(), "2.4");
+
+  db->close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
 void registerApiTests() {
   registerTest("Api::SerializeSampleJson", test_api_SerializeSampleJson);
   registerTest("Api::SerializeOrderJson", test_api_SerializeOrderJson);
@@ -313,4 +537,17 @@ void registerApiTests() {
   registerTest("Api::ReadOrderByIdAudits", test_api_ReadOrderByIdAudits);
   registerTest("Api::ReadResultsReturnsJson", test_api_ReadResultsReturnsJson);
   registerTest("Api::ReadResultByIdAudits", test_api_ReadResultByIdAudits);
+  registerTest("Api::WriteAuthRequired", test_api_WriteAuthRequired);
+  registerTest("Api::WriteSampleMissingFields",
+               test_api_WriteSampleMissingFields);
+  registerTest("Api::WriteOrderMissingFields",
+               test_api_WriteOrderMissingFields);
+  registerTest("Api::WriteResultMissingFields",
+               test_api_WriteResultMissingFields);
+  registerTest("Api::WriteSampleCreateAndUpdate",
+               test_api_WriteSampleCreateAndUpdate);
+  registerTest("Api::WriteOrderCreateAndUpdate",
+               test_api_WriteOrderCreateAndUpdate);
+  registerTest("Api::WriteResultCreateAndUpdate",
+               test_api_WriteResultCreateAndUpdate);
 }
