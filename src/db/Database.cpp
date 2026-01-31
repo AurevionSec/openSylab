@@ -3267,11 +3267,22 @@ bool Database::applyAuditRetention(const std::string &actor,
   const std::time_t cutoff =
       now - static_cast<std::time_t>(retentionDays * 24 * 60 * 60);
 
+  char *errMsg = nullptr;
+  int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
+                        &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Starten der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    return false;
+  }
+
   const char *deleteSQL =
       "DELETE FROM audit_log WHERE timestamp < ?;";
   sqlite3_stmt *rawStmt = nullptr;
-  int rc = sqlite3_prepare_v2(db_, deleteSQL, -1, &rawStmt, nullptr);
+  rc = sqlite3_prepare_v2(db_, deleteSQL, -1, &rawStmt, nullptr);
   if (rc != SQLITE_OK) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     setError("Fehler beim Vorbereiten des DELETE: " +
              std::string(sqlite3_errmsg(db_)));
     return false;
@@ -3282,6 +3293,7 @@ bool Database::applyAuditRetention(const std::string &actor,
 
   rc = sqlite3_step(stmt.get());
   if (rc != SQLITE_DONE) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     setError("Fehler beim Anwenden der Retention-Regeln: " +
              std::string(sqlite3_errmsg(db_)));
     return false;
@@ -3299,8 +3311,18 @@ bool Database::applyAuditRetention(const std::string &actor,
                            normalizeActor(actor), details.str());
     entry.setTimestamp(now);
     if (!logAudit(entry)) {
+      sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
       return false;
     }
+  }
+
+  rc = sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Commit der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
   }
 
   return true;
