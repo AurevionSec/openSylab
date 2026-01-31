@@ -3140,14 +3140,17 @@ bool Database::exportAuditLogToCsv(const std::string &filePath,
     return false;
   }
 
+  output.close();
+
   exportedCount = static_cast<int>(entries.size());
 
   const std::string details =
       "Export: " + filePath + "; Anzahl: " + std::to_string(exportedCount);
-  core::AuditEntry auditEntry(core::AuditEntry::ActionType::UPDATE,
+  core::AuditEntry auditEntry(core::AuditEntry::ActionType::EXPORT,
                               core::AuditEntry::EntityType::SYSTEM,
                               "audit_log", normalizeActor(actor), details);
   if (!logAudit(auditEntry)) {
+    std::remove(filePath.c_str());
     return false;
   }
 

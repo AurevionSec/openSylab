@@ -1231,7 +1231,7 @@ bool test_database_AuditLogExport_FilteredAndLogged() {
       db.getAuditLogByEntity(AuditEntry::EntityType::SYSTEM, "audit_log");
   ASSERT_FALSE(entries.empty());
   const AuditEntry *entry =
-      findAuditEntry(entries, AuditEntry::ActionType::UPDATE,
+      findAuditEntry(entries, AuditEntry::ActionType::EXPORT,
                      AuditEntry::EntityType::SYSTEM, "audit_log", "admin");
   ASSERT_NOT_NULL(entry);
   ASSERT_NE(entry->getDetails().find("Export: " + exportPath),
