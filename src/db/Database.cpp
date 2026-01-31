@@ -1,5 +1,6 @@
 #include "db/Database.h"
 #include <algorithm>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -19,6 +20,16 @@ StatementPtr makeStatement(sqlite3_stmt *stmt) {
 std::string columnText(sqlite3_stmt *stmt, int index) {
   const unsigned char *text = sqlite3_column_text(stmt, index);
   return text ? reinterpret_cast<const char *>(text) : "";
+}
+
+std::string maskPathForAudit(const std::string &path) {
+  try {
+    std::filesystem::path p(path);
+    const std::string name = p.filename().string();
+    return name.empty() ? std::string("<redacted>") : name;
+  } catch (const std::exception &) {
+    return "<redacted>";
+  }
 }
 
 int computeMfaCode(const std::string &secret, std::time_t now) {
@@ -346,6 +357,8 @@ bool Database::initializeSchema() {
 
         CREATE INDEX IF NOT EXISTS idx_sample_id ON samples(sample_id);
         CREATE INDEX IF NOT EXISTS idx_patient_id ON samples(patient_id);
+        CREATE INDEX IF NOT EXISTS idx_sample_registration_date ON samples(registration_date);
+        CREATE INDEX IF NOT EXISTS idx_sample_status_regdate ON samples(status, registration_date);
 
         CREATE TABLE IF NOT EXISTS orders (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -364,6 +377,9 @@ bool Database::initializeSchema() {
         CREATE INDEX IF NOT EXISTS idx_order_id ON orders(order_id);
         CREATE INDEX IF NOT EXISTS idx_order_sample_id ON orders(sample_id);
         CREATE INDEX IF NOT EXISTS idx_order_status ON orders(status);
+        CREATE INDEX IF NOT EXISTS idx_order_requested_date ON orders(requested_date);
+        CREATE INDEX IF NOT EXISTS idx_order_status_requested_date ON orders(status, requested_date);
+        CREATE INDEX IF NOT EXISTS idx_order_priority_requested_date ON orders(priority, requested_date);
 
         CREATE TABLE IF NOT EXISTS test_results (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -386,6 +402,8 @@ bool Database::initializeSchema() {
         CREATE INDEX IF NOT EXISTS idx_result_id ON test_results(result_id);
         CREATE INDEX IF NOT EXISTS idx_result_order_id ON test_results(order_id);
         CREATE INDEX IF NOT EXISTS idx_result_status ON test_results(status);
+        CREATE INDEX IF NOT EXISTS idx_result_measured_date ON test_results(measured_date);
+        CREATE INDEX IF NOT EXISTS idx_result_status_measured_date ON test_results(status, measured_date);
 
         CREATE TABLE IF NOT EXISTS audit_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -668,6 +686,113 @@ bool Database::createSample(const core::Sample &sample,
   return true;
 }
 
+Database::BatchInsertResult
+Database::createSamplesBatch(const std::vector<core::Sample> &samples,
+                             const std::string &actor) {
+  BatchInsertResult result;
+  clearError();
+
+  if (!isOpen_) {
+    setError("Datenbank ist nicht geöffnet");
+    return result;
+  }
+  if (samples.empty()) {
+    return result;
+  }
+
+  char *errMsg = nullptr;
+  int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
+                        &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Starten der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    return result;
+  }
+
+  const char *insertSQL = R"(
+        INSERT INTO samples (sample_id, patient_id, patient_name, description, status, registration_date)
+        VALUES (?, ?, ?, ?, ?, ?);
+    )";
+
+  sqlite3_stmt *rawStmt = nullptr;
+  rc = sqlite3_prepare_v2(db_, insertSQL, -1, &rawStmt, nullptr);
+  if (rc != SQLITE_OK) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    setError("Fehler beim Vorbereiten des INSERT: " +
+             std::string(sqlite3_errmsg(db_)));
+    return result;
+  }
+  auto stmt = makeStatement(rawStmt);
+
+  const std::string actorName = normalizeActor(actor);
+
+  for (size_t i = 0; i < samples.size(); ++i) {
+    const auto &sample = samples[i];
+    sqlite3_bind_text(stmt.get(), 1, sample.getSampleId().c_str(), -1,
+                      SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt.get(), 2, sample.getPatientId().c_str(), -1,
+                      SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt.get(), 3, sample.getPatientName().c_str(), -1,
+                      SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt.get(), 4, sample.getDescription().c_str(), -1,
+                      SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt.get(), 5, sample.getStatusString().c_str(), -1,
+                      SQLITE_TRANSIENT);
+    sqlite3_bind_int64(
+        stmt.get(), 6,
+        static_cast<sqlite3_int64>(sample.getRegistrationDate()));
+
+    rc = sqlite3_step(stmt.get());
+    if (rc != SQLITE_DONE) {
+      BatchInsertError error;
+      error.index = i;
+      error.message = sqlite3_errmsg(db_);
+      result.failures.push_back(error);
+      sqlite3_reset(stmt.get());
+      sqlite3_clear_bindings(stmt.get());
+      continue;
+    }
+
+    std::ostringstream details;
+    details << "Patient-ID: " << sample.getPatientId() << "; Patient: "
+            << sample.getPatientName()
+            << "; Status: " << sample.getStatusString();
+    if (!sample.getDescription().empty()) {
+      details << "; Beschreibung: " << sample.getDescription();
+    }
+    core::AuditEntry entry(core::AuditEntry::ActionType::CREATE,
+                           core::AuditEntry::EntityType::SAMPLE,
+                           sample.getSampleId(), actorName, details.str());
+    if (!logAudit(entry)) {
+      sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+      result.inserted = 0;
+      BatchInsertError error;
+      error.index = i;
+      error.message = "Audit log failed: " + getLastError();
+      result.failures.clear();
+      result.failures.push_back(error);
+      return result;
+    }
+
+    sqlite3_reset(stmt.get());
+    sqlite3_clear_bindings(stmt.get());
+    result.inserted++;
+  }
+
+  rc = sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Commit der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    result.inserted = 0;
+    return result;
+  }
+
+  return result;
+}
+
 std::unique_ptr<core::Sample> Database::getSample(int id) {
   clearError();
 
@@ -860,7 +985,18 @@ Database::getSamplesByFilter(const SampleFilter &filter) {
     }
   }
 
-  sql << " ORDER BY registration_date DESC;";
+  sql << " ORDER BY registration_date DESC";
+
+  int limitValue = -1;
+  int offsetValue = 0;
+  if (filter.limit.has_value() && filter.limit.value() > 0) {
+    limitValue = filter.limit.value();
+    if (filter.offset.has_value() && filter.offset.value() > 0) {
+      offsetValue = filter.offset.value();
+    }
+    sql << " LIMIT ? OFFSET ?";
+  }
+  sql << ";";
 
   sqlite3_stmt *rawStmt = nullptr;
   int rc = sqlite3_prepare_v2(db_, sql.str().c_str(), -1, &rawStmt, nullptr);
@@ -899,6 +1035,11 @@ Database::getSamplesByFilter(const SampleFilter &filter) {
   if (filter.toDate.has_value()) {
     sqlite3_bind_int64(stmt.get(), bindIndex++,
                        static_cast<sqlite3_int64>(filter.toDate.value()));
+  }
+
+  if (limitValue > 0) {
+    sqlite3_bind_int(stmt.get(), bindIndex++, limitValue);
+    sqlite3_bind_int(stmt.get(), bindIndex++, offsetValue);
   }
 
   while ((rc = sqlite3_step(stmt.get())) == SQLITE_ROW) {
@@ -1115,16 +1256,6 @@ bool Database::exportSamplesToCsv(const std::string &filePath) {
     return false;
   }
 
-  auto samples = getAllSamples();
-  if (hasError()) {
-    return false;
-  }
-
-  if (samples.empty()) {
-    setError("Keine Proben zum Export");
-    return false;
-  }
-
   std::ofstream output(filePath);
   if (!output.is_open()) {
     setError("Exportdatei konnte nicht geschrieben werden");
@@ -1132,12 +1263,40 @@ bool Database::exportSamplesToCsv(const std::string &filePath) {
   }
 
   output << "sample_id,patient_id,patient_name,description,status\n";
-  for (const auto &sample : samples) {
-    output << escapeCsvField(sample->getSampleId()) << ","
-           << escapeCsvField(sample->getPatientId()) << ","
-           << escapeCsvField(sample->getPatientName()) << ","
-           << escapeCsvField(sample->getDescription()) << ","
-           << escapeCsvField(sample->getStatusString()) << "\n";
+
+  const char *selectSQL =
+      "SELECT sample_id, patient_id, patient_name, description, status "
+      "FROM samples ORDER BY registration_date DESC;";
+  sqlite3_stmt *rawStmt = nullptr;
+  int rc = sqlite3_prepare_v2(db_, selectSQL, -1, &rawStmt, nullptr);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Vorbereiten des SELECT: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+  auto stmt = makeStatement(rawStmt);
+
+  int exported = 0;
+  while ((rc = sqlite3_step(stmt.get())) == SQLITE_ROW) {
+    output << escapeCsvField(columnText(stmt.get(), 0)) << ","
+           << escapeCsvField(columnText(stmt.get(), 1)) << ","
+           << escapeCsvField(columnText(stmt.get(), 2)) << ","
+           << escapeCsvField(columnText(stmt.get(), 3)) << ","
+           << escapeCsvField(columnText(stmt.get(), 4)) << "\n";
+    exported++;
+  }
+
+  if (rc != SQLITE_DONE) {
+    setError("Fehler beim Abrufen der Proben: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+
+  if (exported == 0) {
+    output.close();
+    std::remove(filePath.c_str());
+    setError("Keine Proben zum Export");
+    return false;
   }
 
   if (!output) {
@@ -1467,6 +1626,16 @@ Database::getOrdersByFilter(const OrderFilter &filter) {
   }
   query << " ORDER BY requested_date DESC";
 
+  int limitValue = -1;
+  int offsetValue = 0;
+  if (filter.limit.has_value() && filter.limit.value() > 0) {
+    limitValue = filter.limit.value();
+    if (filter.offset.has_value() && filter.offset.value() > 0) {
+      offsetValue = filter.offset.value();
+    }
+    query << " LIMIT ? OFFSET ?";
+  }
+
   sqlite3_stmt *rawStmt = nullptr;
   int rc = sqlite3_prepare_v2(db_, query.str().c_str(), -1, &rawStmt, nullptr);
   if (rc != SQLITE_OK) {
@@ -1488,6 +1657,11 @@ Database::getOrdersByFilter(const OrderFilter &filter) {
   if (!filter.priority.empty()) {
     sqlite3_bind_text(stmt.get(), index++, filter.priority.c_str(), -1,
                       SQLITE_TRANSIENT);
+  }
+
+  if (limitValue > 0) {
+    sqlite3_bind_int(stmt.get(), index++, limitValue);
+    sqlite3_bind_int(stmt.get(), index++, offsetValue);
   }
 
   while ((rc = sqlite3_step(stmt.get())) == SQLITE_ROW) {
@@ -1845,6 +2019,163 @@ bool Database::createTestResult(const core::TestResult &result,
   return true;
 }
 
+Database::BatchInsertResult
+Database::createTestResultsBatch(const std::vector<core::TestResult> &results,
+                                 const std::string &actor) {
+  BatchInsertResult result;
+  clearError();
+
+  if (!isOpen_) {
+    setError("Datenbank ist nicht geöffnet");
+    return result;
+  }
+  if (results.empty()) {
+    return result;
+  }
+
+  char *errMsg = nullptr;
+  int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
+                        &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Starten der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    return result;
+  }
+
+  const char *insertSQL = R"(
+        INSERT INTO test_results (result_id, order_id, test_parameter, value, unit,
+                                  reference_range, reference_low, reference_high,
+                                  status, flag, measured_date, measured_by, comment)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    )";
+
+  sqlite3_stmt *rawStmt = nullptr;
+  rc = sqlite3_prepare_v2(db_, insertSQL, -1, &rawStmt, nullptr);
+  if (rc != SQLITE_OK) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    setError("Fehler beim Vorbereiten des INSERT: " +
+             std::string(sqlite3_errmsg(db_)));
+    return result;
+  }
+  auto stmt = makeStatement(rawStmt);
+
+  const std::string actorName = normalizeActor(actor);
+
+  for (size_t i = 0; i < results.size(); ++i) {
+    const auto &item = results[i];
+    auto failWith = [&](const std::string &message) {
+      BatchInsertError error;
+      error.index = i;
+      error.message = message;
+      result.failures.push_back(error);
+    };
+
+    if (item.getResultId().empty()) {
+      failWith("Ergebnis-ID darf nicht leer sein");
+      continue;
+    }
+    if (item.getOrderId() <= 0) {
+      failWith("Auftrags-ID ist ungültig");
+      continue;
+    }
+    if (item.getTestParameter().empty()) {
+      failWith("Testparameter darf nicht leer sein");
+      continue;
+    }
+    if (item.getValue().empty()) {
+      failWith("Messwert darf nicht leer sein");
+      continue;
+    }
+    if (item.getUnit().empty()) {
+      failWith("Einheit darf nicht leer sein");
+      continue;
+    }
+
+    auto order = getOrder(item.getOrderId());
+    if (!order) {
+      failWith(getLastError());
+      continue;
+    }
+
+    const std::string computedFlag =
+        core::TestResult::flagToString(item.evaluateFlag());
+
+    sqlite3_bind_text(stmt.get(), 1, item.getResultId().c_str(), -1,
+                      SQLITE_TRANSIENT);
+    sqlite3_bind_int(stmt.get(), 2, item.getOrderId());
+    sqlite3_bind_text(stmt.get(), 3, item.getTestParameter().c_str(), -1,
+                      SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt.get(), 4, item.getValue().c_str(), -1,
+                      SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt.get(), 5, item.getUnit().c_str(), -1,
+                      SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt.get(), 6, item.getReferenceRange().c_str(), -1,
+                      SQLITE_TRANSIENT);
+    sqlite3_bind_double(stmt.get(), 7, item.getReferenceLow());
+    sqlite3_bind_double(stmt.get(), 8, item.getReferenceHigh());
+    sqlite3_bind_text(stmt.get(), 9, item.getStatusString().c_str(), -1,
+                      SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt.get(), 10, computedFlag.c_str(), -1,
+                      SQLITE_TRANSIENT);
+    sqlite3_bind_int64(
+        stmt.get(), 11,
+        static_cast<sqlite3_int64>(item.getMeasuredDate()));
+    sqlite3_bind_text(stmt.get(), 12, item.getMeasuredBy().c_str(), -1,
+                      SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt.get(), 13, item.getComment().c_str(), -1,
+                      SQLITE_TRANSIENT);
+
+    rc = sqlite3_step(stmt.get());
+    if (rc != SQLITE_DONE) {
+      failWith(sqlite3_errmsg(db_));
+      sqlite3_reset(stmt.get());
+      sqlite3_clear_bindings(stmt.get());
+      continue;
+    }
+
+    std::ostringstream details;
+    details << "Auftrags-ID: " << item.getOrderId()
+            << "; Parameter: " << item.getTestParameter()
+            << "; Status: " << item.getStatusString();
+    if (!item.getValue().empty()) {
+      details << "; Wert: " << item.getValue();
+    }
+    if (!item.getUnit().empty()) {
+      details << " " << item.getUnit();
+    }
+    core::AuditEntry entry(core::AuditEntry::ActionType::CREATE,
+                           core::AuditEntry::EntityType::RESULT,
+                           item.getResultId(), actorName, details.str());
+    if (!logAudit(entry)) {
+      sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+      result.inserted = 0;
+      result.failures.clear();
+      BatchInsertError error;
+      error.index = i;
+      error.message = "Audit log failed: " + getLastError();
+      result.failures.push_back(error);
+      return result;
+    }
+
+    sqlite3_reset(stmt.get());
+    sqlite3_clear_bindings(stmt.get());
+    result.inserted++;
+  }
+
+  rc = sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Commit der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    result.inserted = 0;
+    return result;
+  }
+
+  return result;
+}
+
 std::unique_ptr<core::TestResult> Database::getTestResult(int id) {
   clearError();
 
@@ -1941,7 +2272,8 @@ Database::getTestResultByResultId(const std::string &resultId) {
 }
 
 std::vector<std::unique_ptr<core::TestResult>>
-Database::getTestResultsByOrderId(int orderId) {
+Database::getTestResultsByOrderId(int orderId, std::optional<int> limit,
+                                  std::optional<int> offset) {
   std::vector<std::unique_ptr<core::TestResult>> results;
 
   clearError();
@@ -1951,15 +2283,25 @@ Database::getTestResultsByOrderId(int orderId) {
     return results;
   }
 
-  const char *selectSQL = R"(
-        SELECT id, result_id, order_id, test_parameter, value, unit,
-               reference_range, reference_low, reference_high,
-               status, flag, measured_date, measured_by, comment
-        FROM test_results WHERE order_id = ? ORDER BY id;
-    )";
+  std::ostringstream sql;
+  sql << "SELECT id, result_id, order_id, test_parameter, value, unit, "
+         "reference_range, reference_low, reference_high, "
+         "status, flag, measured_date, measured_by, comment "
+         "FROM test_results WHERE order_id = ? ORDER BY id";
+
+  int limitValue = -1;
+  int offsetValue = 0;
+  if (limit.has_value() && limit.value() > 0) {
+    limitValue = limit.value();
+    if (offset.has_value() && offset.value() > 0) {
+      offsetValue = offset.value();
+    }
+    sql << " LIMIT ? OFFSET ?";
+  }
+  sql << ";";
 
   sqlite3_stmt *rawStmt = nullptr;
-  int rc = sqlite3_prepare_v2(db_, selectSQL, -1, &rawStmt, nullptr);
+  int rc = sqlite3_prepare_v2(db_, sql.str().c_str(), -1, &rawStmt, nullptr);
 
   if (rc != SQLITE_OK) {
     setError("Fehler beim Vorbereiten des SELECT: " +
@@ -1970,6 +2312,11 @@ Database::getTestResultsByOrderId(int orderId) {
   auto stmt = makeStatement(rawStmt);
 
   sqlite3_bind_int(stmt.get(), 1, orderId);
+  int bindIndex = 2;
+  if (limitValue > 0) {
+    sqlite3_bind_int(stmt.get(), bindIndex++, limitValue);
+    sqlite3_bind_int(stmt.get(), bindIndex++, offsetValue);
+  }
 
   while ((rc = sqlite3_step(stmt.get())) == SQLITE_ROW) {
     try {
@@ -1989,7 +2336,9 @@ Database::getTestResultsByOrderId(int orderId) {
   return results;
 }
 
-std::vector<std::unique_ptr<core::TestResult>> Database::getAllTestResults() {
+std::vector<std::unique_ptr<core::TestResult>>
+Database::getAllTestResults(std::optional<int> limit,
+                            std::optional<int> offset) {
   std::vector<std::unique_ptr<core::TestResult>> results;
 
   clearError();
@@ -1999,15 +2348,25 @@ std::vector<std::unique_ptr<core::TestResult>> Database::getAllTestResults() {
     return results;
   }
 
-  const char *selectSQL = R"(
-        SELECT id, result_id, order_id, test_parameter, value, unit,
-               reference_range, reference_low, reference_high,
-               status, flag, measured_date, measured_by, comment
-        FROM test_results ORDER BY id DESC;
-    )";
+  std::ostringstream sql;
+  sql << "SELECT id, result_id, order_id, test_parameter, value, unit, "
+         "reference_range, reference_low, reference_high, "
+         "status, flag, measured_date, measured_by, comment "
+         "FROM test_results ORDER BY id DESC";
+
+  int limitValue = -1;
+  int offsetValue = 0;
+  if (limit.has_value() && limit.value() > 0) {
+    limitValue = limit.value();
+    if (offset.has_value() && offset.value() > 0) {
+      offsetValue = offset.value();
+    }
+    sql << " LIMIT ? OFFSET ?";
+  }
+  sql << ";";
 
   sqlite3_stmt *rawStmt = nullptr;
-  int rc = sqlite3_prepare_v2(db_, selectSQL, -1, &rawStmt, nullptr);
+  int rc = sqlite3_prepare_v2(db_, sql.str().c_str(), -1, &rawStmt, nullptr);
 
   if (rc != SQLITE_OK) {
     setError("Fehler beim Vorbereiten des SELECT: " +
@@ -2016,6 +2375,11 @@ std::vector<std::unique_ptr<core::TestResult>> Database::getAllTestResults() {
   }
 
   auto stmt = makeStatement(rawStmt);
+
+  if (limitValue > 0) {
+    sqlite3_bind_int(stmt.get(), 1, limitValue);
+    sqlite3_bind_int(stmt.get(), 2, offsetValue);
+  }
 
   while ((rc = sqlite3_step(stmt.get())) == SQLITE_ROW) {
     try {
@@ -2288,30 +2652,6 @@ bool Database::exportValidatedResultsToCsv(const std::string &filePath,
     return false;
   }
 
-  std::vector<std::unique_ptr<core::TestResult>> results;
-  if (orderId.has_value()) {
-    results = getTestResultsByOrderId(*orderId);
-  } else {
-    results = getAllTestResults();
-  }
-
-  if (hasError()) {
-    return false;
-  }
-
-  std::vector<core::TestResult *> validated;
-  validated.reserve(results.size());
-  for (auto &result : results) {
-    if (result->getStatus() == core::TestResult::Status::VALIDATED) {
-      validated.push_back(result.get());
-    }
-  }
-
-  if (validated.empty()) {
-    setError("Keine validierten Ergebnisse zum Export");
-    return false;
-  }
-
   std::ofstream output(filePath);
   if (!output.is_open()) {
     setError("Exportdatei konnte nicht geschrieben werden");
@@ -2321,22 +2661,62 @@ bool Database::exportValidatedResultsToCsv(const std::string &filePath,
   output << "result_id,order_id,test_parameter,value,unit,reference_low,"
             "reference_high,status,flag,measured_date,measured_by,comment\n";
 
-  for (const auto *result : validated) {
-    std::ostringstream low;
-    low << result->getReferenceLow();
-    std::ostringstream high;
-    high << result->getReferenceHigh();
+  std::ostringstream selectSql;
+  selectSql
+      << "SELECT result_id, order_id, test_parameter, value, unit, "
+         "reference_low, reference_high, status, flag, measured_date, "
+         "measured_by, comment FROM test_results WHERE status = ?";
+  if (orderId.has_value()) {
+    selectSql << " AND order_id = ?";
+  }
+  selectSql << " ORDER BY id;";
 
-    output << escapeCsvField(result->getResultId()) << ","
-           << result->getOrderId() << ","
-           << escapeCsvField(result->getTestParameter()) << ","
-           << escapeCsvField(result->getValue()) << ","
-           << escapeCsvField(result->getUnit()) << "," << low.str() << ","
-           << high.str() << "," << escapeCsvField(result->getStatusString())
-           << "," << escapeCsvField(result->getFlagString()) << ","
-           << static_cast<long long>(result->getMeasuredDate()) << ","
-           << escapeCsvField(result->getMeasuredBy()) << ","
-           << escapeCsvField(result->getComment()) << "\n";
+  sqlite3_stmt *rawStmt = nullptr;
+  int rc = sqlite3_prepare_v2(db_, selectSql.str().c_str(), -1, &rawStmt, nullptr);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Vorbereiten des SELECT: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+  auto stmt = makeStatement(rawStmt);
+
+  int bindIndex = 1;
+  const std::string validatedStatus =
+      core::TestResult::statusToString(core::TestResult::Status::VALIDATED);
+  sqlite3_bind_text(stmt.get(), bindIndex++, validatedStatus.c_str(), -1,
+                    SQLITE_TRANSIENT);
+  if (orderId.has_value()) {
+    sqlite3_bind_int(stmt.get(), bindIndex++, *orderId);
+  }
+
+  int exported = 0;
+  while ((rc = sqlite3_step(stmt.get())) == SQLITE_ROW) {
+    output << escapeCsvField(columnText(stmt.get(), 0)) << ","
+           << columnText(stmt.get(), 1) << ","
+           << escapeCsvField(columnText(stmt.get(), 2)) << ","
+           << escapeCsvField(columnText(stmt.get(), 3)) << ","
+           << escapeCsvField(columnText(stmt.get(), 4)) << ","
+           << columnText(stmt.get(), 5) << ","
+           << columnText(stmt.get(), 6) << ","
+           << escapeCsvField(columnText(stmt.get(), 7)) << ","
+           << escapeCsvField(columnText(stmt.get(), 8)) << ","
+           << columnText(stmt.get(), 9) << ","
+           << escapeCsvField(columnText(stmt.get(), 10)) << ","
+           << escapeCsvField(columnText(stmt.get(), 11)) << "\n";
+    exported++;
+  }
+
+  if (rc != SQLITE_DONE) {
+    setError("Fehler beim Abrufen der Ergebnisse: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+
+  if (exported == 0) {
+    output.close();
+    std::remove(filePath.c_str());
+    setError("Keine validierten Ergebnisse zum Export");
+    return false;
   }
 
   if (!output) {
@@ -2345,8 +2725,8 @@ bool Database::exportValidatedResultsToCsv(const std::string &filePath,
   }
 
   char *errMsg = nullptr;
-  int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
-                        &errMsg);
+  rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
+                    &errMsg);
   if (rc != SQLITE_OK) {
     setError("Fehler beim Starten der Transaktion: " +
              std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
@@ -2355,16 +2735,41 @@ bool Database::exportValidatedResultsToCsv(const std::string &filePath,
   }
 
   const std::string actor = normalizeActor(user);
-  const std::string details = "Export: " + filePath + "; Anzahl: " +
-                              std::to_string(validated.size());
-  for (const auto *result : validated) {
+  const std::string details = "Export: " + maskPathForAudit(filePath) +
+                              "; Anzahl: " + std::to_string(exported);
+
+  sqlite3_stmt *auditStmt = nullptr;
+  rc = sqlite3_prepare_v2(db_, selectSql.str().c_str(), -1, &auditStmt, nullptr);
+  if (rc != SQLITE_OK) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    setError("Fehler beim Vorbereiten des SELECT: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+  auto auditSelect = makeStatement(auditStmt);
+  bindIndex = 1;
+  sqlite3_bind_text(auditSelect.get(), bindIndex++, validatedStatus.c_str(), -1,
+                    SQLITE_TRANSIENT);
+  if (orderId.has_value()) {
+    sqlite3_bind_int(auditSelect.get(), bindIndex++, *orderId);
+  }
+
+  while ((rc = sqlite3_step(auditSelect.get())) == SQLITE_ROW) {
+    const std::string resultId = columnText(auditSelect.get(), 0);
     core::AuditEntry entry(core::AuditEntry::ActionType::EXPORT,
-                           core::AuditEntry::EntityType::RESULT,
-                           result->getResultId(), actor, details);
+                           core::AuditEntry::EntityType::RESULT, resultId,
+                           actor, details);
     if (!logAudit(entry)) {
       sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
       return false;
     }
+  }
+
+  if (rc != SQLITE_DONE) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    setError("Fehler beim Abrufen der Ergebnisse: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
   }
 
   rc = sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &errMsg);
@@ -2869,7 +3274,7 @@ bool Database::exportStatsReportToCsv(
   }
 
   std::ostringstream details;
-  details << "Export stats report: " << filePath
+  details << "Export stats report: " << maskPathForAudit(filePath)
           << "; sample_status="
           << (sampleFilter.status.has_value() ? sampleFilter.status.value()
                                               : "any")
@@ -3169,15 +3574,6 @@ bool Database::exportAuditLogToCsv(const std::string &filePath,
     return false;
   }
 
-  auto entries = getAuditLogFiltered(filter);
-  if (hasError()) {
-    return false;
-  }
-  if (entries.empty()) {
-    setError("Keine Audit-Einträge zum Export");
-    return false;
-  }
-
   std::ofstream output(filePath);
   if (!output.is_open()) {
     setError("Exportdatei konnte nicht geschrieben werden");
@@ -3186,14 +3582,98 @@ bool Database::exportAuditLogToCsv(const std::string &filePath,
 
   output << "id,action,entity,entity_id,user,timestamp,details\n";
 
-  for (const auto &entry : entries) {
-    output << entry->getId() << ","
-           << escapeCsvField(entry->getActionString()) << ","
-           << escapeCsvField(entry->getEntityString()) << ","
-           << escapeCsvField(entry->getEntityId()) << ","
-           << escapeCsvField(entry->getUser()) << ","
-           << static_cast<long long>(entry->getTimestamp()) << ","
-           << escapeCsvField(entry->getDetails()) << "\n";
+  int limit = filter.limit;
+  if (limit <= 0) {
+    limit = 100;
+  }
+
+  std::ostringstream sql;
+  sql << "SELECT id, action, entity, entity_id, user, timestamp, details "
+         "FROM audit_log WHERE 1=1";
+
+  if (filter.user && !filter.user->empty()) {
+    sql << " AND user = ?";
+  }
+  if (filter.action.has_value()) {
+    sql << " AND action = ?";
+  }
+  if (filter.entity.has_value()) {
+    sql << " AND entity = ?";
+  }
+  if (filter.entityId && !filter.entityId->empty()) {
+    sql << " AND entity_id = ?";
+  }
+  if (filter.fromTime.has_value()) {
+    sql << " AND timestamp >= ?";
+  }
+  if (filter.toTime.has_value()) {
+    sql << " AND timestamp <= ?";
+  }
+
+  sql << " ORDER BY timestamp DESC LIMIT ?;";
+
+  sqlite3_stmt *rawStmt = nullptr;
+  int rc = sqlite3_prepare_v2(db_, sql.str().c_str(), -1, &rawStmt, nullptr);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Vorbereiten des SELECT: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+  auto stmt = makeStatement(rawStmt);
+
+  int index = 1;
+  if (filter.user && !filter.user->empty()) {
+    sqlite3_bind_text(stmt.get(), index++, filter.user->c_str(), -1,
+                      SQLITE_TRANSIENT);
+  }
+  if (filter.action.has_value()) {
+    const std::string action =
+        core::AuditEntry::actionToString(filter.action.value());
+    sqlite3_bind_text(stmt.get(), index++, action.c_str(), -1,
+                      SQLITE_TRANSIENT);
+  }
+  if (filter.entity.has_value()) {
+    const std::string entity =
+        core::AuditEntry::entityToString(filter.entity.value());
+    sqlite3_bind_text(stmt.get(), index++, entity.c_str(), -1,
+                      SQLITE_TRANSIENT);
+  }
+  if (filter.entityId && !filter.entityId->empty()) {
+    sqlite3_bind_text(stmt.get(), index++, filter.entityId->c_str(), -1,
+                      SQLITE_TRANSIENT);
+  }
+  if (filter.fromTime.has_value()) {
+    sqlite3_bind_int64(stmt.get(), index++,
+                       static_cast<sqlite3_int64>(filter.fromTime.value()));
+  }
+  if (filter.toTime.has_value()) {
+    sqlite3_bind_int64(stmt.get(), index++,
+                       static_cast<sqlite3_int64>(filter.toTime.value()));
+  }
+  sqlite3_bind_int(stmt.get(), index++, limit);
+
+  while ((rc = sqlite3_step(stmt.get())) == SQLITE_ROW) {
+    output << sqlite3_column_int(stmt.get(), 0) << ","
+           << escapeCsvField(columnText(stmt.get(), 1)) << ","
+           << escapeCsvField(columnText(stmt.get(), 2)) << ","
+           << escapeCsvField(columnText(stmt.get(), 3)) << ","
+           << escapeCsvField(columnText(stmt.get(), 4)) << ","
+           << static_cast<long long>(sqlite3_column_int64(stmt.get(), 5)) << ","
+           << escapeCsvField(columnText(stmt.get(), 6)) << "\n";
+    exportedCount++;
+  }
+
+  if (rc != SQLITE_DONE) {
+    setError("Fehler beim Abrufen der Audit-Einträge: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+
+  if (exportedCount == 0) {
+    output.close();
+    std::remove(filePath.c_str());
+    setError("Keine Audit-Einträge zum Export");
+    return false;
   }
 
   if (!output) {
@@ -3203,10 +3683,8 @@ bool Database::exportAuditLogToCsv(const std::string &filePath,
 
   output.close();
 
-  exportedCount = static_cast<int>(entries.size());
-
-  const std::string details =
-      "Export: " + filePath + "; Anzahl: " + std::to_string(exportedCount);
+  const std::string details = "Export: " + maskPathForAudit(filePath) +
+                              "; Anzahl: " + std::to_string(exportedCount);
   core::AuditEntry auditEntry(core::AuditEntry::ActionType::EXPORT,
                               core::AuditEntry::EntityType::SYSTEM,
                               "audit_log", normalizeActor(actor), details);
@@ -3472,8 +3950,8 @@ bool Database::logResultRetryImport(const std::vector<std::string> &resultIds,
   }
 
   const std::string actor = user.empty() ? "system" : user;
-  const std::string details = "Retry-Import: " + filePath + "; Anzahl: " +
-                              std::to_string(resultIds.size());
+  const std::string details = "Retry-Import: " + maskPathForAudit(filePath) +
+                              "; Anzahl: " + std::to_string(resultIds.size());
 
   for (const auto &resultId : resultIds) {
     core::AuditEntry entry(core::AuditEntry::ActionType::UPDATE,

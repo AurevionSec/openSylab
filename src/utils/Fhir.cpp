@@ -8,6 +8,8 @@ namespace opensylab {
 namespace utils {
 namespace {
 
+constexpr size_t kMaxImportBytes = 10 * 1024 * 1024;
+
 bool isWhitespace(char ch) { return std::isspace(static_cast<unsigned char>(ch)); }
 
 std::string trim(const std::string &value) {
@@ -427,6 +429,17 @@ bool FhirExchange::importBundle(const std::string &payload,
     summary.lastError = "Database unavailable";
     return false;
   }
+  if (payload.size() > kMaxImportBytes) {
+    FhirParser::Error err;
+    err.path = "Bundle";
+    err.code = "validation_error";
+    err.message = "Payload too large";
+    summary.errors.push_back(err);
+    logErrors(summary.errors, actor);
+    summary.operationOutcome = buildOperationOutcome(summary.errors);
+    summary.lastError = "FHIR payload exceeds size limit";
+    return false;
+  }
 
   FhirParser parser;
   if (!parser.parse(payload)) {
@@ -484,6 +497,9 @@ bool FhirExchange::importBundle(const std::string &payload,
   }
   const int orderDbId = storedOrder->getId();
 
+  std::vector<core::TestResult> results;
+  results.reserve(mapped.results.size());
+
   for (const auto &resultData : mapped.results) {
     if (resultData.parameter.empty() || resultData.value.empty()) {
       FhirParser::Error err;
@@ -507,13 +523,17 @@ bool FhirExchange::importBundle(const std::string &payload,
     result.setMeasuredDate(std::time(nullptr));
     result.setFlag(result.evaluateFlag());
 
-    if (database_->createTestResult(result, actor)) {
-      summary.resultsCreated++;
-    } else {
+    results.push_back(result);
+  }
+
+  if (!results.empty()) {
+    auto batch = database_->createTestResultsBatch(results, actor);
+    summary.resultsCreated += static_cast<int>(batch.inserted);
+    for (const auto &failure : batch.failures) {
       FhirParser::Error err;
       err.path = "Observation";
       err.code = "conflict";
-      err.message = database_->getLastError();
+      err.message = failure.message;
       summary.errors.push_back(err);
     }
   }

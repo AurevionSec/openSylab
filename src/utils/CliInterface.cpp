@@ -486,6 +486,56 @@ void CliInterface::handleListSamples() {
     }
   }
 
+  std::optional<int> limit;
+  std::optional<int> offset;
+  while (true) {
+    std::string limitInput =
+        readInput("Limit (optional, Enter=alle)");
+    if (!running_)
+      return;
+    limitInput = trim(limitInput);
+    if (limitInput.empty()) {
+      break;
+    }
+    try {
+      int value = std::stoi(limitInput);
+      if (value <= 0) {
+        std::cout << "\n✗ Limit muss positiv sein.\n";
+        continue;
+      }
+      limit = value;
+      break;
+    } catch (const std::exception &) {
+      std::cout << "\n✗ Ungültiges Limit.\n";
+    }
+  }
+  if (limit.has_value()) {
+    while (true) {
+      std::string offsetInput =
+          readInput("Offset (optional, Enter=0)");
+      if (!running_)
+        return;
+      offsetInput = trim(offsetInput);
+      if (offsetInput.empty()) {
+        offset = 0;
+        break;
+      }
+      try {
+        int value = std::stoi(offsetInput);
+        if (value < 0) {
+          std::cout << "\n✗ Offset darf nicht negativ sein.\n";
+          continue;
+        }
+        offset = value;
+        break;
+      } catch (const std::exception &) {
+        std::cout << "\n✗ Ungültiges Offset.\n";
+      }
+    }
+  }
+  filter.limit = limit;
+  filter.offset = offset;
+
   const bool supportView = canAccessSupportData() && !isAdmin();
   bool supportAccessOk = true;
   auto printSamples = [&](const std::string &title,
@@ -889,30 +939,35 @@ void CliInterface::handleImportCsv() {
       std::cout << "\n✗ Keine Proben importiert: " << importer.getLastError()
                 << "\n";
     } else {
-      size_t imported = 0;
-      size_t failed = 0;
       std::vector<std::string> failedSamples;
-
+      std::vector<core::Sample> samples;
+      samples.reserve(importedRecords.size());
       for (const auto &record : importedRecords) {
-        if (database_->createSample(record.sample, getCurrentUsername())) {
-          imported++;
-        } else {
-          failed++;
-          const std::string error = database_->getLastError();
-          failedSamples.push_back("Zeile " + std::to_string(record.recordNumber) +
-                                  " (" + record.sample.getSampleId() + "): " +
-                                  error);
-          dbFailedRecords.push_back(
-              {record.recordNumber, record.record, error});
-        }
+        samples.push_back(record.sample);
       }
 
-      std::cout << "\n✓ " << imported << " von " << importedRecords.size()
+      auto batchResult =
+          database_->createSamplesBatch(samples, getCurrentUsername());
+
+      for (const auto &failure : batchResult.failures) {
+        if (failure.index >= importedRecords.size()) {
+          continue;
+        }
+        const auto &record = importedRecords[failure.index];
+        failedSamples.push_back("Zeile " + std::to_string(record.recordNumber) +
+                                " (" + record.sample.getSampleId() + "): " +
+                                failure.message);
+        dbFailedRecords.push_back(
+            {record.recordNumber, record.record, failure.message});
+      }
+
+      std::cout << "\n✓ " << batchResult.inserted << " von "
+                << importedRecords.size()
                 << " Proben erfolgreich importiert!\n";
 
       // Fehlgeschlagene Importe anzeigen
-      if (failed > 0) {
-        std::cout << "\n✗ " << failed
+      if (!failedSamples.empty()) {
+        std::cout << "\n✗ " << failedSamples.size()
                   << " Proben konnten nicht importiert werden:\n";
         for (const auto &msg : failedSamples) {
           std::cout << "  - " << msg << "\n";
@@ -1830,13 +1885,63 @@ void CliInterface::handleListOrders() {
   filter.sampleId = sampleFilter;
   filter.priority = priorityFilter;
 
+  std::optional<int> limit;
+  std::optional<int> offset;
+  while (true) {
+    std::string limitInput =
+        readInput("Limit (optional, Enter=alle)");
+    if (!running_)
+      return;
+    limitInput = trim(limitInput);
+    if (limitInput.empty()) {
+      break;
+    }
+    try {
+      int value = std::stoi(limitInput);
+      if (value <= 0) {
+        std::cout << "\n✗ Limit muss positiv sein.\n";
+        continue;
+      }
+      limit = value;
+      break;
+    } catch (const std::exception &) {
+      std::cout << "\n✗ Ungültiges Limit.\n";
+    }
+  }
+  if (limit.has_value()) {
+    while (true) {
+      std::string offsetInput =
+          readInput("Offset (optional, Enter=0)");
+      if (!running_)
+        return;
+      offsetInput = trim(offsetInput);
+      if (offsetInput.empty()) {
+        offset = 0;
+        break;
+      }
+      try {
+        int value = std::stoi(offsetInput);
+        if (value < 0) {
+          std::cout << "\n✗ Offset darf nicht negativ sein.\n";
+          continue;
+        }
+        offset = value;
+        break;
+      } catch (const std::exception &) {
+        std::cout << "\n✗ Ungültiges Offset.\n";
+      }
+    }
+  }
+  filter.limit = limit;
+  filter.offset = offset;
+
   const bool supportView = canAccessSupportData() && !isAdmin();
-  auto orders = (statusFilter.empty() && sampleFilter.empty() &&
-                 priorityFilter.empty())
-                    ? database_->getAllOrders()
-                    : database_->getOrdersByFilter(filter);
   const bool hasFilters =
       !(statusFilter.empty() && sampleFilter.empty() && priorityFilter.empty());
+  const bool useFilteredQuery =
+      hasFilters || filter.limit.has_value() || filter.offset.has_value();
+  auto orders = useFilteredQuery ? database_->getOrdersByFilter(filter)
+                                 : database_->getAllOrders();
   db::Database::OrderFilter activeFilter = filter;
   bool activeHasFilters = hasFilters;
 
@@ -1851,7 +1956,14 @@ void CliInterface::handleListOrders() {
     if (!running_)
       return;
     if (!reset.empty() && (reset[0] == 'y' || reset[0] == 'Y')) {
-      orders = database_->getAllOrders();
+      db::Database::OrderFilter resetFilter = filter;
+      resetFilter.status.clear();
+      resetFilter.sampleId.clear();
+      resetFilter.priority.clear();
+      orders = (resetFilter.limit.has_value() || resetFilter.offset.has_value())
+                   ? database_->getOrdersByFilter(resetFilter)
+                   : database_->getAllOrders();
+      activeFilter = resetFilter;
       activeHasFilters = false;
     }
   } else if (orders.empty()) {
@@ -1896,9 +2008,15 @@ void CliInterface::handleListOrders() {
     reset = trim(reset);
     if (!reset.empty() && (reset == "j" || reset == "ja" || reset == "y" ||
                            reset == "yes")) {
-      orders = database_->getAllOrders();
+      db::Database::OrderFilter resetFilter = activeFilter;
+      resetFilter.status.clear();
+      resetFilter.sampleId.clear();
+      resetFilter.priority.clear();
+      orders = (resetFilter.limit.has_value() || resetFilter.offset.has_value())
+                   ? database_->getOrdersByFilter(resetFilter)
+                   : database_->getAllOrders();
       activeHasFilters = false;
-      activeFilter = db::Database::OrderFilter{};
+      activeFilter = resetFilter;
       if (database_->hasError()) {
         std::cout << "✗ Fehler beim Abrufen der Aufträge:\n";
         std::cout << "  " << database_->getLastError() << "\n";
@@ -1955,8 +2073,12 @@ void CliInterface::handleListOrders() {
       std::cout << "              ALLE AUFTRÄGE\n";
       printSeparator();
       std::cout << "\n";
-      auto refreshed = activeHasFilters ? database_->getOrdersByFilter(activeFilter)
-                                        : database_->getAllOrders();
+      const bool useActiveFilter =
+          activeHasFilters || activeFilter.limit.has_value() ||
+          activeFilter.offset.has_value();
+      auto refreshed =
+          useActiveFilter ? database_->getOrdersByFilter(activeFilter)
+                          : database_->getAllOrders();
       if (database_->hasError()) {
         std::cout << "✗ Fehler beim Abrufen der Aufträge:\n";
         std::cout << "  " << database_->getLastError() << "\n";
@@ -2522,7 +2644,55 @@ void CliInterface::handleListResults() {
         }
       };
 
-  auto results = database_->getAllTestResults();
+  std::optional<int> limit;
+  std::optional<int> offset;
+  while (true) {
+    std::string limitInput =
+        readInput("Limit (optional, Enter=alle)");
+    if (!running_)
+      return;
+    limitInput = trim(limitInput);
+    if (limitInput.empty()) {
+      break;
+    }
+    try {
+      int value = std::stoi(limitInput);
+      if (value <= 0) {
+        std::cout << "\n✗ Limit muss positiv sein.\n";
+        continue;
+      }
+      limit = value;
+      break;
+    } catch (const std::exception &) {
+      std::cout << "\n✗ Ungültiges Limit.\n";
+    }
+  }
+  if (limit.has_value()) {
+    while (true) {
+      std::string offsetInput =
+          readInput("Offset (optional, Enter=0)");
+      if (!running_)
+        return;
+      offsetInput = trim(offsetInput);
+      if (offsetInput.empty()) {
+        offset = 0;
+        break;
+      }
+      try {
+        int value = std::stoi(offsetInput);
+        if (value < 0) {
+          std::cout << "\n✗ Offset darf nicht negativ sein.\n";
+          continue;
+        }
+        offset = value;
+        break;
+      } catch (const std::exception &) {
+        std::cout << "\n✗ Ungültiges Offset.\n";
+      }
+    }
+  }
+
+  auto results = database_->getAllTestResults(limit, offset);
 
   printResults(results, supportView);
   if (!supportAccessOk) {
@@ -2546,7 +2716,7 @@ void CliInterface::handleListResults() {
       std::cout << "            ALLE ERGEBNISSE\n";
       printSeparator();
       std::cout << "\n";
-      auto refreshed = database_->getAllTestResults();
+      auto refreshed = database_->getAllTestResults(limit, offset);
       printResults(refreshed, false);
       std::cout << "\nAuto-Refresh aktiv. 'q' + Enter beendet.\n";
     }
@@ -2980,19 +3150,31 @@ void CliInterface::handleImportResultsCsv() {
       std::cout << "\n✗ Keine Ergebnisse importiert: "
                 << importer.getLastError() << "\n";
     } else {
-      int stored = 0;
-      int failed = 0;
       std::vector<std::string> storedResultIds;
 
+      std::vector<core::TestResult> results;
+      results.reserve(importedRecords.size());
       for (const auto &record : importedRecords) {
-        if (database_->createTestResult(record.result, getCurrentUsername())) {
-          stored++;
-          storedResultIds.push_back(record.result.getResultId());
-        } else {
-          failed++;
-          const std::string error = database_->getLastError();
-          dbFailedRecords.push_back(
-              {record.recordNumber, record.record, error});
+        results.push_back(record.result);
+      }
+
+      auto batchResult =
+          database_->createTestResultsBatch(results, getCurrentUsername());
+
+      std::vector<bool> failedMask(importedRecords.size(), false);
+      for (const auto &failure : batchResult.failures) {
+        if (failure.index >= importedRecords.size()) {
+          continue;
+        }
+        failedMask[failure.index] = true;
+        const auto &record = importedRecords[failure.index];
+        dbFailedRecords.push_back(
+            {record.recordNumber, record.record, failure.message});
+      }
+
+      for (size_t i = 0; i < importedRecords.size(); ++i) {
+        if (!failedMask[i]) {
+          storedResultIds.push_back(importedRecords[i].result.getResultId());
         }
       }
 
@@ -3006,11 +3188,12 @@ void CliInterface::handleImportResultsCsv() {
         }
       }
 
-      std::cout << "\n✓ " << stored << " Ergebnisse erfolgreich in Datenbank "
+      std::cout << "\n✓ " << batchResult.inserted
+                << " Ergebnisse erfolgreich in Datenbank "
                 << "gespeichert.\n";
 
-      if (failed > 0) {
-        std::cout << "\n✗ " << failed
+      if (!dbFailedRecords.empty()) {
+        std::cout << "\n✗ " << dbFailedRecords.size()
                   << " Ergebnisse konnten nicht importiert werden.\n";
       }
     }

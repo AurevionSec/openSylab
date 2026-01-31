@@ -1083,7 +1083,35 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
     }
     auto statusIt = query.find("status");
     if (statusIt != query.end()) {
-      filter.status = statusIt->second;
+      try {
+        filter.status = core::Sample::statusToString(
+            core::Sample::stringToStatus(statusIt->second));
+      } catch (const std::exception &) {
+        return makeError(400, "validation_error", "Invalid status",
+                         "Use Erfasst, In Analyse, Analysiert, Validiert, Archiviert.");
+      }
+    }
+    auto limitIt = query.find("limit");
+    if (limitIt != query.end()) {
+      int limitValue = 0;
+      if (!parseIntValue(limitIt->second, limitValue) || limitValue <= 0) {
+        return makeError(400, "validation_error", "Invalid limit",
+                         "Provide positive integer limit.");
+      }
+      filter.limit = limitValue;
+    }
+    auto offsetIt = query.find("offset");
+    if (offsetIt != query.end()) {
+      int offsetValue = 0;
+      if (!parseIntValue(offsetIt->second, offsetValue) || offsetValue < 0) {
+        return makeError(400, "validation_error", "Invalid offset",
+                         "Provide non-negative integer offset.");
+      }
+      if (!filter.limit.has_value()) {
+        return makeError(400, "validation_error", "Offset requires limit",
+                         "Provide limit when using offset.");
+      }
+      filter.offset = offsetValue;
     }
     auto fromIt = query.find("from");
     if (fromIt != query.end()) {
@@ -1130,8 +1158,14 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                                  : "any")
             << "; to=" << (filter.toDate.has_value()
                                ? std::to_string(*filter.toDate)
-                               : "any");
-    core::AuditEntry entry(core::AuditEntry::ActionType::UPDATE,
+                               : "any")
+            << "; limit="
+            << (filter.limit.has_value() ? std::to_string(*filter.limit)
+                                         : "any")
+            << "; offset="
+            << (filter.offset.has_value() ? std::to_string(*filter.offset)
+                                          : "any");
+    core::AuditEntry entry(core::AuditEntry::ActionType::ACCESS,
                            core::AuditEntry::EntityType::SAMPLE, "*",
                            actor, details.str());
     if (!database_->logAudit(entry)) {
@@ -1159,7 +1193,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                        "Verify the sample_id.");
     }
 
-    core::AuditEntry entry(core::AuditEntry::ActionType::UPDATE,
+    core::AuditEntry entry(core::AuditEntry::ActionType::ACCESS,
                            core::AuditEntry::EntityType::SAMPLE, sampleId,
                            actor, "API READ /samples/" + sampleId);
     if (!database_->logAudit(entry)) {
@@ -1175,7 +1209,13 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
     db::Database::OrderFilter filter;
     auto statusIt = query.find("status");
     if (statusIt != query.end()) {
-      filter.status = statusIt->second;
+      try {
+        filter.status = core::Order::statusToString(
+            core::Order::stringToStatus(statusIt->second));
+      } catch (const std::exception &) {
+        return makeError(400, "validation_error", "Invalid status",
+                         "Use Angefordert, In Bearbeitung, Abgeschlossen, Validiert, Storniert.");
+      }
     }
     auto sampleIt = query.find("sample_id");
     if (sampleIt != query.end()) {
@@ -1183,7 +1223,35 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
     }
     auto priorityIt = query.find("priority");
     if (priorityIt != query.end()) {
-      filter.priority = priorityIt->second;
+      try {
+        filter.priority = core::Order::priorityToString(
+            core::Order::stringToPriority(priorityIt->second));
+      } catch (const std::exception &) {
+        return makeError(400, "validation_error", "Invalid priority",
+                         "Use Normal, Dringend, Notfall.");
+      }
+    }
+    auto limitIt = query.find("limit");
+    if (limitIt != query.end()) {
+      int limitValue = 0;
+      if (!parseIntValue(limitIt->second, limitValue) || limitValue <= 0) {
+        return makeError(400, "validation_error", "Invalid limit",
+                         "Provide positive integer limit.");
+      }
+      filter.limit = limitValue;
+    }
+    auto offsetIt = query.find("offset");
+    if (offsetIt != query.end()) {
+      int offsetValue = 0;
+      if (!parseIntValue(offsetIt->second, offsetValue) || offsetValue < 0) {
+        return makeError(400, "validation_error", "Invalid offset",
+                         "Provide non-negative integer offset.");
+      }
+      if (!filter.limit.has_value()) {
+        return makeError(400, "validation_error", "Offset requires limit",
+                         "Provide limit when using offset.");
+      }
+      filter.offset = offsetValue;
     }
 
     auto orders = database_->getOrdersByFilter(filter);
@@ -1209,8 +1277,14 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
             << "; sample_id="
             << (filter.sampleId.empty() ? "any" : filter.sampleId)
             << "; priority="
-            << (filter.priority.empty() ? "any" : filter.priority);
-    core::AuditEntry entry(core::AuditEntry::ActionType::UPDATE,
+            << (filter.priority.empty() ? "any" : filter.priority)
+            << "; limit="
+            << (filter.limit.has_value() ? std::to_string(*filter.limit)
+                                         : "any")
+            << "; offset="
+            << (filter.offset.has_value() ? std::to_string(*filter.offset)
+                                          : "any");
+    core::AuditEntry entry(core::AuditEntry::ActionType::ACCESS,
                            core::AuditEntry::EntityType::ORDER, "*",
                            actor, details.str());
     if (!database_->logAudit(entry)) {
@@ -1238,7 +1312,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                        "Verify the order_id.");
     }
 
-    core::AuditEntry entry(core::AuditEntry::ActionType::UPDATE,
+    core::AuditEntry entry(core::AuditEntry::ActionType::ACCESS,
                            core::AuditEntry::EntityType::ORDER, orderId,
                            actor, "API READ /orders/" + orderId);
     if (!database_->logAudit(entry)) {
@@ -1252,6 +1326,30 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
 
   if (path == "/api/v1/results") {
     std::vector<std::unique_ptr<core::TestResult>> results;
+    std::optional<int> limit;
+    std::optional<int> offset;
+    auto limitIt = query.find("limit");
+    if (limitIt != query.end()) {
+      int limitValue = 0;
+      if (!parseIntValue(limitIt->second, limitValue) || limitValue <= 0) {
+        return makeError(400, "validation_error", "Invalid limit",
+                         "Provide positive integer limit.");
+      }
+      limit = limitValue;
+    }
+    auto offsetIt = query.find("offset");
+    if (offsetIt != query.end()) {
+      int offsetValue = 0;
+      if (!parseIntValue(offsetIt->second, offsetValue) || offsetValue < 0) {
+        return makeError(400, "validation_error", "Invalid offset",
+                         "Provide non-negative integer offset.");
+      }
+      if (!limit.has_value()) {
+        return makeError(400, "validation_error", "Offset requires limit",
+                         "Provide limit when using offset.");
+      }
+      offset = offsetValue;
+    }
     auto orderIt = query.find("order_id");
     if (orderIt != query.end()) {
       int orderId = 0;
@@ -1259,9 +1357,9 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
         return makeError(400, "validation_error", "Invalid order_id",
                          "Provide numeric order_id.");
       }
-      results = database_->getTestResultsByOrderId(orderId);
+      results = database_->getTestResultsByOrderId(orderId, limit, offset);
     } else {
-      results = database_->getAllTestResults();
+      results = database_->getAllTestResults(limit, offset);
     }
 
     if (database_->hasError()) {
@@ -1282,8 +1380,12 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
     std::ostringstream details;
     details << "API READ /results"
             << "; count=" << results.size()
-            << "; order_id=" << (orderIt != query.end() ? orderIt->second : "any");
-    core::AuditEntry entry(core::AuditEntry::ActionType::UPDATE,
+            << "; order_id="
+            << (orderIt != query.end() ? orderIt->second : "any")
+            << "; limit=" << (limit.has_value() ? std::to_string(*limit) : "any")
+            << "; offset="
+            << (offset.has_value() ? std::to_string(*offset) : "any");
+    core::AuditEntry entry(core::AuditEntry::ActionType::ACCESS,
                            core::AuditEntry::EntityType::RESULT, "*",
                            actor, details.str());
     if (!database_->logAudit(entry)) {
@@ -1311,7 +1413,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                        "Verify the result_id.");
     }
 
-    core::AuditEntry entry(core::AuditEntry::ActionType::UPDATE,
+    core::AuditEntry entry(core::AuditEntry::ActionType::ACCESS,
                            core::AuditEntry::EntityType::RESULT, resultId,
                            actor, "API READ /results/" + resultId);
     if (!database_->logAudit(entry)) {

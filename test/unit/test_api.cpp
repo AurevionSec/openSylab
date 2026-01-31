@@ -127,6 +127,48 @@ bool test_api_ReadSamplesReturnsJson() {
   return true;
 }
 
+bool test_api_ReadSamplesInvalidStatus() {
+  std::string dbPath = uniqueDbPath();
+  auto db = std::make_shared<Database>(dbPath);
+  ASSERT_TRUE(db->open());
+  ASSERT_TRUE(db->initializeSchema());
+  ASSERT_TRUE(db->upsertApiKey("testkey", true));
+
+  ApiRouter router(db);
+  ApiRequest req;
+  req.method = "GET";
+  req.path = "/api/v1/samples?status=NOPE";
+  req.headers["x-api-key"] = "testkey";
+
+  ApiResponse res = router.handleRequest(req);
+  ASSERT_EQ(res.status, 400);
+
+  db->close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_api_ReadSamplesInvalidPagination() {
+  std::string dbPath = uniqueDbPath();
+  auto db = std::make_shared<Database>(dbPath);
+  ASSERT_TRUE(db->open());
+  ASSERT_TRUE(db->initializeSchema());
+  ASSERT_TRUE(db->upsertApiKey("testkey", true));
+
+  ApiRouter router(db);
+  ApiRequest req;
+  req.method = "GET";
+  req.path = "/api/v1/samples?offset=10";
+  req.headers["x-api-key"] = "testkey";
+
+  ApiResponse res = router.handleRequest(req);
+  ASSERT_EQ(res.status, 400);
+
+  db->close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
 bool test_api_ReadSampleByIdAudits() {
   std::string dbPath = uniqueDbPath();
   auto db = std::make_shared<Database>(dbPath);
@@ -183,6 +225,33 @@ bool test_api_ReadOrdersReturnsJson() {
   ASSERT_NE(res.body.find("\"order_id\":\"O_API_LIST\""),
             std::string::npos);
   ASSERT_EQ(auditCount(*db, AuditEntry::EntityType::ORDER, "*"), before + 1);
+
+  db->close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_api_ReadOrdersInvalidFilters() {
+  std::string dbPath = uniqueDbPath();
+  auto db = std::make_shared<Database>(dbPath);
+  ASSERT_TRUE(db->open());
+  ASSERT_TRUE(db->initializeSchema());
+  ASSERT_TRUE(db->upsertApiKey("testkey", true));
+
+  ApiRouter router(db);
+  ApiRequest badStatus;
+  badStatus.method = "GET";
+  badStatus.path = "/api/v1/orders?status=BAD";
+  badStatus.headers["x-api-key"] = "testkey";
+  ApiResponse resStatus = router.handleRequest(badStatus);
+  ASSERT_EQ(resStatus.status, 400);
+
+  ApiRequest badPriority;
+  badPriority.method = "GET";
+  badPriority.path = "/api/v1/orders?priority=BAD";
+  badPriority.headers["x-api-key"] = "testkey";
+  ApiResponse resPriority = router.handleRequest(badPriority);
+  ASSERT_EQ(resPriority.status, 400);
 
   db->close();
   std::remove(dbPath.c_str());
@@ -262,6 +331,26 @@ bool test_api_ReadResultsReturnsJson() {
   return true;
 }
 
+bool test_api_ReadResultsInvalidPagination() {
+  std::string dbPath = uniqueDbPath();
+  auto db = std::make_shared<Database>(dbPath);
+  ASSERT_TRUE(db->open());
+  ASSERT_TRUE(db->initializeSchema());
+  ASSERT_TRUE(db->upsertApiKey("testkey", true));
+
+  ApiRouter router(db);
+  ApiRequest req;
+  req.method = "GET";
+  req.path = "/api/v1/results?limit=-1";
+  req.headers["x-api-key"] = "testkey";
+  ApiResponse res = router.handleRequest(req);
+  ASSERT_EQ(res.status, 400);
+
+  db->close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
 bool test_api_ReadResultByIdAudits() {
   std::string dbPath = uniqueDbPath();
   auto db = std::make_shared<Database>(dbPath);
@@ -316,6 +405,51 @@ bool test_api_WriteAuthRequired() {
 
   ApiResponse res = router.handleRequest(req);
   ASSERT_EQ(res.status, 401);
+
+  db->close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_api_InactiveApiKeyRejected() {
+  std::string dbPath = uniqueDbPath();
+  auto db = std::make_shared<Database>(dbPath);
+  ASSERT_TRUE(db->open());
+  ASSERT_TRUE(db->initializeSchema());
+  ASSERT_TRUE(db->upsertApiKey("testkey", false));
+
+  ApiRouter router(db);
+  ApiRequest req;
+  req.method = "GET";
+  req.path = "/api/v1/samples";
+  req.headers["x-api-key"] = "testkey";
+
+  ApiResponse res = router.handleRequest(req);
+  ASSERT_EQ(res.status, 401);
+
+  db->close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_api_WriteInvalidJsonPayload() {
+  std::string dbPath = uniqueDbPath();
+  auto db = std::make_shared<Database>(dbPath);
+  ASSERT_TRUE(db->open());
+  ASSERT_TRUE(db->initializeSchema());
+  ASSERT_TRUE(db->upsertApiKey("testkey", true));
+
+  ApiRouter router(db);
+  ApiRequest req;
+  req.method = "POST";
+  req.path = "/api/v1/samples";
+  req.headers["x-api-key"] = "testkey";
+  req.body = "{bad json}";
+
+  ApiResponse res = router.handleRequest(req);
+  ASSERT_EQ(res.status, 400);
+  ASSERT_NE(res.body.find("\"code\":\"validation_error\""),
+            std::string::npos);
 
   db->close();
   std::remove(dbPath.c_str());
@@ -532,12 +666,20 @@ void registerApiTests() {
   registerTest("Api::SerializeResultJson", test_api_SerializeResultJson);
   registerTest("Api::ReadSamplesAuthRequired", test_api_ReadSamplesAuthRequired);
   registerTest("Api::ReadSamplesReturnsJson", test_api_ReadSamplesReturnsJson);
+  registerTest("Api::ReadSamplesInvalidStatus", test_api_ReadSamplesInvalidStatus);
+  registerTest("Api::ReadSamplesInvalidPagination",
+               test_api_ReadSamplesInvalidPagination);
   registerTest("Api::ReadSampleByIdAudits", test_api_ReadSampleByIdAudits);
   registerTest("Api::ReadOrdersReturnsJson", test_api_ReadOrdersReturnsJson);
+  registerTest("Api::ReadOrdersInvalidFilters", test_api_ReadOrdersInvalidFilters);
   registerTest("Api::ReadOrderByIdAudits", test_api_ReadOrderByIdAudits);
   registerTest("Api::ReadResultsReturnsJson", test_api_ReadResultsReturnsJson);
+  registerTest("Api::ReadResultsInvalidPagination",
+               test_api_ReadResultsInvalidPagination);
   registerTest("Api::ReadResultByIdAudits", test_api_ReadResultByIdAudits);
   registerTest("Api::WriteAuthRequired", test_api_WriteAuthRequired);
+  registerTest("Api::InactiveApiKeyRejected", test_api_InactiveApiKeyRejected);
+  registerTest("Api::WriteInvalidJsonPayload", test_api_WriteInvalidJsonPayload);
   registerTest("Api::WriteSampleMissingFields",
                test_api_WriteSampleMissingFields);
   registerTest("Api::WriteOrderMissingFields",

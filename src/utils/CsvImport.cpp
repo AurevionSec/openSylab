@@ -1,11 +1,14 @@
 #include "utils/CsvImport.h"
 #include <algorithm>
 #include <cctype>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <sstream>
 
 namespace {
+constexpr size_t kMaxImportBytes = 10 * 1024 * 1024;
+
 std::string trim(const std::string &value) {
   const size_t start = value.find_first_not_of(" \t\r\n");
   if (start == std::string::npos) {
@@ -84,6 +87,13 @@ CsvImport::importSamples(const std::string &filePath) {
   importedRecords_.clear();
   failedRecords_.clear();
   headerLine_.clear();
+
+  std::error_code ec;
+  const auto size = std::filesystem::file_size(filePath, ec);
+  if (!ec && size > kMaxImportBytes) {
+    setError("CSV-Datei zu groß für Import");
+    return samples;
+  }
 
   std::ifstream file(filePath);
   if (!file.is_open()) {

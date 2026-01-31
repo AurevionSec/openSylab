@@ -32,12 +32,16 @@ public:
     std::optional<std::time_t> fromDate;
     std::optional<std::time_t> toDate;
     bool excludeArchived = false;
+    std::optional<int> limit;
+    std::optional<int> offset;
   };
 
   struct OrderFilter {
     std::string status;
     std::string sampleId;
     std::string priority;
+    std::optional<int> limit;
+    std::optional<int> offset;
   };
 
   struct AuditLogFilter {
@@ -165,9 +169,30 @@ public:
   [[nodiscard]] std::unique_ptr<core::TestResult>
   getTestResultByResultId(const std::string &resultId);
   [[nodiscard]] std::vector<std::unique_ptr<core::TestResult>>
-  getTestResultsByOrderId(int orderId);
+  getTestResultsByOrderId(int orderId,
+                          std::optional<int> limit = std::nullopt,
+                          std::optional<int> offset = std::nullopt);
   [[nodiscard]] std::vector<std::unique_ptr<core::TestResult>>
-  getAllTestResults();
+  getAllTestResults(std::optional<int> limit = std::nullopt,
+                    std::optional<int> offset = std::nullopt);
+
+  struct BatchInsertError {
+    size_t index = 0;
+    std::string message;
+  };
+
+  struct BatchInsertResult {
+    size_t inserted = 0;
+    std::vector<BatchInsertError> failures;
+  };
+
+  [[nodiscard]] BatchInsertResult
+  createSamplesBatch(const std::vector<core::Sample> &samples,
+                     const std::string &actor = "");
+
+  [[nodiscard]] BatchInsertResult
+  createTestResultsBatch(const std::vector<core::TestResult> &results,
+                         const std::string &actor = "");
   [[nodiscard]] bool updateTestResult(const core::TestResult &result,
                                       const std::string &actor = "");
   [[nodiscard]] bool updateTestResultWithAudit(const core::TestResult &result,

@@ -8,6 +8,8 @@ namespace opensylab {
 namespace utils {
 namespace {
 
+constexpr size_t kMaxImportBytes = 10 * 1024 * 1024;
+
 std::string trim(const std::string &value) {
   const size_t start = value.find_first_not_of(" \t\r\n");
   if (start == std::string::npos) {
@@ -42,6 +44,17 @@ bool Hl7Exchange::importOruR01Message(const std::string &message,
 
   if (!database_) {
     summary.lastError = "Database unavailable";
+    return false;
+  }
+  if (message.size() > kMaxImportBytes) {
+    Hl7Parser::Error err;
+    err.segment = "HL7";
+    err.fieldIndex = 0;
+    err.line = 0;
+    err.message = "Payload too large";
+    summary.errors.push_back(err);
+    logErrors(summary.errors, actor, "", "", "");
+    summary.lastError = "HL7 payload exceeds size limit";
     return false;
   }
 
@@ -143,6 +156,11 @@ bool Hl7Exchange::importOruR01Message(const std::string &message,
   }
   const int orderDbId = storedOrder->getId();
 
+  std::vector<core::TestResult> results;
+  std::vector<std::string> resultIds;
+  results.reserve(mapped.results.size());
+  resultIds.reserve(mapped.results.size());
+
   for (const auto &resultData : mapped.results) {
     if (resultData.parameter.empty() || resultData.value.empty()) {
       Hl7Parser::Error err;
@@ -166,13 +184,19 @@ bool Hl7Exchange::importOruR01Message(const std::string &message,
     result.setMeasuredDate(std::time(nullptr));
     result.setFlag(result.evaluateFlag());
 
-    if (database_->createTestResult(result, actor)) {
-      summary.resultsCreated++;
-    } else {
+    results.push_back(result);
+    resultIds.push_back(result.getResultId());
+  }
+
+  if (!results.empty()) {
+    auto batch = database_->createTestResultsBatch(results, actor);
+    summary.resultsCreated += static_cast<int>(batch.inserted);
+    for (const auto &failure : batch.failures) {
       Hl7Parser::Error err;
       err.segment = "OBX";
       err.fieldIndex = 0;
-      err.message = database_->getLastError();
+      err.line = 0;
+      err.message = failure.message;
       summary.errors.push_back(err);
     }
   }

@@ -11,6 +11,7 @@
 #include <ctime>
 #include <fstream>
 #include <sstream>
+#include <sqlite3.h>
 
 using namespace opensylab::db;
 using namespace opensylab::core;
@@ -1042,6 +1043,59 @@ bool test_database_LogSupportAccess() {
                      AuditEntry::EntityType::SAMPLE, "SUP_S1", "support");
   ASSERT_NOT_NULL(entry);
   ASSERT_NE(entry->getDetails().find("support"), std::string::npos);
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_database_LogSupportAccessOrderResult() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  ASSERT_TRUE(
+      db.logSupportAccess(AuditEntry::EntityType::ORDER, "SUP_O1", "support",
+                          "support_list"));
+  ASSERT_TRUE(
+      db.logSupportAccess(AuditEntry::EntityType::RESULT, "SUP_R1", "support",
+                          "support_list"));
+
+  auto orderEntries =
+      db.getAuditLogByEntity(AuditEntry::EntityType::ORDER, "SUP_O1");
+  const AuditEntry *orderEntry =
+      findAuditEntry(orderEntries, AuditEntry::ActionType::ACCESS,
+                     AuditEntry::EntityType::ORDER, "SUP_O1", "support");
+  ASSERT_NOT_NULL(orderEntry);
+
+  auto resultEntries =
+      db.getAuditLogByEntity(AuditEntry::EntityType::RESULT, "SUP_R1");
+  const AuditEntry *resultEntry =
+      findAuditEntry(resultEntries, AuditEntry::ActionType::ACCESS,
+                     AuditEntry::EntityType::RESULT, "SUP_R1", "support");
+  ASSERT_NOT_NULL(resultEntry);
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_database_AuditFailureBlocksCreateSample() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  sqlite3 *raw = nullptr;
+  ASSERT_EQ(sqlite3_open(dbPath.c_str(), &raw), SQLITE_OK);
+  ASSERT_EQ(sqlite3_exec(raw, "DROP TABLE audit_log;", nullptr, nullptr, nullptr),
+            SQLITE_OK);
+  sqlite3_close(raw);
+
+  Sample sample("S_AUDIT_FAIL", "P_FAIL");
+  ASSERT_FALSE(db.createSample(sample, "tester"));
+  ASSERT_EQ(db.getSampleByBarcode("S_AUDIT_FAIL"), nullptr);
 
   db.close();
   std::remove(dbPath.c_str());
@@ -2207,6 +2261,10 @@ void registerDatabaseTests() {
                test_database_AssignUserRoleCustom);
   registerTest("Database::LogRoleAction", test_database_LogRoleAction);
   registerTest("Database::LogSupportAccess", test_database_LogSupportAccess);
+  registerTest("Database::LogSupportAccessOrderResult",
+               test_database_LogSupportAccessOrderResult);
+  registerTest("Database::AuditFailureBlocksCreateSample",
+               test_database_AuditFailureBlocksCreateSample);
   registerTest("Database::AuditLogFiltering",
                test_database_AuditLogFiltering);
   registerTest("Database::AuditLogFilterReset",

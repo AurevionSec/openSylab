@@ -1,11 +1,14 @@
 #include "utils/CsvResultImport.h"
 #include <algorithm>
 #include <cctype>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <sstream>
 
 namespace {
+constexpr size_t kMaxImportBytes = 10 * 1024 * 1024;
+
 std::string toLower(std::string value) {
   std::transform(value.begin(), value.end(), value.begin(),
                  [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
@@ -30,6 +33,13 @@ CsvResultImport::importResults(const std::string &filePath) {
   failedRecords_.clear();
   lastError_.clear();
   headerLine_.clear();
+
+  std::error_code ec;
+  const auto size = std::filesystem::file_size(filePath, ec);
+  if (!ec && size > kMaxImportBytes) {
+    setError("CSV-Datei zu groß für Import");
+    return results;
+  }
 
   std::ifstream file(filePath);
   if (!file.is_open()) {
@@ -118,17 +128,17 @@ CsvResultImport::importResults(const std::string &filePath) {
 int CsvResultImport::importAndStore(const std::string &filePath) {
   auto results = importResults(filePath);
 
-  int stored = 0;
-  for (const auto &result : results) {
-    if (database_->createTestResult(result)) {
-      stored++;
-    } else {
-      std::cout << "✗ Fehler beim Speichern von " << result.getResultId()
-                << ": " << database_->getLastError() << "\n";
+  auto batch = database_->createTestResultsBatch(results);
+  for (const auto &failure : batch.failures) {
+    if (failure.index >= results.size()) {
+      continue;
     }
+    std::cout << "✗ Fehler beim Speichern von "
+              << results[failure.index].getResultId() << ": "
+              << failure.message << "\n";
   }
 
-  return stored;
+  return static_cast<int>(batch.inserted);
 }
 
 bool CsvResultImport::processRecord(const std::string &record, int recordNumber,
