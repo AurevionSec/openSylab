@@ -487,6 +487,7 @@ void CliInterface::handleListSamples() {
   }
 
   const bool supportView = canAccessSupportData() && !isAdmin();
+  bool supportAccessOk = true;
   auto printSamples = [&](const std::string &title,
                           const std::vector<std::unique_ptr<core::Sample>>
                               &samplesToPrint,
@@ -507,8 +508,14 @@ void CliInterface::handleListSamples() {
       const std::string actor =
           currentUser_ ? currentUser_->getUsername() : std::string("system");
       for (const auto &sample : samplesToPrint) {
-        (void)database_->logSupportAccess(core::AuditEntry::EntityType::SAMPLE,
-                                          sample->getSampleId(), actor);
+        if (!database_->logSupportAccess(
+                core::AuditEntry::EntityType::SAMPLE, sample->getSampleId(),
+                actor)) {
+          supportAccessOk = false;
+          std::cout << "\n✗ Zugriff konnte nicht protokolliert werden: "
+                    << database_->getLastError() << "\n";
+          return;
+        }
       }
     }
 
@@ -538,6 +545,10 @@ void CliInterface::handleListSamples() {
 
   printSamples(hasCriteria ? "Suchergebnisse" : "Alle Proben", samples,
                supportView);
+  if (!supportAccessOk) {
+    waitForEnter();
+    return;
+  }
 
   db::Database::SampleFilter activeFilter = filter;
   std::string activeTitle = hasCriteria ? "Suchergebnisse" : "Alle Proben";
@@ -556,6 +567,10 @@ void CliInterface::handleListSamples() {
       resetFilter.excludeArchived = true;
       auto allSamples = database_->getSamplesByFilter(resetFilter);
       printSamples("Alle Proben", allSamples, supportView);
+      if (!supportAccessOk) {
+        waitForEnter();
+        return;
+      }
       activeFilter = resetFilter;
       activeTitle = "Alle Proben";
     }
@@ -633,8 +648,10 @@ void CliInterface::handleSearchSample() {
           currentUser_ ? currentUser_->getUsername() : std::string("system");
       if (!database_->logSupportAccess(core::AuditEntry::EntityType::SAMPLE,
                                        sample->getSampleId(), actor)) {
-        std::cout << "\n⚠ Zugriff konnte nicht protokolliert werden: "
+        std::cout << "\n✗ Zugriff konnte nicht protokolliert werden: "
                   << database_->getLastError() << "\n";
+        waitForEnter();
+        return;
       }
     }
     printSampleDetail(*sample, supportView);
@@ -1844,8 +1861,14 @@ void CliInterface::handleListOrders() {
       const std::string actor =
           currentUser_ ? currentUser_->getUsername() : std::string("system");
       for (const auto &order : orders) {
-        (void)database_->logSupportAccess(core::AuditEntry::EntityType::ORDER,
-                                          order->getOrderId(), actor);
+        if (!database_->logSupportAccess(
+                core::AuditEntry::EntityType::ORDER, order->getOrderId(),
+                actor)) {
+          std::cout << "\n✗ Zugriff konnte nicht protokolliert werden: "
+                    << database_->getLastError() << "\n";
+          waitForEnter();
+          return;
+        }
       }
     }
     std::cout << std::left << std::setw(5) << "ID" << std::setw(12)
@@ -1886,8 +1909,14 @@ void CliInterface::handleListOrders() {
           const std::string actor =
               currentUser_ ? currentUser_->getUsername() : std::string("system");
           for (const auto &order : orders) {
-            (void)database_->logSupportAccess(
-                core::AuditEntry::EntityType::ORDER, order->getOrderId(), actor);
+            if (!database_->logSupportAccess(
+                    core::AuditEntry::EntityType::ORDER, order->getOrderId(),
+                    actor)) {
+              std::cout << "\n✗ Zugriff konnte nicht protokolliert werden: "
+                        << database_->getLastError() << "\n";
+              waitForEnter();
+              return;
+            }
           }
         }
         std::cout << std::left << std::setw(5) << "ID" << std::setw(12)
@@ -2011,8 +2040,10 @@ void CliInterface::handleSearchOrder() {
           currentUser_ ? currentUser_->getUsername() : std::string("system");
       if (!database_->logSupportAccess(core::AuditEntry::EntityType::ORDER,
                                        order->getOrderId(), actor)) {
-        std::cout << "\n⚠ Zugriff konnte nicht protokolliert werden: "
+        std::cout << "\n✗ Zugriff konnte nicht protokolliert werden: "
                   << database_->getLastError() << "\n";
+        waitForEnter();
+        return;
       }
     }
     printOrderDetail(*order, supportView);
@@ -2208,6 +2239,7 @@ void CliInterface::handleOrdersForSample() {
   }
 
   auto orders = database_->getOrdersBySampleId(sampleId);
+  const bool supportView = canAccessSupportData() && !isAdmin();
 
   if (database_->hasError()) {
     std::cout << "✗ Fehler beim Abrufen der Aufträge:\n";
@@ -2215,6 +2247,20 @@ void CliInterface::handleOrdersForSample() {
   } else if (orders.empty()) {
     std::cout << "\nℹ Keine Aufträge für diese Probe vorhanden.\n";
   } else {
+    if (supportView) {
+      const std::string actor =
+          currentUser_ ? currentUser_->getUsername() : std::string("system");
+      for (const auto &order : orders) {
+        if (!database_->logSupportAccess(
+                core::AuditEntry::EntityType::ORDER, order->getOrderId(),
+                actor)) {
+          std::cout << "\n✗ Zugriff konnte nicht protokolliert werden: "
+                    << database_->getLastError() << "\n";
+          waitForEnter();
+          return;
+        }
+      }
+    }
     std::cout << "\nAufträge für Probe " << sampleId << ":\n\n";
     std::cout << std::left << std::setw(5) << "ID" << std::setw(12)
               << "Auftrags-ID" << std::setw(15) << "Testtyp" << std::setw(14)
@@ -2429,6 +2475,7 @@ void CliInterface::handleListResults() {
   std::cout << "\n";
 
   const bool supportView = canAccessSupportData() && !isAdmin();
+  bool supportAccessOk = true;
   auto printResults =
       [&](const std::vector<std::unique_ptr<core::TestResult>> &entries,
           bool logAccess) {
@@ -2442,8 +2489,14 @@ void CliInterface::handleListResults() {
             const std::string actor =
                 currentUser_ ? currentUser_->getUsername() : std::string("system");
             for (const auto &result : entries) {
-              (void)database_->logSupportAccess(core::AuditEntry::EntityType::RESULT,
-                                                result->getResultId(), actor);
+              if (!database_->logSupportAccess(
+                      core::AuditEntry::EntityType::RESULT,
+                      result->getResultId(), actor)) {
+                supportAccessOk = false;
+                std::cout << "\n✗ Zugriff konnte nicht protokolliert werden: "
+                          << database_->getLastError() << "\n";
+                return;
+              }
             }
           }
           std::cout << std::left << std::setw(5) << "ID" << std::setw(12)
@@ -2458,8 +2511,9 @@ void CliInterface::handleListResults() {
                       << std::setw(12) << result->getResultId()
                       << std::setw(10) << result->getOrderId()
                       << std::setw(15) << result->getTestParameter()
-                      << std::setw(10) << result->getValue() << std::setw(8)
-                      << result->getUnit() << std::setw(12)
+                      << std::setw(10) << (supportView ? "-" : result->getValue())
+                      << std::setw(8) << (supportView ? "-" : result->getUnit())
+                      << std::setw(12)
                       << result->getStatusString() << std::setw(10)
                       << result->getFlagString() << "\n";
           }
@@ -2471,6 +2525,10 @@ void CliInterface::handleListResults() {
   auto results = database_->getAllTestResults();
 
   printResults(results, supportView);
+  if (!supportAccessOk) {
+    waitForEnter();
+    return;
+  }
 
   std::string autoRefreshInput =
       readInput("\nAuto-Refresh alle 5s aktivieren? (j/n, Enter=ja)");
@@ -2529,8 +2587,12 @@ void CliInterface::handleSearchResult() {
           std::cout << "  Ergebnis-ID:     " << detail.getResultId() << "\n";
           std::cout << "  Auftrags-ID:     " << detail.getOrderId() << "\n";
           std::cout << "  Testparameter:   " << detail.getTestParameter() << "\n";
-          std::cout << "  Messwert:        " << detail.getValue() << " "
-                    << detail.getUnit() << "\n";
+          if (supportView) {
+            std::cout << "  Messwert:        -\n";
+          } else {
+            std::cout << "  Messwert:        " << detail.getValue() << " "
+                      << detail.getUnit() << "\n";
+          }
           std::cout << "  Status:          " << detail.getStatusString() << "\n";
           std::cout << "  Flag:            " << detail.getFlagString() << "\n";
           if (!supportView) {
@@ -2548,8 +2610,10 @@ void CliInterface::handleSearchResult() {
           currentUser_ ? currentUser_->getUsername() : std::string("system");
       if (!database_->logSupportAccess(core::AuditEntry::EntityType::RESULT,
                                        result->getResultId(), actor)) {
-        std::cout << "\n⚠ Zugriff konnte nicht protokolliert werden: "
+        std::cout << "\n✗ Zugriff konnte nicht protokolliert werden: "
                   << database_->getLastError() << "\n";
+        waitForEnter();
+        return;
       }
     }
     printResultDetail(*result, supportView);
@@ -2766,6 +2830,7 @@ void CliInterface::handleResultsForOrder() {
   std::cout << "Auftrag: " << order->getOrderId() << " - "
             << order->getTestType() << "\n\n";
 
+  const bool supportView = canAccessSupportData() && !isAdmin();
   auto results = database_->getTestResultsByOrderId(orderId);
 
   if (database_->hasError()) {
@@ -2774,6 +2839,20 @@ void CliInterface::handleResultsForOrder() {
   } else if (results.empty()) {
     std::cout << "ℹ Keine Ergebnisse für diesen Auftrag vorhanden.\n";
   } else {
+    if (supportView) {
+      const std::string actor =
+          currentUser_ ? currentUser_->getUsername() : std::string("system");
+      for (const auto &result : results) {
+        if (!database_->logSupportAccess(
+                core::AuditEntry::EntityType::RESULT, result->getResultId(),
+                actor)) {
+          std::cout << "\n✗ Zugriff konnte nicht protokolliert werden: "
+                    << database_->getLastError() << "\n";
+          waitForEnter();
+          return;
+        }
+      }
+    }
     std::cout << std::left << std::setw(5) << "ID" << std::setw(12)
               << "Ergebnis-ID" << std::setw(15) << "Parameter" << std::setw(10)
               << "Wert" << std::setw(8) << "Einheit" << std::setw(12)
@@ -2784,7 +2863,8 @@ void CliInterface::handleResultsForOrder() {
       std::cout << std::left << std::setw(5) << result->getId() << std::setw(12)
                 << result->getResultId() << std::setw(15)
                 << result->getTestParameter() << std::setw(10)
-                << result->getValue() << std::setw(8) << result->getUnit()
+                << (supportView ? "-" : result->getValue()) << std::setw(8)
+                << (supportView ? "-" : result->getUnit())
                 << std::setw(12) << result->getStatusString() << std::setw(10)
                 << result->getFlagString() << "\n";
     }
@@ -2827,8 +2907,10 @@ void CliInterface::handleResultsForOrder() {
           std::cout << std::left << std::setw(5) << result->getId()
                     << std::setw(12) << result->getResultId()
                     << std::setw(15) << result->getTestParameter()
-                    << std::setw(10) << result->getValue() << std::setw(8)
-                    << result->getUnit() << std::setw(12)
+                    << std::setw(10)
+                    << (supportView ? "-" : result->getValue()) << std::setw(8)
+                    << (supportView ? "-" : result->getUnit())
+                    << std::setw(12)
                     << result->getStatusString() << std::setw(10)
                     << result->getFlagString() << "\n";
         }
