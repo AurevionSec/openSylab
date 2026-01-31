@@ -2949,9 +2949,10 @@ void CliInterface::handleShowAuditLog() {
     std::cout << "  [3] Gelöscht\n";
     std::cout << "  [4] Angemeldet\n";
     std::cout << "  [5] Abgemeldet\n";
-    std::cout << "  [6] Validiert\n\n";
+    std::cout << "  [6] Validiert\n";
+    std::cout << "  [7] Exportiert\n\n";
 
-    int actionChoice = readInteger("Aktion (0-6)");
+    int actionChoice = readInteger("Aktion (0-7)");
     if (!running_)
       return;
     switch (actionChoice) {
@@ -2974,6 +2975,9 @@ void CliInterface::handleShowAuditLog() {
       break;
     case 6:
       filter.action = core::AuditEntry::ActionType::VALIDATE;
+      break;
+    case 7:
+      filter.action = core::AuditEntry::ActionType::EXPORT;
       break;
     default:
       std::cout << "\n✗ Ungültige Auswahl.\n";
@@ -3046,6 +3050,12 @@ void CliInterface::handleShowAuditLog() {
         waitForEnter();
         return;
       }
+    }
+    if (filter.fromTime.has_value() && filter.toTime.has_value() &&
+        filter.fromTime.value() > filter.toTime.value()) {
+      std::cout << "\n✗ Von-Zeitstempel darf nicht nach dem Bis-Zeitstempel liegen.\n";
+      waitForEnter();
+      return;
     }
   }
 
@@ -3343,9 +3353,10 @@ void CliInterface::handleExportAuditLog() {
     std::cout << "  [3] Gelöscht\n";
     std::cout << "  [4] Angemeldet\n";
     std::cout << "  [5] Abgemeldet\n";
-    std::cout << "  [6] Validiert\n\n";
+    std::cout << "  [6] Validiert\n";
+    std::cout << "  [7] Exportiert\n\n";
 
-    int actionChoice = readInteger("Aktion (0-6)");
+    int actionChoice = readInteger("Aktion (0-7)");
     if (!running_)
       return;
     switch (actionChoice) {
@@ -3368,6 +3379,9 @@ void CliInterface::handleExportAuditLog() {
       break;
     case 6:
       filter.action = core::AuditEntry::ActionType::VALIDATE;
+      break;
+    case 7:
+      filter.action = core::AuditEntry::ActionType::EXPORT;
       break;
     default:
       std::cout << "\n✗ Ungültige Auswahl.\n";
@@ -3448,6 +3462,12 @@ void CliInterface::handleExportAuditLog() {
         waitForEnter();
         return;
       }
+    }
+    if (filter.fromTime.has_value() && filter.toTime.has_value() &&
+        filter.fromTime.value() > filter.toTime.value()) {
+      std::cout << "\n✗ Von-Zeitstempel darf nicht nach dem Bis-Zeitstempel liegen.\n";
+      waitForEnter();
+      return;
     }
   }
 

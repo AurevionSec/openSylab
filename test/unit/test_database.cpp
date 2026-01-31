@@ -1069,6 +1069,11 @@ bool test_database_AuditLogFiltering() {
   e3.setTimestamp(3000);
   ASSERT_TRUE(db.logAudit(e3));
 
+  AuditEntry e4(AuditEntry::ActionType::EXPORT, AuditEntry::EntityType::SYSTEM,
+                "audit_log", "admin", "export");
+  e4.setTimestamp(4000);
+  ASSERT_TRUE(db.logAudit(e4));
+
   Database::AuditLogFilter byUser;
   byUser.user = "userA";
   auto userEntries = db.getAuditLogFiltered(byUser);
@@ -1079,6 +1084,12 @@ bool test_database_AuditLogFiltering() {
   auto actionEntries = db.getAuditLogFiltered(byAction);
   ASSERT_EQ(actionEntries.size(), static_cast<size_t>(1));
   ASSERT_EQ(actionEntries[0]->getEntityId(), "O1");
+
+  Database::AuditLogFilter byExportAction;
+  byExportAction.action = AuditEntry::ActionType::EXPORT;
+  auto exportEntries = db.getAuditLogFiltered(byExportAction);
+  ASSERT_EQ(exportEntries.size(), static_cast<size_t>(1));
+  ASSERT_EQ(exportEntries[0]->getEntityId(), "audit_log");
 
   Database::AuditLogFilter byEntity;
   byEntity.entity = AuditEntry::EntityType::SAMPLE;
