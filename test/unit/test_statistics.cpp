@@ -30,6 +30,16 @@ int countFor(const std::vector<Database::StatusCount> &entries,
   }
   return 0;
 }
+
+bool hasStatus(const std::vector<Database::StatusCount> &entries,
+               const std::string &status) {
+  for (const auto &entry : entries) {
+    if (entry.status == status) {
+      return true;
+    }
+  }
+  return false;
+}
 } // namespace
 
 bool test_statistics_StatsCounts() {
@@ -84,6 +94,16 @@ bool test_statistics_StatsCounts() {
   ASSERT_EQ(countFor(sampleStats.byStatus,
                      Sample::statusToString(Sample::Status::ARCHIVED)),
             1);
+  ASSERT_TRUE(hasStatus(sampleStats.byStatus,
+                        Sample::statusToString(Sample::Status::IN_ANALYSIS)));
+  ASSERT_TRUE(hasStatus(sampleStats.byStatus,
+                        Sample::statusToString(Sample::Status::ANALYZED)));
+  ASSERT_EQ(countFor(sampleStats.byStatus,
+                     Sample::statusToString(Sample::Status::IN_ANALYSIS)),
+            0);
+  ASSERT_EQ(countFor(sampleStats.byStatus,
+                     Sample::statusToString(Sample::Status::ANALYZED)),
+            0);
 
   const auto orderStats = db.getOrderStats();
   ASSERT_FALSE(db.hasError());
@@ -97,6 +117,16 @@ bool test_statistics_StatsCounts() {
   ASSERT_EQ(countFor(orderStats.byStatus,
                      Order::statusToString(Order::Status::CANCELLED)),
             1);
+  ASSERT_TRUE(hasStatus(orderStats.byStatus,
+                        Order::statusToString(Order::Status::COMPLETED)));
+  ASSERT_TRUE(hasStatus(orderStats.byStatus,
+                        Order::statusToString(Order::Status::VALIDATED)));
+  ASSERT_EQ(countFor(orderStats.byStatus,
+                     Order::statusToString(Order::Status::COMPLETED)),
+            0);
+  ASSERT_EQ(countFor(orderStats.byStatus,
+                     Order::statusToString(Order::Status::VALIDATED)),
+            0);
 
   const auto resultStats = db.getResultStats();
   ASSERT_FALSE(db.hasError());
@@ -108,6 +138,21 @@ bool test_statistics_StatsCounts() {
       countFor(resultStats.byStatus,
                TestResult::statusToString(TestResult::Status::VALIDATED)),
       1);
+  ASSERT_TRUE(hasStatus(resultStats.byStatus,
+                        TestResult::statusToString(TestResult::Status::PENDING)));
+  ASSERT_TRUE(hasStatus(resultStats.byStatus,
+                        TestResult::statusToString(TestResult::Status::REJECTED)));
+  ASSERT_TRUE(hasStatus(resultStats.byStatus,
+                        TestResult::statusToString(TestResult::Status::REPEATED)));
+  ASSERT_EQ(countFor(resultStats.byStatus,
+                     TestResult::statusToString(TestResult::Status::PENDING)),
+            0);
+  ASSERT_EQ(countFor(resultStats.byStatus,
+                     TestResult::statusToString(TestResult::Status::REJECTED)),
+            0);
+  ASSERT_EQ(countFor(resultStats.byStatus,
+                     TestResult::statusToString(TestResult::Status::REPEATED)),
+            0);
 
   db.close();
   std::remove(dbPath.c_str());
@@ -171,6 +216,11 @@ bool test_statistics_FilteredCounts() {
   ASSERT_EQ(countFor(sampleStatusStats.byStatus,
                      Sample::statusToString(Sample::Status::VALIDATED)),
             1);
+  ASSERT_TRUE(hasStatus(sampleStatusStats.byStatus,
+                        Sample::statusToString(Sample::Status::REGISTERED)));
+  ASSERT_EQ(countFor(sampleStatusStats.byStatus,
+                     Sample::statusToString(Sample::Status::REGISTERED)),
+            0);
 
   Database::StatsFilter orderStatusFilter;
   orderStatusFilter.status =
@@ -180,6 +230,11 @@ bool test_statistics_FilteredCounts() {
   ASSERT_EQ(countFor(orderStatusStats.byStatus,
                      Order::statusToString(Order::Status::IN_PROGRESS)),
             1);
+  ASSERT_TRUE(hasStatus(orderStatusStats.byStatus,
+                        Order::statusToString(Order::Status::REQUESTED)));
+  ASSERT_EQ(countFor(orderStatusStats.byStatus,
+                     Order::statusToString(Order::Status::REQUESTED)),
+            0);
 
   Database::StatsFilter resultStatusFilter;
   resultStatusFilter.status =
@@ -189,6 +244,11 @@ bool test_statistics_FilteredCounts() {
   ASSERT_EQ(countFor(resultStatusStats.byStatus,
                      TestResult::statusToString(TestResult::Status::VALIDATED)),
             1);
+  ASSERT_TRUE(hasStatus(resultStatusStats.byStatus,
+                        TestResult::statusToString(TestResult::Status::ENTERED)));
+  ASSERT_EQ(countFor(resultStatusStats.byStatus,
+                     TestResult::statusToString(TestResult::Status::ENTERED)),
+            0);
 
   db.close();
   std::remove(dbPath.c_str());

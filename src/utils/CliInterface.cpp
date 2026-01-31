@@ -970,138 +970,6 @@ void CliInterface::handleStatistics() {
   printSeparator();
   std::cout << "\n";
 
-  bool applyFilters = false;
-  db::Database::StatsFilter sampleFilter;
-  db::Database::StatsFilter orderFilter;
-  db::Database::StatsFilter resultFilter;
-
-  std::string filterChoice = readInput("Filter anwenden? (y/n)");
-  if (!running_)
-    return;
-  filterChoice = trim(filterChoice);
-  if (!filterChoice.empty() &&
-      (filterChoice[0] == 'y' || filterChoice[0] == 'Y')) {
-    applyFilters = true;
-
-    std::string fromInput = readInput("Von-Datum (YYYY-MM-DD, optional)");
-    if (!running_)
-      return;
-    fromInput = trim(fromInput);
-    if (!fromInput.empty()) {
-      std::time_t fromDate;
-      if (!parseDate(fromInput, fromDate)) {
-        std::cout << "\n✗ Ungültiges Von-Datum.\n";
-        waitForEnter();
-        return;
-      }
-      sampleFilter.fromDate = fromDate;
-      orderFilter.fromDate = fromDate;
-      resultFilter.fromDate = fromDate;
-    }
-
-    std::string toInput = readInput("Bis-Datum (YYYY-MM-DD, optional)");
-    if (!running_)
-      return;
-    toInput = trim(toInput);
-    if (!toInput.empty()) {
-      std::time_t toDate;
-      if (!parseDate(toInput, toDate)) {
-        std::cout << "\n✗ Ungültiges Bis-Datum.\n";
-        waitForEnter();
-        return;
-      }
-      toDate += (24 * 60 * 60 - 1);
-      sampleFilter.toDate = toDate;
-      orderFilter.toDate = toDate;
-      resultFilter.toDate = toDate;
-    }
-
-    if (sampleFilter.fromDate.has_value() &&
-        sampleFilter.toDate.has_value() &&
-        sampleFilter.fromDate.value() > sampleFilter.toDate.value()) {
-      std::cout << "\n✗ Von-Datum darf nicht nach dem Bis-Datum liegen.\n";
-      waitForEnter();
-      return;
-    }
-
-    auto readStatusFilter =
-        [&](const std::string &title,
-            const std::vector<std::string> &options,
-            std::optional<std::string> &out) {
-          std::cout << "\n" << title << "\n";
-          for (size_t i = 0; i < options.size(); ++i) {
-            std::cout << "  " << (i + 1) << ") " << options[i] << "\n";
-          }
-          std::string choice = readInput("Status-Auswahl (0=alle, optional)");
-          if (!running_)
-            return false;
-          choice = trim(choice);
-          if (choice.empty() || choice == "0") {
-            out.reset();
-            return true;
-          }
-          try {
-            int index = std::stoi(choice);
-            if (index < 1 || static_cast<size_t>(index) > options.size()) {
-              throw std::out_of_range("status");
-            }
-            out = options[index - 1];
-            return true;
-          } catch (...) {
-            std::cout << "\n✗ Ungültige Status-Auswahl.\n";
-            waitForEnter();
-            return false;
-          }
-        };
-
-    std::optional<std::string> sampleStatus;
-    std::optional<std::string> orderStatus;
-    std::optional<std::string> resultStatus;
-
-    const std::vector<std::string> sampleOptions = {
-        core::Sample::statusToString(core::Sample::Status::REGISTERED),
-        core::Sample::statusToString(core::Sample::Status::IN_ANALYSIS),
-        core::Sample::statusToString(core::Sample::Status::ANALYZED),
-        core::Sample::statusToString(core::Sample::Status::VALIDATED),
-        core::Sample::statusToString(core::Sample::Status::ARCHIVED)};
-
-    if (!readStatusFilter("Proben-Status:", sampleOptions, sampleStatus)) {
-      return;
-    }
-
-    const std::vector<std::string> orderOptions = {
-        core::Order::statusToString(core::Order::Status::REQUESTED),
-        core::Order::statusToString(core::Order::Status::IN_PROGRESS),
-        core::Order::statusToString(core::Order::Status::COMPLETED),
-        core::Order::statusToString(core::Order::Status::VALIDATED),
-        core::Order::statusToString(core::Order::Status::CANCELLED)};
-
-    if (!readStatusFilter("Auftrags-Status:", orderOptions, orderStatus)) {
-      return;
-    }
-
-    const std::vector<std::string> resultOptions = {
-        core::TestResult::statusToString(core::TestResult::Status::PENDING),
-        core::TestResult::statusToString(core::TestResult::Status::ENTERED),
-        core::TestResult::statusToString(core::TestResult::Status::VALIDATED),
-        core::TestResult::statusToString(core::TestResult::Status::REJECTED),
-        core::TestResult::statusToString(core::TestResult::Status::REPEATED)};
-
-    if (!readStatusFilter("Ergebnis-Status:", resultOptions, resultStatus)) {
-      return;
-    }
-
-    if (sampleStatus.has_value()) {
-      sampleFilter.status = sampleStatus;
-    }
-    if (orderStatus.has_value()) {
-      orderFilter.status = orderStatus;
-    }
-    if (resultStatus.has_value()) {
-      resultFilter.status = resultStatus;
-    }
-  }
-
   auto countFor = [](const std::vector<db::Database::StatusCount> &entries,
                      const std::string &status) {
     for (const auto &entry : entries) {
@@ -1112,162 +980,119 @@ void CliInterface::handleStatistics() {
     return 0;
   };
 
-  while (true) {
-    const auto sampleStats = database_->getSampleStats(sampleFilter);
-    if (database_->hasError()) {
-      std::cout << "✗ Fehler beim Abrufen der Proben-Statistiken:\n";
-      std::cout << "  " << database_->getLastError() << "\n";
-      waitForEnter();
-      return;
-    }
-
-    const auto orderStats = database_->getOrderStats(orderFilter);
-    if (database_->hasError()) {
-      std::cout << "✗ Fehler beim Abrufen der Auftrags-Statistiken:\n";
-      std::cout << "  " << database_->getLastError() << "\n";
-      waitForEnter();
-      return;
-    }
-
-    const auto resultStats = database_->getResultStats(resultFilter);
-    if (database_->hasError()) {
-      std::cout << "✗ Fehler beim Abrufen der Ergebnis-Statistiken:\n";
-      std::cout << "  " << database_->getLastError() << "\n";
-      waitForEnter();
-      return;
-    }
-
-    std::cout << "PROBEN\n";
-    std::cout << "Gesamtanzahl:            " << sampleStats.total << "\n";
-    std::cout << "Nach Status:\n";
-    std::cout << "  Erfasst:               "
-              << countFor(sampleStats.byStatus,
-                          core::Sample::statusToString(
-                              core::Sample::Status::REGISTERED))
-              << "\n";
-    std::cout << "  In Analyse:            "
-              << countFor(sampleStats.byStatus,
-                          core::Sample::statusToString(
-                              core::Sample::Status::IN_ANALYSIS))
-              << "\n";
-    std::cout << "  Analysiert:            "
-              << countFor(sampleStats.byStatus,
-                          core::Sample::statusToString(
-                              core::Sample::Status::ANALYZED))
-              << "\n";
-    std::cout << "  Validiert:             "
-              << countFor(sampleStats.byStatus,
-                          core::Sample::statusToString(
-                              core::Sample::Status::VALIDATED))
-              << "\n";
-    std::cout << "  Archiviert:            "
-              << countFor(sampleStats.byStatus,
-                          core::Sample::statusToString(
-                              core::Sample::Status::ARCHIVED))
-              << "\n\n";
-
-    std::cout << "AUFTRÄGE\n";
-    std::cout << "Gesamtanzahl:            " << orderStats.total << "\n";
-    std::cout << "Nach Status:\n";
-    std::cout << "  Angefordert:           "
-              << countFor(orderStats.byStatus,
-                          core::Order::statusToString(
-                              core::Order::Status::REQUESTED))
-              << "\n";
-    std::cout << "  In Bearbeitung:        "
-              << countFor(orderStats.byStatus,
-                          core::Order::statusToString(
-                              core::Order::Status::IN_PROGRESS))
-              << "\n";
-    std::cout << "  Abgeschlossen:         "
-              << countFor(orderStats.byStatus,
-                          core::Order::statusToString(
-                              core::Order::Status::COMPLETED))
-              << "\n";
-    std::cout << "  Validiert:             "
-              << countFor(orderStats.byStatus,
-                          core::Order::statusToString(
-                              core::Order::Status::VALIDATED))
-              << "\n";
-    std::cout << "  Storniert:             "
-              << countFor(orderStats.byStatus,
-                          core::Order::statusToString(
-                              core::Order::Status::CANCELLED))
-              << "\n\n";
-
-    std::cout << "ERGEBNISSE\n";
-    std::cout << "Gesamtanzahl:            " << resultStats.total << "\n";
-    std::cout << "Nach Status:\n";
-    std::cout << "  Ausstehend:            "
-              << countFor(resultStats.byStatus,
-                          core::TestResult::statusToString(
-                              core::TestResult::Status::PENDING))
-              << "\n";
-    std::cout << "  Eingegeben:            "
-              << countFor(resultStats.byStatus,
-                          core::TestResult::statusToString(
-                              core::TestResult::Status::ENTERED))
-              << "\n";
-    std::cout << "  Validiert:             "
-              << countFor(resultStats.byStatus,
-                          core::TestResult::statusToString(
-                              core::TestResult::Status::VALIDATED))
-              << "\n";
-    std::cout << "  Abgelehnt:             "
-              << countFor(resultStats.byStatus,
-                          core::TestResult::statusToString(
-                              core::TestResult::Status::REJECTED))
-              << "\n";
-    std::cout << "  Wiederholung nötig:    "
-              << countFor(resultStats.byStatus,
-                          core::TestResult::statusToString(
-                              core::TestResult::Status::REPEATED))
-              << "\n";
-
-    printSeparator();
-    if (!applyFilters) {
-      waitForEnter();
-      return;
-    }
-
-    std::string exportChoice = readInput("Report exportieren? (y/n)");
-    if (!running_)
-      return;
-    exportChoice = trim(exportChoice);
-    if (!exportChoice.empty() &&
-        (exportChoice[0] == 'y' || exportChoice[0] == 'Y')) {
-      std::string filePath = readInput("Export-Dateipfad");
-      if (!running_)
-        return;
-      filePath = trim(filePath);
-      if (isEmpty(filePath)) {
-        std::cout << "\n✗ Bitte geben Sie einen Dateipfad an.\n";
-      } else if (database_->exportStatsReportToCsv(
-                     filePath, sampleFilter, orderFilter, resultFilter,
-                     getCurrentUsername())) {
-        std::cout << "\n✓ Export erfolgreich!\n";
-      } else {
-        std::cout << "\n✗ Fehler beim Export:\n";
-        std::cout << "  " << database_->getLastError() << "\n";
-      }
-    }
-
-    std::string resetChoice =
-        readInput("Filter zurücksetzen und alle anzeigen? (y/n)");
-    if (!running_)
-      return;
-    resetChoice = trim(resetChoice);
-    if (!resetChoice.empty() &&
-        (resetChoice[0] == 'y' || resetChoice[0] == 'Y')) {
-      applyFilters = false;
-      sampleFilter = db::Database::StatsFilter{};
-      orderFilter = db::Database::StatsFilter{};
-      resultFilter = db::Database::StatsFilter{};
-      continue;
-    }
+  const auto sampleStats = database_->getSampleStats();
+  if (database_->hasError()) {
+    std::cout << "✗ Fehler beim Abrufen der Proben-Statistiken:\n";
+    std::cout << "  " << database_->getLastError() << "\n";
     waitForEnter();
     return;
   }
+
+  const auto orderStats = database_->getOrderStats();
+  if (database_->hasError()) {
+    std::cout << "✗ Fehler beim Abrufen der Auftrags-Statistiken:\n";
+    std::cout << "  " << database_->getLastError() << "\n";
+    waitForEnter();
+    return;
+  }
+
+  const auto resultStats = database_->getResultStats();
+  if (database_->hasError()) {
+    std::cout << "✗ Fehler beim Abrufen der Ergebnis-Statistiken:\n";
+    std::cout << "  " << database_->getLastError() << "\n";
+    waitForEnter();
+    return;
+  }
+
+  std::cout << "PROBEN\n";
+  std::cout << "Gesamtanzahl:            " << sampleStats.total << "\n";
+  std::cout << "Nach Status:\n";
+  std::cout << "  Erfasst:               "
+            << countFor(sampleStats.byStatus,
+                        core::Sample::statusToString(
+                            core::Sample::Status::REGISTERED))
+            << "\n";
+  std::cout << "  In Analyse:            "
+            << countFor(sampleStats.byStatus,
+                        core::Sample::statusToString(
+                            core::Sample::Status::IN_ANALYSIS))
+            << "\n";
+  std::cout << "  Analysiert:            "
+            << countFor(sampleStats.byStatus,
+                        core::Sample::statusToString(
+                            core::Sample::Status::ANALYZED))
+            << "\n";
+  std::cout << "  Validiert:             "
+            << countFor(sampleStats.byStatus,
+                        core::Sample::statusToString(
+                            core::Sample::Status::VALIDATED))
+            << "\n";
+  std::cout << "  Archiviert:            "
+            << countFor(sampleStats.byStatus,
+                        core::Sample::statusToString(
+                            core::Sample::Status::ARCHIVED))
+            << "\n\n";
+
+  std::cout << "AUFTRÄGE\n";
+  std::cout << "Gesamtanzahl:            " << orderStats.total << "\n";
+  std::cout << "Nach Status:\n";
+  std::cout << "  Angefordert:           "
+            << countFor(orderStats.byStatus,
+                        core::Order::statusToString(
+                            core::Order::Status::REQUESTED))
+            << "\n";
+  std::cout << "  In Bearbeitung:        "
+            << countFor(orderStats.byStatus,
+                        core::Order::statusToString(
+                            core::Order::Status::IN_PROGRESS))
+            << "\n";
+  std::cout << "  Abgeschlossen:         "
+            << countFor(orderStats.byStatus,
+                        core::Order::statusToString(
+                            core::Order::Status::COMPLETED))
+            << "\n";
+  std::cout << "  Validiert:             "
+            << countFor(orderStats.byStatus,
+                        core::Order::statusToString(
+                            core::Order::Status::VALIDATED))
+            << "\n";
+  std::cout << "  Storniert:             "
+            << countFor(orderStats.byStatus,
+                        core::Order::statusToString(
+                            core::Order::Status::CANCELLED))
+            << "\n\n";
+
+  std::cout << "ERGEBNISSE\n";
+  std::cout << "Gesamtanzahl:            " << resultStats.total << "\n";
+  std::cout << "Nach Status:\n";
+  std::cout << "  Ausstehend:            "
+            << countFor(resultStats.byStatus,
+                        core::TestResult::statusToString(
+                            core::TestResult::Status::PENDING))
+            << "\n";
+  std::cout << "  Eingegeben:            "
+            << countFor(resultStats.byStatus,
+                        core::TestResult::statusToString(
+                            core::TestResult::Status::ENTERED))
+            << "\n";
+  std::cout << "  Validiert:             "
+            << countFor(resultStats.byStatus,
+                        core::TestResult::statusToString(
+                            core::TestResult::Status::VALIDATED))
+            << "\n";
+  std::cout << "  Abgelehnt:             "
+            << countFor(resultStats.byStatus,
+                        core::TestResult::statusToString(
+                            core::TestResult::Status::REJECTED))
+            << "\n";
+  std::cout << "  Wiederholung nötig:    "
+            << countFor(resultStats.byStatus,
+                        core::TestResult::statusToString(
+                            core::TestResult::Status::REPEATED))
+            << "\n";
+
+  printSeparator();
+  waitForEnter();
 }
 
 void CliInterface::handleExit() {

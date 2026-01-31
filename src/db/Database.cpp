@@ -2547,6 +2547,17 @@ Database::EntityStats Database::getSampleStats(const StatsFilter &filter) {
     return stats;
   }
 
+  const std::vector<std::string> sampleStatuses = {
+      core::Sample::statusToString(core::Sample::Status::REGISTERED),
+      core::Sample::statusToString(core::Sample::Status::IN_ANALYSIS),
+      core::Sample::statusToString(core::Sample::Status::ANALYZED),
+      core::Sample::statusToString(core::Sample::Status::VALIDATED),
+      core::Sample::statusToString(core::Sample::Status::ARCHIVED)};
+  stats.byStatus.reserve(sampleStatuses.size());
+  for (const auto &status : sampleStatuses) {
+    stats.byStatus.push_back(StatusCount{status, 0});
+  }
+
   const std::string statusSQL =
       "SELECT status, COUNT(*) FROM samples" + filterSql.whereClause +
       " GROUP BY status;";
@@ -2563,10 +2574,19 @@ Database::EntityStats Database::getSampleStats(const StatsFilter &filter) {
     return stats;
   }
   while ((rc = sqlite3_step(stmt.get())) == SQLITE_ROW) {
-    StatusCount entry;
-    entry.status = columnText(stmt.get(), 0);
-    entry.count = sqlite3_column_int(stmt.get(), 1);
-    stats.byStatus.push_back(std::move(entry));
+    const std::string status = columnText(stmt.get(), 0);
+    const int count = sqlite3_column_int(stmt.get(), 1);
+    bool updated = false;
+    for (auto &entry : stats.byStatus) {
+      if (entry.status == status) {
+        entry.count = count;
+        updated = true;
+        break;
+      }
+    }
+    if (!updated) {
+      stats.byStatus.push_back(StatusCount{status, count});
+    }
   }
   if (rc != SQLITE_DONE) {
     setError("Fehler beim Abrufen der Status-Statistiken: " +
@@ -2609,6 +2629,17 @@ Database::EntityStats Database::getOrderStats(const StatsFilter &filter) {
     return stats;
   }
 
+  const std::vector<std::string> orderStatuses = {
+      core::Order::statusToString(core::Order::Status::REQUESTED),
+      core::Order::statusToString(core::Order::Status::IN_PROGRESS),
+      core::Order::statusToString(core::Order::Status::COMPLETED),
+      core::Order::statusToString(core::Order::Status::VALIDATED),
+      core::Order::statusToString(core::Order::Status::CANCELLED)};
+  stats.byStatus.reserve(orderStatuses.size());
+  for (const auto &status : orderStatuses) {
+    stats.byStatus.push_back(StatusCount{status, 0});
+  }
+
   const std::string statusSQL =
       "SELECT status, COUNT(*) FROM orders" + filterSql.whereClause +
       " GROUP BY status;";
@@ -2625,10 +2656,19 @@ Database::EntityStats Database::getOrderStats(const StatsFilter &filter) {
     return stats;
   }
   while ((rc = sqlite3_step(stmt.get())) == SQLITE_ROW) {
-    StatusCount entry;
-    entry.status = columnText(stmt.get(), 0);
-    entry.count = sqlite3_column_int(stmt.get(), 1);
-    stats.byStatus.push_back(std::move(entry));
+    const std::string status = columnText(stmt.get(), 0);
+    const int count = sqlite3_column_int(stmt.get(), 1);
+    bool updated = false;
+    for (auto &entry : stats.byStatus) {
+      if (entry.status == status) {
+        entry.count = count;
+        updated = true;
+        break;
+      }
+    }
+    if (!updated) {
+      stats.byStatus.push_back(StatusCount{status, count});
+    }
   }
   if (rc != SQLITE_DONE) {
     setError("Fehler beim Abrufen der Status-Statistiken: " +
@@ -2671,6 +2711,17 @@ Database::EntityStats Database::getResultStats(const StatsFilter &filter) {
     return stats;
   }
 
+  const std::vector<std::string> resultStatuses = {
+      core::TestResult::statusToString(core::TestResult::Status::PENDING),
+      core::TestResult::statusToString(core::TestResult::Status::ENTERED),
+      core::TestResult::statusToString(core::TestResult::Status::VALIDATED),
+      core::TestResult::statusToString(core::TestResult::Status::REJECTED),
+      core::TestResult::statusToString(core::TestResult::Status::REPEATED)};
+  stats.byStatus.reserve(resultStatuses.size());
+  for (const auto &status : resultStatuses) {
+    stats.byStatus.push_back(StatusCount{status, 0});
+  }
+
   const std::string statusSQL =
       "SELECT status, COUNT(*) FROM test_results" + filterSql.whereClause +
       " GROUP BY status;";
@@ -2687,10 +2738,19 @@ Database::EntityStats Database::getResultStats(const StatsFilter &filter) {
     return stats;
   }
   while ((rc = sqlite3_step(stmt.get())) == SQLITE_ROW) {
-    StatusCount entry;
-    entry.status = columnText(stmt.get(), 0);
-    entry.count = sqlite3_column_int(stmt.get(), 1);
-    stats.byStatus.push_back(std::move(entry));
+    const std::string status = columnText(stmt.get(), 0);
+    const int count = sqlite3_column_int(stmt.get(), 1);
+    bool updated = false;
+    for (auto &entry : stats.byStatus) {
+      if (entry.status == status) {
+        entry.count = count;
+        updated = true;
+        break;
+      }
+    }
+    if (!updated) {
+      stats.byStatus.push_back(StatusCount{status, count});
+    }
   }
   if (rc != SQLITE_DONE) {
     setError("Fehler beim Abrufen der Status-Statistiken: " +
