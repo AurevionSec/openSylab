@@ -53,6 +53,26 @@ std::string jsonEscape(const std::string &value) {
   return out;
 }
 
+std::string mapIssueType(const std::string &code) {
+  const std::string lower = trim(code);
+  if (lower == "validation_error") {
+    return "invalid";
+  }
+  if (lower == "not_found") {
+    return "not-found";
+  }
+  if (lower == "conflict") {
+    return "conflict";
+  }
+  if (lower == "unauthorized" || lower == "forbidden") {
+    return "forbidden";
+  }
+  if (lower == "internal_error") {
+    return "exception";
+  }
+  return "processing";
+}
+
 size_t findKey(const std::string &json, const std::string &key,
                size_t start = 0) {
   const std::string needle = "\"" + key + "\"";
@@ -545,9 +565,36 @@ std::string FhirExchange::exportBundle(
         << jsonEscape(result.getTestParameter())
         << "\"},\"valueQuantity\":{\"value\":\""
         << jsonEscape(result.getValue()) << "\",\"unit\":\""
-        << jsonEscape(result.getUnit())
-        << "\"},\"referenceRange\":[{\"low\":{\"value\":\""
-        << jsonEscape(result.getReferenceRange()) << "\"}}]}}";
+        << jsonEscape(result.getUnit()) << "\"}";
+
+    const double refLow = result.getReferenceLow();
+    const double refHigh = result.getReferenceHigh();
+    const bool hasLow = refLow != 0.0;
+    const bool hasHigh = refHigh != 0.0;
+    if (hasLow || hasHigh) {
+      out << ",\"referenceRange\":[{";
+      bool wrote = false;
+      if (hasLow) {
+        out << "\"low\":{\"value\":" << refLow;
+        if (!result.getUnit().empty()) {
+          out << ",\"unit\":\"" << jsonEscape(result.getUnit()) << "\"";
+        }
+        out << "}";
+        wrote = true;
+      }
+      if (hasHigh) {
+        if (wrote) {
+          out << ",";
+        }
+        out << "\"high\":{\"value\":" << refHigh;
+        if (!result.getUnit().empty()) {
+          out << ",\"unit\":\"" << jsonEscape(result.getUnit()) << "\"";
+        }
+        out << "}";
+      }
+      out << "}]";
+    }
+    out << "}}";
   }
 
   out << "]}";
@@ -583,10 +630,11 @@ std::string FhirExchange::buildOperationOutcome(
     }
     out << "{";
     out << "\"severity\":\"error\",";
-    out << "\"code\":\"" << jsonEscape(errors[i].code) << "\",";
+    out << "\"code\":\"" << jsonEscape(mapIssueType(errors[i].code)) << "\",";
     out << "\"details\":{\"text\":\"" << jsonEscape(errors[i].message)
         << "\"},";
-    out << "\"diagnostics\":\"" << jsonEscape(errors[i].path) << "\"";
+    out << "\"diagnostics\":\""
+        << jsonEscape(errors[i].path + " (" + errors[i].code + ")") << "\"";
     out << "}";
   }
   out << "]}";

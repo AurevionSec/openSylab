@@ -87,6 +87,8 @@ bool test_fhir_ImportLogsErrors() {
   FhirExchange::ImportSummary summary;
   ASSERT_FALSE(exchange.importBundle(payload, "tester", summary));
   ASSERT_FALSE(summary.operationOutcome.empty());
+  ASSERT_NE(summary.operationOutcome.find("\"code\":\"invalid\""),
+            std::string::npos);
 
   auto entries =
       db->getAuditLogByEntity(opensylab::core::AuditEntry::EntityType::SYSTEM,
@@ -107,6 +109,8 @@ bool test_fhir_ExportBundleContainsResources() {
   result.setValue("5.5");
   result.setUnit("mg/dL");
   result.setReferenceRange("4-6");
+  result.setReferenceLow(4.0);
+  result.setReferenceHigh(6.0);
   std::vector<opensylab::core::TestResult> results = {result};
 
   FhirExchange exchange(nullptr);
@@ -116,6 +120,9 @@ bool test_fhir_ExportBundleContainsResources() {
   ASSERT_NE(payload.find("\"resourceType\":\"Specimen\""), std::string::npos);
   ASSERT_NE(payload.find("\"resourceType\":\"Observation\""),
             std::string::npos);
+  ASSERT_NE(payload.find("\"referenceRange\""), std::string::npos);
+  ASSERT_NE(payload.find("\"low\""), std::string::npos);
+  ASSERT_NE(payload.find("\"high\""), std::string::npos);
 
   return true;
 }
