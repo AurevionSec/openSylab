@@ -132,10 +132,21 @@ bool test_hl7_ImportLogsErrors() {
   ASSERT_FALSE(exchange.importOruR01Message(message, "tester", summary));
   ASSERT_FALSE(summary.errors.empty());
 
+  bool hasLineContext = false;
+  for (const auto &err : summary.errors) {
+    if (err.line > 0 && !err.segment.empty()) {
+      hasLineContext = true;
+      break;
+    }
+  }
+  ASSERT_TRUE(hasLineContext);
+
   auto entries =
       db->getAuditLogByEntity(opensylab::core::AuditEntry::EntityType::SYSTEM,
                               "hl7");
   ASSERT_FALSE(entries.empty());
+  ASSERT_NE(entries[0]->getDetails().find("message_id=MSG2"),
+            std::string::npos);
 
   db->close();
   std::remove(dbPath.c_str());

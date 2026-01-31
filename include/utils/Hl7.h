@@ -63,6 +63,7 @@ public:
   const std::vector<Segment> &getSegments() const { return segments_; }
   const std::string &getMessageType() const { return messageType_; }
   const std::string &getTriggerEvent() const { return triggerEvent_; }
+  const std::string &getMessageControlId() const { return messageControlId_; }
   const std::string &getVersion() const { return version_; }
 
 private:
@@ -70,6 +71,7 @@ private:
   std::vector<Error> errors_;
   std::string messageType_;
   std::string triggerEvent_;
+  std::string messageControlId_;
   std::string version_;
 
   static std::vector<std::string> splitFields(const std::string &line,
@@ -103,7 +105,10 @@ public:
 private:
   std::shared_ptr<db::Database> database_;
   void logErrors(const std::vector<Hl7Parser::Error> &errors,
-                 const std::string &actor);
+                 const std::string &actor,
+                 const std::string &messageId,
+                 const std::string &messageType,
+                 const std::string &triggerEvent);
 };
 
 } // namespace utils

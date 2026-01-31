@@ -48,13 +48,15 @@ bool Hl7Exchange::importOruR01Message(const std::string &message,
   Hl7Parser parser;
   if (!parser.parse(message)) {
     summary.errors = parser.getErrors();
-    logErrors(summary.errors, actor);
+    logErrors(summary.errors, actor, parser.getMessageControlId(),
+              parser.getMessageType(), parser.getTriggerEvent());
     summary.lastError = "Failed to parse HL7 message";
     return false;
   }
   if (!parser.validateOruR01()) {
     summary.errors = parser.getErrors();
-    logErrors(summary.errors, actor);
+    logErrors(summary.errors, actor, parser.getMessageControlId(),
+              parser.getMessageType(), parser.getTriggerEvent());
     summary.lastError = "Invalid ORU^R01 message";
     return false;
   }
@@ -62,18 +64,30 @@ bool Hl7Exchange::importOruR01Message(const std::string &message,
   Hl7Parser::MappedData mapped;
   if (!parser.mapOruR01(mapped)) {
     summary.errors = parser.getErrors();
-    logErrors(summary.errors, actor);
+    logErrors(summary.errors, actor, parser.getMessageControlId(),
+              parser.getMessageType(), parser.getTriggerEvent());
     summary.lastError = "Failed to map ORU^R01 message";
     return false;
   }
 
+  auto findLine = [&](const std::string &segmentName) -> int {
+    for (const auto &segment : parser.getSegments()) {
+      if (segment.name == segmentName) {
+        return segment.line;
+      }
+    }
+    return 0;
+  };
+
   if (mapped.sample.sampleId.empty() || mapped.sample.patientId.empty()) {
     Hl7Parser::Error err;
     err.segment = "PID";
-    err.fieldIndex = 3;
+    err.line = findLine("PID");
+    err.fieldIndex = mapped.sample.patientId.empty() ? 3 : 0;
     err.message = "Missing sample_id or patient_id";
     summary.errors.push_back(err);
-    logErrors(summary.errors, actor);
+    logErrors(summary.errors, actor, parser.getMessageControlId(),
+              parser.getMessageType(), parser.getTriggerEvent());
     summary.lastError = "Missing required sample identifiers";
     return false;
   }
@@ -96,10 +110,12 @@ bool Hl7Exchange::importOruR01Message(const std::string &message,
   if (mapped.order.orderId.empty() || mapped.order.sampleId.empty()) {
     Hl7Parser::Error err;
     err.segment = "OBR";
-    err.fieldIndex = 2;
+    err.line = findLine("OBR");
+    err.fieldIndex = mapped.order.orderId.empty() ? 2 : 3;
     err.message = "Missing order_id or sample_id";
     summary.errors.push_back(err);
-    logErrors(summary.errors, actor);
+    logErrors(summary.errors, actor, parser.getMessageControlId(),
+              parser.getMessageType(), parser.getTriggerEvent());
     summary.lastError = "Missing required order identifiers";
     return false;
   }
@@ -162,7 +178,8 @@ bool Hl7Exchange::importOruR01Message(const std::string &message,
   }
 
   if (!summary.errors.empty()) {
-    logErrors(summary.errors, actor);
+    logErrors(summary.errors, actor, parser.getMessageControlId(),
+              parser.getMessageType(), parser.getTriggerEvent());
     summary.lastError = "HL7 import completed with errors";
     return false;
   }
@@ -194,14 +211,22 @@ std::string Hl7Exchange::exportOruR01Message(
 }
 
 void Hl7Exchange::logErrors(const std::vector<Hl7Parser::Error> &errors,
-                            const std::string &actor) {
+                            const std::string &actor,
+                            const std::string &messageId,
+                            const std::string &messageType,
+                            const std::string &triggerEvent) {
   if (!database_) {
     return;
   }
 
   for (const auto &error : errors) {
     std::ostringstream details;
-    details << "HL7 error: segment=" << error.segment
+    details << "HL7 error: message_id="
+            << (messageId.empty() ? "unknown" : messageId)
+            << " type=" << (messageType.empty() ? "unknown" : messageType)
+            << "^"
+            << (triggerEvent.empty() ? "unknown" : triggerEvent)
+            << " segment=" << error.segment
             << " field=" << error.fieldIndex
             << " line=" << error.line
             << " message=" << error.message;
@@ -217,6 +242,7 @@ bool Hl7Parser::parse(const std::string &rawMessage) {
   errors_.clear();
   messageType_.clear();
   triggerEvent_.clear();
+  messageControlId_.clear();
   version_.clear();
 
   if (rawMessage.empty()) {
@@ -281,6 +307,7 @@ bool Hl7Parser::parse(const std::string &rawMessage) {
       messageType_ = mshType;
     }
   }
+  messageControlId_ = fieldValue(*msh, 9);
   version_ = fieldValue(*msh, 12);
 
   return true;
@@ -306,6 +333,9 @@ bool Hl7Parser::validateOruR01() {
         } else {
           messageType_ = mshType;
         }
+      }
+      if (messageControlId_.empty()) {
+        messageControlId_ = fieldValue(*msh, 9);
       }
     }
   }
