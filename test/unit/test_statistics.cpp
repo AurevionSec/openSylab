@@ -307,8 +307,14 @@ bool test_statistics_ExportReport() {
 
   const std::string reportPath = "test_stats_export.csv";
   Database::StatsFilter sampleFilter;
+  sampleFilter.status =
+      Sample::statusToString(Sample::Status::REGISTERED);
   Database::StatsFilter orderFilter;
+  orderFilter.status =
+      Order::statusToString(Order::Status::IN_PROGRESS);
   Database::StatsFilter resultFilter;
+  resultFilter.status =
+      TestResult::statusToString(TestResult::Status::VALIDATED);
   ASSERT_TRUE(db.exportStatsReportToCsv(reportPath, sampleFilter, orderFilter,
                                         resultFilter, "tester"));
 
@@ -318,6 +324,15 @@ bool test_statistics_ExportReport() {
                       std::istreambuf_iterator<char>());
   input.close();
   ASSERT_NE(content.find("entity,status,count"), std::string::npos);
+  ASSERT_NE(content.find("# sample_filter status=" +
+                         Sample::statusToString(Sample::Status::REGISTERED)),
+            std::string::npos);
+  ASSERT_NE(content.find("# order_filter status=" +
+                         Order::statusToString(Order::Status::IN_PROGRESS)),
+            std::string::npos);
+  ASSERT_NE(content.find("# result_filter status=" +
+                         TestResult::statusToString(TestResult::Status::VALIDATED)),
+            std::string::npos);
   ASSERT_NE(content.find("samples,TOTAL"), std::string::npos);
   ASSERT_NE(content.find("orders,TOTAL"), std::string::npos);
   ASSERT_NE(content.find("results,TOTAL"), std::string::npos);
@@ -326,6 +341,14 @@ bool test_statistics_ExportReport() {
       db.getAuditLogByEntity(opensylab::core::AuditEntry::EntityType::SYSTEM,
                               "stats_report");
   ASSERT_FALSE(entries.empty());
+  bool hasExport = false;
+  for (const auto &entry : entries) {
+    if (entry && entry->getAction() == opensylab::core::AuditEntry::ActionType::EXPORT) {
+      hasExport = true;
+      break;
+    }
+  }
+  ASSERT_TRUE(hasExport);
 
   std::remove(reportPath.c_str());
   db.close();

@@ -2885,7 +2885,7 @@ bool Database::exportStatsReportToCsv(
           << "; result_from=" << formatDate(resultFilter.fromDate)
           << "; result_to=" << formatDate(resultFilter.toDate);
 
-  core::AuditEntry auditEntry(core::AuditEntry::ActionType::UPDATE,
+  core::AuditEntry auditEntry(core::AuditEntry::ActionType::EXPORT,
                               core::AuditEntry::EntityType::SYSTEM,
                               "stats_report", normalizeActor(actor),
                               details.str());

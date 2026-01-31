@@ -1107,6 +1107,12 @@ void CliInterface::handleStatistics() {
     return true;
   };
 
+  auto hasActiveFilters = [&]() {
+    return sampleFilter.fromDate.has_value() || sampleFilter.toDate.has_value() ||
+           sampleFilter.status.has_value() || orderFilter.status.has_value() ||
+           resultFilter.status.has_value();
+  };
+
   while (true) {
     const auto sampleStats = database_->getSampleStats(sampleFilter);
     if (database_->hasError()) {
@@ -1223,6 +1229,7 @@ void CliInterface::handleStatistics() {
     std::cout << "Optionen:\n";
     std::cout << "  1) Filter anwenden\n";
     std::cout << "  2) Filter zurücksetzen\n";
+    std::cout << "  3) Report exportieren\n";
     std::cout << "  0) Zurück\n";
 
     std::string choice = readInput("Auswahl");
@@ -1243,6 +1250,34 @@ void CliInterface::handleStatistics() {
       sampleFilter = db::Database::StatsFilter{};
       orderFilter = db::Database::StatsFilter{};
       resultFilter = db::Database::StatsFilter{};
+      continue;
+    }
+    if (choice == "3") {
+      if (!hasActiveFilters()) {
+        std::cout << "\n✗ Bitte zuerst Filter anwenden.\n";
+        waitForEnter();
+        continue;
+      }
+
+      std::string filePath = readInput("Export-Dateipfad");
+      if (!running_)
+        return;
+      filePath = trim(filePath);
+      if (isEmpty(filePath)) {
+        std::cout << "\n✗ Bitte geben Sie einen Dateipfad an.\n";
+        waitForEnter();
+        continue;
+      }
+
+      if (database_->exportStatsReportToCsv(
+              filePath, sampleFilter, orderFilter, resultFilter,
+              getCurrentUsername())) {
+        std::cout << "\n✓ Export erfolgreich!\n";
+      } else {
+        std::cout << "\n✗ Fehler beim Export:\n";
+        std::cout << "  " << database_->getLastError() << "\n";
+      }
+      waitForEnter();
       continue;
     }
 
