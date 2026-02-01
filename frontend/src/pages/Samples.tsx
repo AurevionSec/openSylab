@@ -3,6 +3,7 @@ import { Layout } from '../components/Layout/Layout';
 import { Card } from '../components/common/Card';
 import { Button } from '../components/common/Button';
 import { SampleCreateModal } from '../components/Samples/SampleCreateModal';
+import { SampleEditModal } from '../components/Samples/SampleEditModal';
 import { getSamples } from '../services/samples';
 import type { Sample } from '../types/sample';
 import { SAMPLE_STATUSES, STATUS_COLORS } from '../utils/constants';
@@ -15,6 +16,8 @@ export const Samples = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalSamples, setTotalSamples] = useState(0);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [selectedSampleId, setSelectedSampleId] = useState<number | null>(null);
   const itemsPerPage = 20;
 
   useEffect(() => {
@@ -53,6 +56,34 @@ export const Samples = () => {
 
   const handleCreateSuccess = (newSample: Sample) => {
     console.log('[Samples] Sample created successfully:', newSample);
+    // Refresh the samples list
+    const fetchSamples = async () => {
+      setLoading(true);
+      try {
+        const data = await getSamples({
+          status: selectedStatus || undefined,
+          limit: itemsPerPage,
+          offset: (currentPage - 1) * itemsPerPage,
+        });
+        setSamples(data.samples);
+        setTotalSamples(data.total);
+      } catch (err) {
+        setError('Failed to load samples');
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchSamples();
+  };
+
+  const handleEditClick = (sampleId: number) => {
+    setSelectedSampleId(sampleId);
+    setIsEditModalOpen(true);
+  };
+
+  const handleEditSuccess = (updatedSample: Sample) => {
+    console.log('[Samples] Sample updated successfully:', updatedSample);
     // Refresh the samples list
     const fetchSamples = async () => {
       setLoading(true);
@@ -187,6 +218,12 @@ export const Samples = () => {
                       >
                         Created
                       </th>
+                      <th
+                        scope="col"
+                        className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
+                      >
+                        Actions
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -215,6 +252,28 @@ export const Samples = () => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {new Date(sample.created_at).toLocaleDateString()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => handleEditClick(sample.id)}
+                          >
+                            <span className="flex items-center gap-1">
+                              <svg
+                                className="w-4 h-4"
+                                fill="none"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="2"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                              </svg>
+                              Edit
+                            </span>
+                          </Button>
                         </td>
                       </tr>
                     ))}
@@ -281,6 +340,16 @@ export const Samples = () => {
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         onSuccess={handleCreateSuccess}
+      />
+
+      <SampleEditModal
+        isOpen={isEditModalOpen}
+        sampleId={selectedSampleId}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setSelectedSampleId(null);
+        }}
+        onSuccess={handleEditSuccess}
       />
     </Layout>
   );
