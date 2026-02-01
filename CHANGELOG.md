@@ -2,6 +2,131 @@
 
 Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert.
 
+## [0.5.0] - 2026-02-01
+
+### Neue Features
+
+#### 🆕 JWT-basierte Authentifizierung
+- **JWT Token Authentication** als Ersatz für API-Key-Authentifizierung:
+  - HS256-Algorithmus mit konfigurierbarem Secret
+  - 60-Minuten Token-Gültigkeit
+  - Token-Generierung mit User-Claims (userId, username, role)
+  - Token-Validierung mit Signatur- und Ablaufprüfung
+  - Rückwärtskompatibilität: JWT-first mit API-Key-Fallback
+- **Login-Endpoint**: POST `/api/v1/auth/login`
+  - Username/Password-Authentifizierung
+  - JWT-Token-Rückgabe mit User-Info
+  - Detaillierte Fehlerbehandlung (401, 400, 500)
+- **Bibliothek**: jwt-cpp v0.7.0 via CMake FetchContent
+- **Dateien**:
+  - `include/auth/JwtAuth.h` - JWT-Authentifizierung Header
+  - `src/auth/JwtAuth.cpp` - JWT-Implementierung
+  - `src/api/ApiServer.cpp` - Login-Handler und Token-Validierung
+
+#### 🆕 React Frontend (MVP)
+- **Single Page Application** mit React 18 + TypeScript:
+  - Vite Build-System mit Hot Module Replacement
+  - TailwindCSS für responsive UI
+  - React Router für Client-Side-Routing
+- **Authentifizierung**:
+  - Login-Seite mit Username/Password-Formular
+  - JWT-Token-Management (localStorage mit Ablaufprüfung)
+  - Automatische Token-Validierung bei App-Start
+  - Protected Routes mit Redirect zu Login
+  - Logout-Funktion mit Token-Bereinigung
+- **Dashboard**: Übersichtsseite mit Willkommensnachricht
+- **Probenverwaltung**:
+  - Samples-Liste mit Filtering nach Status
+  - Pagination (20 Items pro Seite)
+  - Sample Create Modal mit Formularvalidierung
+  - Sample Edit Modal mit Datenvorausfüllung
+  - Status-Dropdown mit allen SAMPLE_STATUSES
+  - Real-time Formularvalidierung
+- **UI-Komponenten**:
+  - Layout mit Header und Navigation
+  - Card, Button, Input Komponenten
+  - Loading States und Error Handling
+  - Responsive Design
+- **API-Integration**:
+  - Axios-basierte API-Client
+  - JWT Bearer Token Interceptor
+  - CORS-Unterstützung
+  - Fehlerbehandlung mit Backend-Message-Extraktion
+- **Dateien**:
+  - `frontend/` - Komplettes React-Frontend-Projekt
+  - `frontend/src/services/auth.ts` - JWT-Auth-Service
+  - `frontend/src/services/samples.ts` - Samples-API-Service
+  - `frontend/src/context/AuthContext.tsx` - Auth-State-Management
+  - `frontend/src/pages/Login.tsx` - Login-Seite
+  - `frontend/src/pages/Dashboard.tsx` - Dashboard
+  - `frontend/src/pages/Samples.tsx` - Probenverwaltung
+  - `frontend/src/components/Samples/SampleCreateModal.tsx` - Create-Modal
+  - `frontend/src/components/Samples/SampleEditModal.tsx` - Edit-Modal
+
+#### 🆕 TLS/HTTPS-Unterstützung
+- **OpenSSL-Integration** für verschlüsselte Verbindungen:
+  - TLS 1.2+ mit modernen Cipher Suites
+  - Zertifikat- und Private-Key-Loading
+  - SSL-Handshake mit Client-Verbindungen
+  - Optionaler TLS-Modus (aktivierbar/deaktivierbar)
+- **TlsContext-Klasse** für SSL-Management:
+  - OpenSSL-Initialisierung
+  - SSL-Kontext-Konfiguration
+  - Fehlerbehandlung mit detaillierten Messages
+- **Dual-Mode-Server**: HTTP oder HTTPS je nach Konfiguration
+- **Dateien**:
+  - `include/api/TlsContext.h` - TLS-Kontext Header
+  - `src/api/TlsContext.cpp` - TLS-Implementierung
+  - `src/api/ApiServer.cpp` - TLS-Integration in handleClientTls()
+
+#### 🆕 REST API Erweiterungen
+- **DELETE-Endpoints** für vollständige CRUD-Operationen:
+  - DELETE `/api/v1/samples/:sample_id` - Probe löschen
+  - DELETE `/api/v1/orders/:order_id` - Auftrag löschen
+  - DELETE `/api/v1/results/:result_id` - Ergebnis löschen
+  - Ressourcen-Existenzprüfung vor Löschung (404 bei nicht gefunden)
+  - 204 No Content bei erfolgreicher Löschung
+  - Audit-Logging mit Actor-Tracking
+- **CORS-Support** für Frontend-Integration:
+  - Access-Control-Allow-Origin: http://localhost:5173
+  - Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+  - Access-Control-Allow-Headers: Content-Type, X-API-Key, Authorization
+  - OPTIONS Preflight-Handling
+- **Verbesserte Fehlerbehandlung**:
+  - Konsistente JSON-Fehlerantworten
+  - HTTP-Statuscodes nach REST-Konventionen
+  - Backend-Error-Message-Extraktion im Frontend
+
+### Verbesserungen
+
+- **Build-System**: CMake-Integration für jwt-cpp und OpenSSL
+- **Dokumentation**:
+  - HTTPS_QUICK_START.md - TLS-Setup-Anleitung
+  - frontend/README.md - Frontend-Dokumentation
+  - frontend/DEVELOPMENT.md - Entwickler-Guide
+  - frontend/QUICK_START.md - Frontend-Schnellstart
+- **Code-Qualität**:
+  - TypeScript für Type-Safety im Frontend
+  - ESLint-Konfiguration
+  - Konsistente Error-Handling-Patterns
+- **Sicherheit**:
+  - JWT-Token-basierte Authentifizierung
+  - TLS/HTTPS-Verschlüsselung
+  - Passwort-Hashing (DJB2 mit Salt)
+  - Input-Validierung in API und Frontend
+
+### Breaking Changes
+
+- **Authentifizierung**: API-Key wird durch JWT-Tokens ersetzt (mit Rückwärtskompatibilität)
+- **Frontend**: Neue React-basierte UI anstelle CLI-only
+
+### Technische Details
+
+- **Frontend-Stack**: React 18, TypeScript, Vite, TailwindCSS, React Router, Axios
+- **Backend-Dependencies**: jwt-cpp v0.7.0, OpenSSL 3.x
+- **API-Version**: v1 (keine Breaking Changes in bestehenden Endpoints)
+- **Browser-Kompatibilität**: Moderne Browser mit ES2020+ Support
+
 ## [0.2.0] - 2026-01-02
 
 ### Neue Features
