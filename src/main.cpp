@@ -17,6 +17,7 @@
  * - Command-Line Interface
  */
 
+#include "api/ApiServer.h"
 #include "db/Database.h"
 #include "utils/CliInterface.h"
 #include <cstdlib>
@@ -48,12 +49,33 @@ int main(int argc, char *argv[]) {
 
   // Datenbankpfad ermitteln
   std::string dbPath;
+  bool runApi = false;
+  int apiPort = 8080;
 
-  if (argc > 1) {
-    // Wenn Kommandozeilenargument übergeben wurde, verwende es als DB-Pfad
-    dbPath = argv[1];
-  } else {
-    // Sonst Konfiguration laden
+  for (int i = 1; i < argc; ++i) {
+    std::string arg = argv[i];
+    if (arg == "--api") {
+      runApi = true;
+      continue;
+    }
+    if (arg == "--api-port" && i + 1 < argc) {
+      try {
+        apiPort = std::stoi(argv[++i]);
+      } catch (...) {
+        apiPort = 8080;
+      }
+      continue;
+    }
+    if (arg == "--db" && i + 1 < argc) {
+      dbPath = argv[++i];
+      continue;
+    }
+    if (dbPath.empty()) {
+      dbPath = arg;
+    }
+  }
+
+  if (dbPath.empty()) {
     dbPath = loadConfiguration();
   }
 
@@ -78,15 +100,26 @@ int main(int argc, char *argv[]) {
 
   std::cout << "Datenbank erfolgreich initialisiert.\n" << std::endl;
 
-  // CLI-Interface starten
-  try {
-    auto cli = std::make_unique<opensylab::utils::CliInterface>(database);
-    cli->run();
-  } catch (const std::exception &e) {
-    std::cerr << "FEHLER: Unerwarteter Fehler im CLI: " << e.what()
+  if (runApi) {
+    std::cout << "API-Server wird auf Port " << apiPort << " gestartet...\n"
               << std::endl;
-    database->close();
-    return 1;
+    opensylab::api::ApiServer server(database, apiPort);
+    if (!server.run()) {
+      std::cerr << "FEHLER: API-Server konnte nicht gestartet werden.\n";
+      database->close();
+      return 1;
+    }
+  } else {
+    // CLI-Interface starten
+    try {
+      auto cli = std::make_unique<opensylab::utils::CliInterface>(database);
+      cli->run();
+    } catch (const std::exception &e) {
+      std::cerr << "FEHLER: Unerwarteter Fehler im CLI: " << e.what()
+                << std::endl;
+      database->close();
+      return 1;
+    }
   }
 
   // Aufräumen

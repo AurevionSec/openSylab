@@ -24,13 +24,15 @@ public:
     DELETE,  // Datensatz gelöscht
     LOGIN,   // Benutzer angemeldet
     LOGOUT,  // Benutzer abgemeldet
-    VALIDATE // Ergebnis validiert
+    VALIDATE, // Ergebnis validiert
+    EXPORT,   // Daten exportiert
+    ACCESS    // Zugriff (z.B. Support)
   };
 
   /**
    * @brief Betroffene Entität
    */
-  enum class EntityType { SAMPLE, ORDER, RESULT, USER, SYSTEM };
+  enum class EntityType { SAMPLE, ORDER, RESULT, USER, ROLE, SYSTEM };
 
   // Konstruktoren
   AuditEntry();

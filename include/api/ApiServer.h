@@ -1,0 +1,114 @@
+#ifndef OPENSYLAB_APISERVER_H
+#define OPENSYLAB_APISERVER_H
+
+#include "core/Order.h"
+#include "core/Sample.h"
+#include "core/TestResult.h"
+#include "db/Database.h"
+#include "api/TlsContext.h"
+#include "auth/JwtAuth.h"
+#include <atomic>
+#include <memory>
+#include <string>
+#include <unordered_map>
+#include <optional>
+#include <openssl/ssl.h>
+
+namespace opensylab {
+namespace api {
+
+struct ApiRequest {
+  std::string method;
+  std::string path;
+  std::unordered_map<std::string, std::string> headers;
+  std::string body;
+
+  // JWT Authentication context (populated after successful auth)
+  std::optional<int> userId;
+  std::optional<std::string> username;
+  std::optional<std::string> userRole;
+};
+
+struct ApiResponse {
+  int status = 200;
+  std::string body;
+  std::string contentType = "application/json";
+};
+
+class ApiRouter {
+public:
+  explicit ApiRouter(std::shared_ptr<db::Database> database);
+
+  ApiResponse handleRequest(const ApiRequest &request);
+
+  static std::string sampleToJson(const core::Sample &sample);
+  static std::string orderToJson(const core::Order &order);
+  static std::string resultToJson(const core::TestResult &result);
+
+private:
+  // Authentication handlers
+  ApiResponse handleLogin(const ApiRequest &request);
+
+  // JWT validation helper
+  std::optional<auth::JwtAuth::TokenPayload>
+  extractAndValidateJwt(const std::unordered_map<std::string, std::string> &headers);
+
+  std::shared_ptr<db::Database> database_;
+  std::unique_ptr<auth::JwtAuth> jwtAuth_;
+};
+
+class ApiServer {
+public:
+  ApiServer(std::shared_ptr<db::Database> database, int port = 8080);
+
+  bool run();
+  void stop();
+
+  /**
+   * @brief Enable TLS/HTTPS support
+   *
+   * @param certPath Path to PEM-encoded certificate file
+   * @param keyPath Path to PEM-encoded private key file
+   * @return true if TLS enabled successfully, false otherwise
+   */
+  bool enableTls(const std::string& certPath, const std::string& keyPath);
+
+  /**
+   * @brief Disable TLS (use plain HTTP)
+   */
+  void disableTls();
+
+  /**
+   * @brief Check if TLS is enabled
+   *
+   * @return true if TLS enabled, false otherwise
+   */
+  bool isTlsEnabled() const;
+
+  /**
+   * @brief Get last TLS error message
+   *
+   * @return Error message string
+   */
+  std::string getTlsError() const;
+
+private:
+  bool bindAndListen();
+  void serveLoop();
+  void handleClient(int clientFd);
+  void handleClientTls(int clientFd);
+  void handleClientPlain(int clientFd);
+
+  std::shared_ptr<db::Database> database_;
+  ApiRouter router_;
+  int port_;
+  int serverFd_;
+  std::atomic<bool> running_;
+  std::unique_ptr<TlsContext> tlsContext_;
+  bool tlsEnabled_;
+};
+
+} // namespace api
+} // namespace opensylab
+
+#endif // OPENSYLAB_APISERVER_H

@@ -4,7 +4,7 @@
 
 OpenSylab ist ein Laborinformations- und Managementsystem (LIMS), das als Open-Source-Projekt ins Leben gerufen wurde, um eine entscheidende Lücke in der Laborwelt zu schließen. Viele kleine medizinische Labore stehen vor der Herausforderung, entweder auf teure proprietäre LIMS zurückzugreifen oder ineffiziente manuelle Prozesse zu nutzen. OpenSylab existiert, um dieser Problematik zu begegnen: Es bietet kostenfrei und quelloffen ein vollwertiges System, mit dem ein klinisches Diagnostiklabor seine gesamten Abläufe digital verwalten kann.
 
-**Aktueller Entwicklungsstand:** Version 0.2.0 ist eine funktionsfähige Version mit CLI-Interface, die neben der Probenverwaltung nun auch Auftragsverwaltung, Ergebniseingabe mit Plausibilitätsprüfung, Gerätedatenschnittstelle (CSV/HL7), Audit-Trail und Benutzerauthentifizierung bietet. Web-Interface und REST-API sind für spätere Versionen geplant (siehe [ROADMAP.MD](ROADMAP.MD)).
+**Aktueller Entwicklungsstand:** Version 0.5.0 ist eine funktionsfähige Version mit CLI-Interface UND moderner React-Weboberfläche. Das System bietet vollständige CRUD-Operationen über REST-API, JWT-basierte Authentifizierung, TLS/HTTPS-Verschlüsselung, Probenverwaltung mit Web-UI, Auftragsverwaltung, Ergebniseingabe mit Plausibilitätsprüfung, Gerätedatenschnittstelle (CSV/HL7), Audit-Trail und Benutzerauthentifizierung. (siehe [ROADMAP.MD](ROADMAP.MD)).
 
 ## Manifest
 
@@ -17,9 +17,9 @@ Unser Manifest formuliert die grundlegenden Werte, Ziele und Prinzipien von Open
 - **Ethik und Gemeinwohl**: Gemeinnützig orientiert, kostenlos verfügbar
 - **Dezentralisierung und Unabhängigkeit**: Daten bleiben vor Ort unter voller Kontrolle
 
-## Features von OpenSylab 0.2.0
+## Features von OpenSylab 0.5.0
 
-Die aktuelle Version bietet umfassende LIMS-Funktionalität:
+Die aktuelle Version bietet umfassende LIMS-Funktionalität mit moderner Webtechnologie:
 
 ### Implementierte Features
 
@@ -49,10 +49,41 @@ Die aktuelle Version bietet umfassende LIMS-Funktionalität:
   - Wer, Was, Wann für jede Aktion
   - Unveränderliche Audit-Einträge
 
-- **Benutzerauthentifizierung** (NEU in v0.2):
-  - Login/Logout-Funktionalität
+- **JWT-Authentifizierung** (NEU in v0.5):
+  - Token-basierte Authentifizierung (JWT mit HS256)
+  - Login-Endpoint mit Username/Password
+  - 60-Minuten Token-Gültigkeit
+  - Automatische Token-Validierung und -Erneuerung
+  - Rückwärtskompatibilität mit API-Key
+
+- **React Web-Interface** (NEU in v0.5):
+  - Moderne Single Page Application (SPA)
+  - Responsive Design mit TailwindCSS
+  - Dashboard mit Übersicht
+  - **Probenverwaltung** (Samples): Liste, Filtering, Create/Edit Modals
+  - **Auftragsverwaltung** (Orders): Liste, Dual-Filtering (Status + Priority), Create/Edit
+  - **Ergebnisverwaltung** (Results): Liste, Dual-Filtering (Status + Flag), Anzeige mit Badges
+  - Protected Routes mit JWT-Auth
+  - Real-time Formularvalidierung
+
+- **REST-API** (NEU in v0.5):
+  - Vollständige CRUD-Operationen (GET, POST, PUT, DELETE)
+  - Endpoints: /api/v1/samples, /api/v1/orders, /api/v1/results
+  - JSON-basierte Request/Response
+  - CORS-Unterstützung für Frontend
+  - Konsistente Fehlerbehandlung
+  - Audit-Logging für alle Operationen
+
+- **TLS/HTTPS-Unterstützung** (NEU in v0.5):
+  - OpenSSL-Integration für verschlüsselte Verbindungen
+  - TLS 1.2+ mit modernen Cipher Suites
+  - Optionaler HTTPS-Modus
+  - Zertifikatsverwaltung
+
+- **Benutzerauthentifizierung**:
+  - Login/Logout-Funktionalität (CLI und Web)
   - Rollen: USER, ADMIN, LAB_TECH, VALIDATOR
-  - Passwort-Hashing mit SHA-256
+  - Passwort-Hashing mit DJB2 (Salt)
   - Benutzerverwaltung (nur für Admins)
 
 - **Datenbankverwaltung**:
@@ -74,33 +105,47 @@ Die aktuelle Version bietet umfassende LIMS-Funktionalität:
 
 ### In Entwicklung (zukünftige Versionen)
 
-- Web-basierte Benutzeroberfläche
-- REST-API für externe Systeme
+- Dashboard mit Statistiken und Charts
+- User Management UI (Admin Panel)
 - PostgreSQL-Unterstützung für größere Installationen
 - Qualitätskontrolle (QC)
-- Befunderstellung
+- Befunderstellung mit PDF-Export
+- Docker-Containerisierung
+- Multi-Tenant-Fähigkeit
 
 Details siehe [ROADMAP.MD](ROADMAP.MD).
 
-## Technologie-Stack (v0.2.0)
+## Technologie-Stack (v0.5.0)
 
-### Aktuelle Implementierung
+### Backend
 
 - **Programmiersprache**: C++17
 - **Build-System**: CMake 3.15+
 - **Datenbank**: SQLite 3.x
-- **Benutzeroberfläche**: Kommandozeilen-Interface (CLI)
+- **REST-API**: Custom HTTP-Server mit JSON-Support
+- **Authentifizierung**: JWT (jwt-cpp v0.7.0)
+- **Verschlüsselung**: OpenSSL 3.x für TLS/HTTPS
 - **Architektur**: Modulares Design mit klarer Trennung:
   - `core/` - Geschäftslogik und Datenmodelle
   - `db/` - Datenbankzugriffsschicht
+  - `api/` - REST-API und HTTP-Server
+  - `auth/` - JWT-Authentifizierung
   - `utils/` - CSV-Import und CLI-Interface
+
+### Frontend
+
+- **Framework**: React 18 mit TypeScript
+- **Build-Tool**: Vite mit Hot Module Replacement
+- **Styling**: TailwindCSS für responsive UI
+- **Routing**: React Router für Single Page Application
+- **HTTP-Client**: Axios mit JWT-Interceptors
+- **State Management**: React Context API
 
 ### Geplante Erweiterungen
 
-- **Web-Framework**: drogon oder CppRestSDK für REST-API
-- **Frontend**: React/Angular für Web-UI
 - **Datenbank**: PostgreSQL für Multi-User-Betrieb
-- **Sicherheit**: TLS/SSL, JWT-Authentifizierung, Verschlüsselung
+- **Containerisierung**: Docker und Docker Compose
+- **Testing**: Jest für Frontend, erweiterte Backend-Tests
 
 ## Projektstruktur (Repository-Struktur)
 
@@ -146,8 +191,10 @@ OpenSylab/
 - C++17-kompatibler Compiler (gcc 9+, clang 10+, MSVC 2019+)
 - CMake 3.15+
 - SQLite3 Development Libraries
-  - **Linux**: `sudo apt-get install libsqlite3-dev`
-  - **Fedora**: `sudo dnf install sqlite-devel`
+  - **Linux**: `sudo apt-get install libsqlite3-dev libssl-dev`
+  - **Fedora**: `sudo dnf install sqlite-devel openssl-devel`
+- Node.js 18+ und npm (für Frontend)
+- OpenSSL 3.x Development Libraries (für TLS/HTTPS)
   - **Windows**: SQLite wird automatisch gelinkt
 
 ### Kompilierung
@@ -156,20 +203,24 @@ OpenSylab/
 # Repository klonen
 cd openSylab
 
-# Build mit Test-Skript (empfohlen)
-chmod +x test_and_build.sh
-./test_and_build.sh
-
-# Oder manuell:
+# Backend bauen
 mkdir -p build && cd build
 cmake ..
 make
 
-# Tests ausführen
-./bin/opensylab_tests
+# Backend starten
+./bin/OpenSylab --api-port 8080
 
-# Programm starten
-./bin/OpenSylab
+# Frontend bauen (in neuem Terminal)
+cd frontend
+npm install
+npm run dev
+
+# Browser öffnen: http://localhost:5173
+# API läuft auf: http://localhost:8080/api/v1
+
+# Tests ausführen
+./build/bin/opensylab_tests
 ```
 
 Details siehe [docs/INSTALL.md](docs/INSTALL.md).
@@ -225,8 +276,9 @@ Siehe [LICENSE.txt](LICENSE.txt) für Details.
 OpenSylab wird schrittweise entwickelt:
 
 - **v0.1.1**: CLI + SQLite, Basis-Probenverwaltung ✓
-- **v0.2.0** (Aktuell): Aufträge, Ergebnisse, Audit-Trail, Benutzer ✓
-- **v0.5**: REST-API, Web-Interface (Alpha)
+- **v0.2.0**: Aufträge, Ergebnisse, Audit-Trail, Benutzer ✓
+- **v0.5.0** (Aktuell): REST-API, React Web-UI, JWT-Auth, TLS/HTTPS ✓
+- **v0.6**: Docker, erweiterte Web-UI Features
 - **v1.0**: Produktionsreifes LIMS mit vollständigem Feature-Set
 - **v2.0+**: Multi-Site, KI-Integration
 
@@ -290,14 +342,18 @@ OpenSylab wird entwickelt von einer weltweiten Community von Entwicklern, Laborf
 
 Siehe [CHANGELOG.md](CHANGELOG.md) für detaillierte Änderungen.
 
-**Aktuelle Version**: v0.2.0 (2026-01-02)
+**Aktuelle Version**: v0.5.0 (2026-02-01)
 
-- ✓ 62 Unit-Tests implementiert
-- ✓ Auftragsverwaltung (Order-Modul)
-- ✓ Ergebniseingabe mit Plausibilitätsprüfung
-- ✓ Gerätedatenschnittstelle (CSV/HL7)
-- ✓ Audit-Trail für alle Änderungen
-- ✓ Benutzerauthentifizierung und Rollenverwaltung
+- ✓ React Web-Interface mit TypeScript
+- ✓ REST-API mit vollständigen CRUD-Operationen (GET, POST, PUT, DELETE)
+- ✓ JWT-basierte Authentifizierung
+- ✓ TLS/HTTPS-Verschlüsselung
+- ✓ Samples Management Web-UI (Create, Edit, List, Filter)
+- ✓ Orders Management Web-UI (Create, Edit, List, Dual-Filter)
+- ✓ Results Management Web-UI (List, Dual-Filter, Badge-Display)
+- ✓ Dashboard und geschützte Routen
+- ✓ 62 Unit-Tests (Backend)
+- ✓ Auftragsverwaltung, Ergebniseingabe, Audit-Trail (Backend + Frontend)
 
 ---
 

@@ -51,6 +51,29 @@ else()
     message(FATAL_ERROR "SQLite3 not found. Please install libsqlite3-dev")
 endif()
 
+# OpenSSL finden (für TLS/HTTPS Support)
+find_package(OpenSSL REQUIRED)
+if(OpenSSL_FOUND)
+    message(STATUS "Found OpenSSL: ${OPENSSL_VERSION}")
+    message(STATUS "OpenSSL Include: ${OPENSSL_INCLUDE_DIR}")
+    message(STATUS "OpenSSL Libraries: ${OPENSSL_LIBRARIES}")
+    include_directories(${OPENSSL_INCLUDE_DIR})
+else()
+    message(FATAL_ERROR "OpenSSL not found. Please install libssl-dev")
+endif()
+
+# JWT-CPP (für JWT Token Authentication)
+include(FetchContent)
+FetchContent_Declare(
+    jwt-cpp
+    GIT_REPOSITORY https://github.com/Thalhammer/jwt-cpp.git
+    GIT_TAG        v0.7.0
+)
+set(JWT_BUILD_EXAMPLES OFF CACHE BOOL "")
+set(JWT_BUILD_TESTS OFF CACHE BOOL "")
+FetchContent_MakeAvailable(jwt-cpp)
+message(STATUS "JWT-CPP: Fetched successfully")
+
 # Quellcode-Dateien sammeln
 set(CORE_SOURCES
     src/core/Sample.cpp
@@ -67,13 +90,26 @@ set(DB_SOURCES
 set(UTILS_SOURCES
     src/utils/CsvImport.cpp
     src/utils/CsvResultImport.cpp
+    src/utils/Hl7.cpp
+    src/utils/Fhir.cpp
     src/utils/CliInterface.cpp
+)
+
+set(API_SOURCES
+    src/api/ApiServer.cpp
+    src/api/TlsContext.cpp
+)
+
+set(AUTH_SOURCES
+    src/auth/JwtAuth.cpp
 )
 
 set(ALL_SOURCES
     ${CORE_SOURCES}
     ${DB_SOURCES}
     ${UTILS_SOURCES}
+    ${API_SOURCES}
+    ${AUTH_SOURCES}
     src/main.cpp
 )
 
@@ -81,7 +117,12 @@ set(ALL_SOURCES
 add_executable(${PROJECT_NAME} ${ALL_SOURCES})
 
 # Libraries verlinken
-target_link_libraries(${PROJECT_NAME} PRIVATE SQLite::SQLite3)
+target_link_libraries(${PROJECT_NAME} PRIVATE
+    SQLite::SQLite3
+    OpenSSL::SSL
+    OpenSSL::Crypto
+    jwt-cpp::jwt-cpp
+)
 
 # Installation
 install(TARGETS ${PROJECT_NAME} DESTINATION bin)
@@ -100,4 +141,5 @@ message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "C++ Standard: ${CMAKE_CXX_STANDARD}")
 message(STATUS "Install prefix: ${CMAKE_INSTALL_PREFIX}")
 message(STATUS "SQLite3: ${SQLite3_LIBRARIES}")
+message(STATUS "OpenSSL: ${OPENSSL_VERSION}")
 message(STATUS "")

@@ -21,6 +21,17 @@ namespace utils {
  */
 class CsvResultImport {
 public:
+  struct FailedRecord {
+    int recordNumber;
+    std::string record;
+    std::string error;
+  };
+
+  struct ImportedRecord {
+    core::TestResult result;
+    int recordNumber;
+    std::string record;
+  };
   /**
    * @brief Konstruktor
    * @param database Zeiger auf Datenbank für Validierung
@@ -79,6 +90,29 @@ public:
    */
   int getErrorCount() const { return errorCount_; }
 
+  /**
+   * @brief Gibt alle fehlgeschlagenen CSV-Records zurück
+   */
+  const std::vector<FailedRecord> &getFailedRecords() const {
+    return failedRecords_;
+  }
+
+  /**
+   * @brief Gibt alle erfolgreich importierten Records mit Metadaten zurück
+   */
+  const std::vector<ImportedRecord> &getImportedRecords() const {
+    return importedRecords_;
+  }
+
+  /**
+   * @brief Schreibt fehlgeschlagene Records in eine Retry-CSV
+   * @param filePath Zielpfad für Retry-Datei
+   * @return true wenn Datei geschrieben wurde
+   */
+  bool writeRetryCsv(const std::string &filePath) const;
+  bool writeRetryCsv(const std::string &filePath,
+                     const std::vector<FailedRecord> &extraFailed) const;
+
 private:
   std::shared_ptr<db::Database> database_;
   char delimiter_;
@@ -87,12 +121,18 @@ private:
   std::string lastError_;
   int importedCount_;
   int errorCount_;
+  std::vector<ImportedRecord> importedRecords_;
+  std::vector<FailedRecord> failedRecords_;
+  std::string headerLine_;
 
   // Hilfsfunktionen
   std::vector<std::string> parseLine(const std::string &line);
   bool processRecord(const std::string &record, int recordNumber,
                      std::vector<core::TestResult> &results);
   core::TestResult parseRecord(const std::vector<std::string> &fields);
+  bool validateHeader(const std::string &header);
+  void addFailedRecord(int recordNumber, const std::string &record,
+                       const std::string &error);
   bool validateOrderExists(int orderId);
   void setError(const std::string &error);
   static std::string trim(const std::string &str);

@@ -130,6 +130,30 @@ OpenSylab/
 - Passwort-Hashing
 - Berechtigungsprüfung
 
+## Sicherheit & Compliance (Policies)
+
+### API-Key-Lebenszyklus (Doc-Policy)
+- API-Keys werden in der Datenbank verwaltet und sind aktiv/inaktiv schaltbar.
+- Rotation: Neuer Key wird erstellt, alter Key wird deaktiviert (kein Re-Use).
+- Revocation: Key deaktivieren und aus aktiven Systemen entfernen.
+- Keys niemals im Klartext teilen; Änderungen sind zu auditieren.
+
+### Support-Datenminimierung (Support Role)
+- Support darf Listen/Detailansichten sehen, aber nur reduzierte Felder.
+- Sichtbar: IDs, Status, Zeitstempel, Testtyp, Priorität, Flags.
+- Versteckt: Patientenname, Notizen, Kommentare, Referenzbereiche, measured_by.
+- Ergebniswerte/Einheit werden in Support-Ansichten ausgeblendet.
+- Zugriff wird beim ersten Anzeigen protokolliert (Auto-Refresh erzeugt keine neuen Logs).
+
+### Auto-Refresh & Systemlast
+- Auto-Refresh ist opt-in (Standard: aus).
+- Mehrere parallele Nutzer mit Auto-Refresh erhöhen die DB-Last.
+- Empfehlung: nur bei Bedarf aktivieren und Intervall stabil halten.
+
+### Audit-Log-Integrität (Assessment)
+- Aktuell kein hash-chain / WORM-Speicher implementiert.
+- Für strengere Compliance: Hash-Ketten, Append-only Storage oder externe Audit-Sinks prüfen.
+
 ✅ **Datenbank**
 - SQLite-Integration mit Foreign Key Enforcement
 - CRUD-Operationen für alle Entitäten

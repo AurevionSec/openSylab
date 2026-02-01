@@ -21,7 +21,8 @@ public:
   enum class Role {
     ADMIN,    // Vollzugriff, Benutzerverwaltung
     OPERATOR, // Proben, Aufträge, Ergebnisse bearbeiten
-    VIEWER    // Nur Lesezugriff
+    VIEWER,   // Nur Lesezugriff
+    CUSTOM    // Benutzerdefinierte Rolle
   };
 
   // Konstruktoren
@@ -37,6 +38,7 @@ public:
   const std::string &getUsername() const { return username_; }
   const std::string &getPasswordHash() const { return passwordHash_; }
   Role getRole() const { return role_; }
+  const std::string &getRoleName() const { return roleName_; }
   bool isActive() const { return active_; }
   std::time_t getLastLogin() const { return lastLogin_; }
   std::time_t getCreatedDate() const { return createdDate_; }
@@ -47,7 +49,11 @@ public:
   void setId(int id) { id_ = id; }
   void setUsername(const std::string &username) { username_ = username; }
   void setPasswordHash(const std::string &hash) { passwordHash_ = hash; }
-  void setRole(Role role) { role_ = role; }
+  void setRole(Role role) {
+    role_ = role;
+    roleName_ = roleToString(role);
+  }
+  void setRoleName(const std::string &roleName);
   void setActive(bool active) { active_ = active; }
   void setLastLogin(std::time_t lastLogin) { lastLogin_ = lastLogin; }
   void setCreatedDate(std::time_t created) { createdDate_ = created; }
@@ -72,6 +78,7 @@ private:
   std::string username_;
   std::string passwordHash_;
   Role role_;
+  std::string roleName_;
   bool active_;
   std::time_t lastLogin_;
   std::time_t createdDate_;

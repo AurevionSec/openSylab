@@ -149,6 +149,30 @@ Einführung einer REST-API und eines Web-Frontends als Alternative zur CLI. Dies
 
 ---
 
+## Version 0.6 - Dockerisierung
+
+**Status:** Geplant
+**Geschätzter Zeitrahmen:** Q4 2026
+
+### Ziele
+
+Bereitstellung einer containerisierten OpenSylab-Version für einfache Installation,
+standardisierte Deployments und reproduzierbare Umgebungen.
+
+### Geplante Features
+
+- **Docker-Images** für OpenSylab (CLI + API)
+- **docker-compose** für lokale Stacks (DB + App)
+- **Konfigurations-Templates** (env/volume mounts)
+- **Dokumentation** für Build/Run/Upgrade
+
+### Tests
+
+- Container-Build-Tests
+- Smoke-Tests (Start/Healthcheck)
+
+---
+
 ## Version 1.0 - Produktionsreifes LIMS
 
 **Status:** Vision
@@ -316,6 +340,7 @@ Die Roadmap ist flexibel und wird basierend auf Community-Feedback angepasst. Ak
 | v0.1.1  | ✅ Abgeschlossen | 100% | 2025-11-25 |
 | v0.2.0  | ✅ Abgeschlossen | 100% | 2026-01-02 |
 | v0.5    | 💡 Konzept | 0% | Q3 2026 |
+| v0.6    | 🛠️ Geplant | 0% | Q4 2026 |
 | v1.0    | 💡 Vision | 0% | Q2 2027 |
 | v2.0    | 💭 Langfristig | 0% | 2028+ |
 
@@ -338,5 +363,5 @@ Diese Roadmap ist ein lebendiges Dokument. Wir freuen uns über:
 
 ---
 
-**Letzte Aktualisierung:** 2026-01-02
-**Version des Dokuments:** 1.2
+**Letzte Aktualisierung:** 2026-01-31
+**Version des Dokuments:** 1.3

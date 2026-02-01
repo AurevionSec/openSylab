@@ -37,6 +37,10 @@ std::string AuditEntry::actionToString(ActionType action) {
     return "Abgemeldet";
   case ActionType::VALIDATE:
     return "Validiert";
+  case ActionType::EXPORT:
+    return "Exportiert";
+  case ActionType::ACCESS:
+    return "Zugriff";
   default:
     return "Unbekannt";
   }
@@ -50,6 +54,8 @@ AuditEntry::ActionType AuditEntry::stringToAction(const std::string &str) {
       {"Angemeldet", ActionType::LOGIN},    {"LOGIN", ActionType::LOGIN},
       {"Abgemeldet", ActionType::LOGOUT},   {"LOGOUT", ActionType::LOGOUT},
       {"Validiert", ActionType::VALIDATE},  {"VALIDATE", ActionType::VALIDATE},
+      {"Exportiert", ActionType::EXPORT},   {"EXPORT", ActionType::EXPORT},
+      {"Zugriff", ActionType::ACCESS},      {"ACCESS", ActionType::ACCESS},
   };
 
   auto it = actionMap.find(str);
@@ -75,6 +81,8 @@ std::string AuditEntry::entityToString(EntityType entity) {
     return "Ergebnis";
   case EntityType::USER:
     return "Benutzer";
+  case EntityType::ROLE:
+    return "Rolle";
   case EntityType::SYSTEM:
     return "System";
   default:
@@ -88,6 +96,7 @@ AuditEntry::EntityType AuditEntry::stringToEntity(const std::string &str) {
       {"Auftrag", EntityType::ORDER},   {"ORDER", EntityType::ORDER},
       {"Ergebnis", EntityType::RESULT}, {"RESULT", EntityType::RESULT},
       {"Benutzer", EntityType::USER},   {"USER", EntityType::USER},
+      {"Rolle", EntityType::ROLE},      {"ROLE", EntityType::ROLE},
       {"System", EntityType::SYSTEM},   {"SYSTEM", EntityType::SYSTEM},
   };
 

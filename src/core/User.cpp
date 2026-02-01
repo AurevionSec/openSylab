@@ -10,14 +10,14 @@ namespace core {
 // Konstruktoren
 User::User()
     : id_(0), username_(""), passwordHash_(""), role_(Role::VIEWER),
-      active_(true), lastLogin_(0), createdDate_(std::time(nullptr)),
-      fullName_(""), email_("") {}
+      roleName_(roleToString(role_)), active_(true), lastLogin_(0),
+      createdDate_(std::time(nullptr)), fullName_(""), email_("") {}
 
 User::User(const std::string &username, const std::string &passwordHash,
            Role role)
     : id_(0), username_(username), passwordHash_(passwordHash), role_(role),
-      active_(true), lastLogin_(0), createdDate_(std::time(nullptr)),
-      fullName_(""), email_("") {}
+      roleName_(roleToString(role)), active_(true), lastLogin_(0),
+      createdDate_(std::time(nullptr)), fullName_(""), email_("") {}
 
 // Einfache Hash-Funktion (NICHT kryptographisch sicher!)
 // In einer Produktionsumgebung sollte bcrypt oder argon2 verwendet werden
@@ -56,7 +56,12 @@ void User::setPassword(const std::string &password) {
 }
 
 // Rollen-Hilfsfunktionen
-std::string User::getRoleString() const { return roleToString(role_); }
+std::string User::getRoleString() const {
+  if (!roleName_.empty()) {
+    return roleName_;
+  }
+  return roleToString(role_);
+}
 
 std::string User::roleToString(Role role) {
   switch (role) {
@@ -66,6 +71,8 @@ std::string User::roleToString(Role role) {
     return "Operator";
   case Role::VIEWER:
     return "Betrachter";
+  case Role::CUSTOM:
+    return "Benutzerdefiniert";
   default:
     return "Unbekannt";
   }
@@ -84,7 +91,12 @@ User::Role User::stringToRole(const std::string &str) {
     return it->second;
   }
 
-  throw std::invalid_argument("Ungültiger Rollen-String: " + str);
+  return Role::CUSTOM;
+}
+
+void User::setRoleName(const std::string &roleName) {
+  roleName_ = roleName;
+  role_ = stringToRole(roleName);
 }
 
 } // namespace core

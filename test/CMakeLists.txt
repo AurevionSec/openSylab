@@ -6,8 +6,13 @@ set(TEST_SOURCES
     unit/test_order.cpp
     unit/test_testresult.cpp
     unit/test_database.cpp
+    unit/test_api.cpp
     unit/test_csvimport.cpp
     unit/test_csvresultimport.cpp
+    unit/test_hl7.cpp
+    unit/test_fhir.cpp
+    unit/test_statistics.cpp
+    unit/test_utils.cpp
     unit/test_runner.cpp
 )
 
@@ -20,7 +25,7 @@ target_include_directories(opensylab_tests PRIVATE
 )
 
 # Libraries verlinken
-target_link_libraries(opensylab_tests PRIVATE SQLite::SQLite3)
+target_link_libraries(opensylab_tests PRIVATE SQLite::SQLite3 OpenSSL::SSL OpenSSL::Crypto jwt-cpp::jwt-cpp)
 
 # Quellcode-Dateien die getestet werden sollen
 target_sources(opensylab_tests PRIVATE
@@ -30,8 +35,13 @@ target_sources(opensylab_tests PRIVATE
     ${PROJECT_SOURCE_DIR}/src/core/AuditEntry.cpp
     ${PROJECT_SOURCE_DIR}/src/core/User.cpp
     ${PROJECT_SOURCE_DIR}/src/db/Database.cpp
+    ${PROJECT_SOURCE_DIR}/src/api/ApiServer.cpp
+    ${PROJECT_SOURCE_DIR}/src/api/TlsContext.cpp
+    ${PROJECT_SOURCE_DIR}/src/auth/JwtAuth.cpp
     ${PROJECT_SOURCE_DIR}/src/utils/CsvImport.cpp
     ${PROJECT_SOURCE_DIR}/src/utils/CsvResultImport.cpp
+    ${PROJECT_SOURCE_DIR}/src/utils/Hl7.cpp
+    ${PROJECT_SOURCE_DIR}/src/utils/Fhir.cpp
 )
 
 # Test hinzufügen

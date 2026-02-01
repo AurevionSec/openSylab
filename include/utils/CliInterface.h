@@ -3,8 +3,12 @@
 
 #include "core/User.h"
 #include "db/Database.h"
+#include <algorithm>
+#include <cctype>
+#include <ctime>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace opensylab {
 namespace utils {
@@ -42,11 +46,27 @@ public:
    * @brief Zeigt Hauptmenü
    */
   void showMainMenu();
+  static int autoRefreshIntervalSeconds() { return 5; }
+  static bool isAutoRefreshEnabled(const std::string &input) {
+    std::string value = input;
+    size_t start = value.find_first_not_of(" \t\r\n");
+    if (start == std::string::npos) {
+      return false;
+    }
+    size_t end = value.find_last_not_of(" \t\r\n");
+    value = value.substr(start, end - start + 1);
+    std::transform(value.begin(), value.end(), value.begin(),
+                   [](unsigned char c) {
+                     return static_cast<char>(std::tolower(c));
+                   });
+    return value == "j" || value == "ja" || value == "y" || value == "yes";
+  }
 
 private:
   std::shared_ptr<db::Database> database_;
   bool running_;
   std::unique_ptr<core::User> currentUser_;
+  std::time_t startTime_;
 
   // Sample-Menü-Aktionen
   void handleNewSample();
@@ -55,7 +75,9 @@ private:
   void handleUpdateSample();
   void handleDeleteSample();
   void handleImportCsv();
+  void handleExportSamples();
   void handleStatistics();
+  void handleSystemStatus();
   void handleExit();
 
   // Order-Menü-Aktionen
@@ -74,10 +96,15 @@ private:
   void handleValidateResult();
   void handleResultsForOrder();
   void handleImportResultsCsv();
+  void handleExportResults();
 
   // Audit-Menü-Aktionen
   void handleShowAuditLog();
   void handleAuditForEntity();
+  void handleConfigureRetention();
+  void handleRunRetention();
+  void handleExportAuditLog();
+  void handleDiagnosticsLogs();
 
   // User-Menü-Aktionen (Authentifizierung)
   void handleLogin();
@@ -87,6 +114,7 @@ private:
   void handleUpdateUser();
   void handleDeleteUser();
   void handleChangePassword();
+  void handleManageRoles();
 
   // Berechtigungsprüfung
   bool isLoggedIn() const { return currentUser_ != nullptr; }
@@ -101,6 +129,8 @@ private:
   std::string getCurrentUsername() const {
     return currentUser_ ? currentUser_->getUsername() : "nicht angemeldet";
   }
+  bool canAccessDiagnostics();
+  bool canAccessSupportData();
 
   // Hilfsfunktionen
   std::string readInput(const std::string &prompt);
@@ -113,6 +143,7 @@ private:
 
   // Validierungsfunktionen
   static std::string trim(const std::string &str);
+  static std::vector<std::string> splitCommaList(const std::string &input);
   static bool isValidId(const std::string &id);
   static bool isEmpty(const std::string &str);
   static bool parseDate(const std::string &input, std::time_t &out);

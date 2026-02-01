@@ -63,8 +63,13 @@ extern void registerSampleTests();
 extern void registerOrderTests();
 extern void registerTestResultTests();
 extern void registerDatabaseTests();
+extern void registerApiTests();
 extern void registerCsvImportTests();
 extern void registerCsvResultImportTests();
+extern void registerHl7Tests();
+extern void registerFhirTests();
+extern void registerStatisticsTests();
+extern void registerUtilsTests();
 
 int main() {
   std::cout << "\n";
@@ -81,8 +86,13 @@ int main() {
   registerOrderTests();
   registerTestResultTests();
   registerDatabaseTests();
+  registerApiTests();
   registerCsvImportTests();
   registerCsvResultImportTests();
+  registerHl7Tests();
+  registerFhirTests();
+  registerStatisticsTests();
+  registerUtilsTests();
 
   int passed = 0;
   int failed = 0;

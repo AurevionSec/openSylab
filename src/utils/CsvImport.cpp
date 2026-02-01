@@ -1,9 +1,14 @@
 #include "utils/CsvImport.h"
+#include <algorithm>
+#include <cctype>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <sstream>
 
 namespace {
+constexpr size_t kMaxImportBytes = 10 * 1024 * 1024;
+
 std::string trim(const std::string &value) {
   const size_t start = value.find_first_not_of(" \t\r\n");
   if (start == std::string::npos) {
@@ -11,6 +16,12 @@ std::string trim(const std::string &value) {
   }
   const size_t end = value.find_last_not_of(" \t\r\n");
   return value.substr(start, end - start + 1);
+}
+
+std::string toLower(std::string value) {
+  std::transform(value.begin(), value.end(), value.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  return value;
 }
 
 bool isWhitespaceOnly(const std::string &value) {
@@ -77,6 +88,13 @@ CsvImport::importSamples(const std::string &filePath) {
   failedRecords_.clear();
   headerLine_.clear();
 
+  std::error_code ec;
+  const auto size = std::filesystem::file_size(filePath, ec);
+  if (!ec && size > kMaxImportBytes) {
+    setError("CSV-Datei zu groß für Import");
+    return samples;
+  }
+
   std::ifstream file(filePath);
   if (!file.is_open()) {
     setError("Kann Datei nicht öffnen: " + filePath);
@@ -84,6 +102,7 @@ CsvImport::importSamples(const std::string &filePath) {
   }
 
   int recordNumber = 0;
+  int lineNumber = hasHeader_ ? 1 : 0;
   int errorCount = 0;
 
   // Header-Zeile überspringen wenn vorhanden
@@ -92,6 +111,11 @@ CsvImport::importSamples(const std::string &filePath) {
     if (std::getline(file, headerLine)) {
       headerLine_ = headerLine;
       std::cout << "Header: " << headerLine << std::endl;
+      if (!validateHeader(headerLine_)) {
+        setError("Ungueltiger CSV-Header. Erwartet: sample_id,patient_id,"
+                 "patient_name,description,status");
+        return samples;
+      }
     }
   }
 
@@ -105,7 +129,8 @@ CsvImport::importSamples(const std::string &filePath) {
       inQuotes = !inQuotes;
       record += c;
     } else if (c == '\n' && !inQuotes) {
-      recordNumber++;
+      lineNumber++;
+      recordNumber = lineNumber;
       if (!isEmptyRecord(record)) {
         if (!processRecord(record, recordNumber, samples)) {
           errorCount++;
@@ -126,7 +151,7 @@ CsvImport::importSamples(const std::string &filePath) {
 
   // Letzten Record verarbeiten (falls Datei nicht mit Newline endet)
   if (!isEmptyRecord(record)) {
-    recordNumber++;
+    recordNumber = lineNumber + 1;
     if (!processRecord(record, recordNumber, samples)) {
       errorCount++;
     }
@@ -146,6 +171,27 @@ CsvImport::importSamples(const std::string &filePath) {
   }
 
   return samples;
+}
+
+bool CsvImport::validateHeader(const std::string &header) {
+  const std::vector<std::string> expected = {
+      "sample_id", "patient_id", "patient_name", "description", "status"};
+  auto fields = parseLine(header);
+  if (fields.size() < 2 || fields.size() > expected.size()) {
+    return false;
+  }
+  if (!fields.empty()) {
+    const std::string bom = "\xEF\xBB\xBF";
+    if (fields[0].rfind(bom, 0) == 0) {
+      fields[0] = fields[0].substr(bom.size());
+    }
+  }
+  for (size_t i = 0; i < fields.size(); ++i) {
+    if (toLower(trim(fields[i])) != expected[i]) {
+      return false;
+    }
+  }
+  return true;
 }
 
 bool CsvImport::writeRetryCsv(const std::string &filePath) const {

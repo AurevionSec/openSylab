@@ -28,6 +28,21 @@ std::string createTempCsv(const std::string &content) {
   return filename;
 }
 
+void createLargeCsv(const std::string &path, size_t bytes) {
+  std::ofstream file(path, std::ios::binary);
+  std::string chunk(1024, 'a');
+  size_t written = 0;
+  while (written + chunk.size() <= bytes) {
+    file.write(chunk.data(), static_cast<std::streamsize>(chunk.size()));
+    written += chunk.size();
+  }
+  if (written < bytes) {
+    const size_t remaining = bytes - written;
+    file.write(chunk.data(), static_cast<std::streamsize>(remaining));
+  }
+  file.close();
+}
+
 // Hilfsfunktion zum Löschen einer temporären Datei
 void deleteTempFile(const std::string &filename) { std::remove(filename.c_str()); }
 
@@ -81,6 +96,60 @@ bool test_csvresultimport_ImportValidCsv() {
   ASSERT_EQ(results[0].getReferenceHigh(), 100.0);
   ASSERT_EQ(results[0].getMeasuredBy(), "Laborant1");
   ASSERT_EQ(results[0].getFlag(), opensylab::core::TestResult::Flag::NORMAL);
+
+  deleteTempFile(filename);
+  return true;
+}
+
+bool test_csvresultimport_HeaderWithBomAccepted() {
+  auto db = createTestDatabase();
+
+  std::string csvContent =
+      "\xEF\xBB\xBFresult_id,order_id,test_parameter,value,unit,ref_low,ref_high,measured_by\n"
+      "R001,1,Glucose,95,mg/dL,70,100,Laborant1\n";
+
+  std::string filename = createTempCsv(csvContent);
+
+  CsvResultImport importer(db);
+  auto results = importer.importResults(filename);
+
+  ASSERT_EQ(results.size(), 1);
+  ASSERT_EQ(importer.getImportedCount(), 1);
+
+  deleteTempFile(filename);
+  return true;
+}
+
+bool test_csvresultimport_HeaderWithExtraColumnsRejected() {
+  auto db = createTestDatabase();
+
+  std::string csvContent =
+      "result_id,order_id,test_parameter,value,unit,ref_low,ref_high,measured_by,extra\n"
+      "R001,1,Glucose,95,mg/dL,70,100,Laborant1,X\n";
+
+  std::string filename = createTempCsv(csvContent);
+
+  CsvResultImport importer(db);
+  auto results = importer.importResults(filename);
+
+  ASSERT_EQ(results.size(), 0);
+  ASSERT_FALSE(importer.getLastError().empty());
+
+  deleteTempFile(filename);
+  return true;
+}
+
+bool test_csvresultimport_LargeFileRejected() {
+  auto db = createTestDatabase();
+  std::string filename =
+      "test_results_large_" + std::to_string(std::time(nullptr)) + ".csv";
+  createLargeCsv(filename, 10 * 1024 * 1024 + 1);
+
+  CsvResultImport importer(db);
+  auto results = importer.importResults(filename);
+
+  ASSERT_EQ(results.size(), 0);
+  ASSERT_FALSE(importer.getLastError().empty());
 
   deleteTempFile(filename);
   return true;
@@ -254,9 +323,67 @@ bool test_csvresultimport_ImportEmptyFile() {
   return true;
 }
 
+bool test_csvresultimport_InvalidHeaderRejected() {
+  auto db = createTestDatabase();
+
+  std::string csvContent = "result_id,order_id,wrong,value\n"
+                           "R001,1,X,95\n";
+
+  std::string filename = createTempCsv(csvContent);
+
+  CsvResultImport importer(db);
+  auto results = importer.importResults(filename);
+
+  ASSERT_EQ(results.size(), 0);
+  ASSERT_EQ(importer.getErrorCount(), 1);
+  ASSERT_FALSE(importer.getLastError().empty());
+
+  deleteTempFile(filename);
+  return true;
+}
+
+bool test_csvresultimport_WriteRetryCsvForFailedRows() {
+  auto db = createTestDatabase();
+
+  std::string csvContent = "result_id,order_id,test_parameter,value\n"
+                           "R_BAD,abc,Glucose,95\n";
+
+  std::string filename = createTempCsv(csvContent);
+
+  CsvResultImport importer(db);
+  auto results = importer.importResults(filename);
+
+  ASSERT_EQ(results.size(), 0);
+  ASSERT_EQ(importer.getErrorCount(), 1);
+
+  std::string retryFile = "test_results_retry.csv";
+  ASSERT_TRUE(importer.writeRetryCsv(retryFile));
+
+  std::ifstream input(retryFile);
+  ASSERT_TRUE(input.is_open());
+  std::string header;
+  std::getline(input, header);
+  ASSERT_EQ(header, "result_id,order_id,test_parameter,value");
+
+  std::string row;
+  std::getline(input, row);
+  ASSERT_EQ(row, "R_BAD,abc,Glucose,95");
+
+  input.close();
+  deleteTempFile(filename);
+  deleteTempFile(retryFile);
+  return true;
+}
+
 void registerCsvResultImportTests() {
   registerTest("CsvResultImport::ImportValidCsv",
                test_csvresultimport_ImportValidCsv);
+  registerTest("CsvResultImport::HeaderWithBomAccepted",
+               test_csvresultimport_HeaderWithBomAccepted);
+  registerTest("CsvResultImport::HeaderWithExtraColumnsRejected",
+               test_csvresultimport_HeaderWithExtraColumnsRejected);
+  registerTest("CsvResultImport::LargeFileRejected",
+               test_csvresultimport_LargeFileRejected);
   registerTest("CsvResultImport::ImportWithMissingFields",
                test_csvresultimport_ImportWithMissingFields);
   registerTest("CsvResultImport::ImportWithEmptyResultId",
@@ -275,4 +402,8 @@ void registerCsvResultImportTests() {
                test_csvresultimport_ImportAndStore);
   registerTest("CsvResultImport::ImportEmptyFile",
                test_csvresultimport_ImportEmptyFile);
+  registerTest("CsvResultImport::InvalidHeaderRejected",
+               test_csvresultimport_InvalidHeaderRejected);
+  registerTest("CsvResultImport::WriteRetryCsvForFailedRows",
+               test_csvresultimport_WriteRetryCsvForFailedRows);
 }
