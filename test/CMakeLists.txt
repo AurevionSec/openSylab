@@ -25,7 +25,7 @@ target_include_directories(opensylab_tests PRIVATE
 )
 
 # Libraries verlinken
-target_link_libraries(opensylab_tests PRIVATE SQLite::SQLite3)
+target_link_libraries(opensylab_tests PRIVATE SQLite::SQLite3 OpenSSL::SSL OpenSSL::Crypto jwt-cpp::jwt-cpp)
 
 # Quellcode-Dateien die getestet werden sollen
 target_sources(opensylab_tests PRIVATE
@@ -36,6 +36,8 @@ target_sources(opensylab_tests PRIVATE
     ${PROJECT_SOURCE_DIR}/src/core/User.cpp
     ${PROJECT_SOURCE_DIR}/src/db/Database.cpp
     ${PROJECT_SOURCE_DIR}/src/api/ApiServer.cpp
+    ${PROJECT_SOURCE_DIR}/src/api/TlsContext.cpp
+    ${PROJECT_SOURCE_DIR}/src/auth/JwtAuth.cpp
     ${PROJECT_SOURCE_DIR}/src/utils/CsvImport.cpp
     ${PROJECT_SOURCE_DIR}/src/utils/CsvResultImport.cpp
     ${PROJECT_SOURCE_DIR}/src/utils/Hl7.cpp

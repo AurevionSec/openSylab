@@ -439,7 +439,16 @@ bool parseJsonObject(const std::string &input,
 } // namespace
 
 ApiRouter::ApiRouter(std::shared_ptr<db::Database> database)
-    : database_(std::move(database)) {}
+    : database_(std::move(database)) {
+  // Initialize JWT authentication
+  // TODO: Load secret from config file or environment variable in production!
+  auth::JwtAuth::JwtConfig jwtConfig;
+  jwtConfig.secret = "opensylab-dev-secret-min-256-bits-change-in-production-12345";
+  jwtConfig.expirationMinutes = 60;
+  jwtConfig.issuer = "opensylab";
+
+  jwtAuth_ = std::make_unique<auth::JwtAuth>(jwtConfig);
+}
 
 std::string ApiRouter::sampleToJson(const core::Sample &sample) {
   std::ostringstream out;
@@ -493,19 +502,152 @@ std::string ApiRouter::resultToJson(const core::TestResult &result) {
   return out.str();
 }
 
+ApiResponse ApiRouter::handleLogin(const ApiRequest &request) {
+  // Parse JSON body
+  const std::string body = trimLeadingNewlines(request.body);
+  if (body.empty()) {
+    return makeError(400, "validation_error", "Missing request body",
+                     "Provide JSON with username and password.");
+  }
+
+  std::unordered_map<std::string, std::string> payload;
+  std::string parseError;
+  if (!parseJsonObject(body, payload, parseError)) {
+    return makeError(400, "validation_error", "Invalid JSON payload",
+                     parseError);
+  }
+
+  // Extract credentials
+  auto usernameIt = payload.find("username");
+  auto passwordIt = payload.find("password");
+
+  if (usernameIt == payload.end() || usernameIt->second.empty()) {
+    return makeError(400, "validation_error", "Missing username",
+                     "Provide username in request body.");
+  }
+  if (passwordIt == payload.end() || passwordIt->second.empty()) {
+    return makeError(400, "validation_error", "Missing password",
+                     "Provide password in request body.");
+  }
+
+  const std::string &username = usernameIt->second;
+  const std::string &password = passwordIt->second;
+
+  // Authenticate user via database
+  auto user = database_->authenticateUser(username, password);
+  if (!user) {
+    // Authentication failed - return 401
+    return makeError(401, "authentication_failed", "Invalid credentials",
+                     "Username or password is incorrect.");
+  }
+
+  // Generate JWT token
+  std::string token;
+  try {
+    token = jwtAuth_->generateToken(user->getId(), user->getUsername(),
+                                    user->getRoleString());
+  } catch (const std::exception &e) {
+    return makeError(500, "internal_error", "Token generation failed",
+                     e.what());
+  }
+
+  // Calculate token expiration
+  const int expiresIn = jwtAuth_->getConfig().expirationMinutes * 60; // seconds
+
+  // Build response JSON
+  std::ostringstream response;
+  response << "{"
+           << "\"token\":" << jsonString(token) << ","
+           << "\"user\":{"
+           << "\"id\":" << user->getId() << ","
+           << "\"username\":" << jsonString(user->getUsername()) << ","
+           << "\"role\":" << jsonString(user->getRoleString())
+           << "},"
+           << "\"expiresIn\":" << expiresIn
+           << "}";
+
+  return ApiResponse{200, response.str(), "application/json"};
+}
+
+std::optional<auth::JwtAuth::TokenPayload>
+ApiRouter::extractAndValidateJwt(
+    const std::unordered_map<std::string, std::string> &headers) {
+  // Look for Authorization header
+  auto authIt = headers.find("authorization");
+  if (authIt == headers.end()) {
+    return std::nullopt;
+  }
+
+  // Extract Bearer token
+  const std::string authValue = trim(authIt->second);
+  const std::string bearerPrefix = "bearer ";
+
+  if (authValue.size() <= bearerPrefix.size() ||
+      toLower(authValue.substr(0, bearerPrefix.size())) != bearerPrefix) {
+    // Not a Bearer token
+    return std::nullopt;
+  }
+
+  const std::string token = trim(authValue.substr(bearerPrefix.size()));
+  if (token.empty()) {
+    return std::nullopt;
+  }
+
+  // Validate JWT token
+  return jwtAuth_->validateToken(token);
+}
+
 ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
   if (!database_) {
     return makeError(500, "internal_error", "Database unavailable",
                      "Database instance is not configured.");
   }
 
-  const std::string apiKey = extractApiKey(request.headers);
-  if (apiKey.empty() || !database_->isApiKeyValid(apiKey)) {
+  const std::string method = toLower(request.method);
+
+  // Handle CORS preflight requests (OPTIONS) without authentication
+  if (method == "options") {
+    return ApiResponse{200, "", "text/plain"};
+  }
+
+  // Extract path early for routing
+  std::string path = request.path;
+  const size_t qpos = path.find('?');
+  if (qpos != std::string::npos) {
+    path = path.substr(0, qpos);
+  }
+
+  // Route: POST /api/v1/auth/login (no authentication required)
+  if (method == "post" && path == "/api/v1/auth/login") {
+    return handleLogin(request);
+  }
+
+  // Authentication: Try JWT first, fall back to API-Key
+  std::optional<auth::JwtAuth::TokenPayload> jwtPayload =
+      extractAndValidateJwt(request.headers);
+
+  bool authenticated = false;
+  std::string actor;
+
+  if (jwtPayload.has_value()) {
+    // JWT authentication successful
+    authenticated = true;
+    actor = "user:" + jwtPayload->username + " (id:" +
+            std::to_string(jwtPayload->userId) + ")";
+  } else {
+    // Try API-Key authentication
+    const std::string apiKey = extractApiKey(request.headers);
+    if (!apiKey.empty() && database_->isApiKeyValid(apiKey)) {
+      authenticated = true;
+      actor = sanitizeActor(apiKey);
+    }
+  }
+
+  if (!authenticated) {
     return makeError(401, "unauthorized", "Invalid API credentials",
                      "Provide X-API-Key or Authorization: Bearer <token>.");
   }
 
-  const std::string method = toLower(request.method);
   const bool isGet = method == "get";
   const bool isPost = method == "post";
   const bool isPut = method == "put";
@@ -514,18 +656,15 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                      "Use GET for read endpoints or POST/PUT for writes.");
   }
 
-  std::string path = request.path;
+  // Extract query string (path was already extracted earlier)
   std::string queryString;
-  const size_t qpos = path.find('?');
-  if (qpos != std::string::npos) {
-    queryString = path.substr(qpos + 1);
-    path = path.substr(0, qpos);
+  const size_t qposQuery = request.path.find('?');
+  if (qposQuery != std::string::npos) {
+    queryString = request.path.substr(qposQuery + 1);
   }
 
   const std::unordered_map<std::string, std::string> query =
       parseQuery(queryString);
-
-  const std::string actor = sanitizeActor(apiKey);
 
   if (isPost || isPut) {
     const std::string body = trimLeadingNewlines(request.body);
@@ -1434,7 +1573,9 @@ ApiServer::ApiServer(std::shared_ptr<db::Database> database, int port)
       router_(database_),
       port_(port),
       serverFd_(-1),
-      running_(false) {}
+      running_(false),
+      tlsContext_(nullptr),
+      tlsEnabled_(false) {}
 
 bool ApiServer::bindAndListen() {
   serverFd_ = socket(AF_INET, SOCK_STREAM, 0);
@@ -1486,6 +1627,41 @@ void ApiServer::stop() {
   }
 }
 
+bool ApiServer::enableTls(const std::string& certPath, const std::string& keyPath) {
+  if (running_) {
+    return false; // Cannot enable TLS while server is running
+  }
+
+  tlsContext_ = std::make_unique<TlsContext>();
+  if (!tlsContext_->initialize(certPath, keyPath)) {
+    tlsContext_.reset();
+    return false;
+  }
+
+  tlsEnabled_ = true;
+  return true;
+}
+
+void ApiServer::disableTls() {
+  if (running_) {
+    return; // Cannot disable TLS while server is running
+  }
+
+  tlsEnabled_ = false;
+  tlsContext_.reset();
+}
+
+bool ApiServer::isTlsEnabled() const {
+  return tlsEnabled_ && tlsContext_ != nullptr && tlsContext_->isInitialized();
+}
+
+std::string ApiServer::getTlsError() const {
+  if (tlsContext_ != nullptr) {
+    return tlsContext_->getLastError();
+  }
+  return "TLS context not initialized";
+}
+
 void ApiServer::serveLoop() {
   while (running_) {
     sockaddr_in clientAddr{};
@@ -1498,12 +1674,113 @@ void ApiServer::serveLoop() {
       }
       break;
     }
-    handleClient(clientFd);
+
+    if (isTlsEnabled()) {
+      handleClientTls(clientFd);
+    } else {
+      handleClientPlain(clientFd);
+    }
+
     close(clientFd);
   }
 }
 
 void ApiServer::handleClient(int clientFd) {
+  if (isTlsEnabled()) {
+    handleClientTls(clientFd);
+  } else {
+    handleClientPlain(clientFd);
+  }
+}
+
+void ApiServer::handleClientTls(int clientFd) {
+  // Create SSL connection
+  SSL* ssl = tlsContext_->createSslConnection(clientFd);
+  if (ssl == nullptr) {
+    // SSL handshake failed - connection will be closed
+    return;
+  }
+
+  char buffer[8192];
+  const int readBytes = SSL_read(ssl, buffer, sizeof(buffer) - 1);
+  if (readBytes <= 0) {
+    TlsContext::freeSslConnection(ssl);
+    return;
+  }
+  buffer[readBytes] = '\0';
+
+  std::istringstream requestStream{std::string(buffer)};
+  std::string requestLine;
+  if (!std::getline(requestStream, requestLine)) {
+    TlsContext::freeSslConnection(ssl);
+    return;
+  }
+  requestLine = trim(requestLine);
+
+  std::istringstream lineStream(requestLine);
+  ApiRequest request;
+  lineStream >> request.method;
+  lineStream >> request.path;
+
+  std::string headerLine;
+  while (std::getline(requestStream, headerLine)) {
+    if (headerLine == "\r" || headerLine.empty()) {
+      break;
+    }
+    const size_t sep = headerLine.find(':');
+    if (sep == std::string::npos) {
+      continue;
+    }
+    const std::string key = toLower(trim(headerLine.substr(0, sep)));
+    const std::string value = trim(headerLine.substr(sep + 1));
+    request.headers[key] = value;
+  }
+
+  std::ostringstream bodyStream;
+  bodyStream << requestStream.rdbuf();
+  std::string body = trimLeadingNewlines(bodyStream.str());
+  auto lengthIt = request.headers.find("content-length");
+  if (lengthIt != request.headers.end()) {
+    try {
+      size_t length = static_cast<size_t>(std::stoul(lengthIt->second));
+      while (body.size() < length) {
+        const int more = SSL_read(ssl, buffer, sizeof(buffer) - 1);
+        if (more <= 0) {
+          break;
+        }
+        buffer[more] = '\0';
+        body.append(buffer, static_cast<size_t>(more));
+      }
+      if (body.size() > length) {
+        body.resize(length);
+      }
+    } catch (...) {
+      // Ignore invalid content-length and use whatever was read.
+    }
+  }
+  request.body = body;
+
+  ApiResponse response = router_.handleRequest(request);
+
+  std::ostringstream out;
+  out << "HTTP/1.1 " << response.status << " " << statusMessage(response.status)
+      << "\r\n";
+  out << "Content-Type: " << response.contentType << "\r\n";
+  out << "Content-Length: " << response.body.size() << "\r\n";
+  out << "Access-Control-Allow-Origin: http://localhost:5173\r\n";
+  out << "Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\n";
+  out << "Access-Control-Allow-Headers: Content-Type, X-API-Key, Authorization\r\n";
+  out << "Access-Control-Max-Age: 3600\r\n";
+  out << "Connection: close\r\n\r\n";
+  out << response.body;
+
+  const std::string responseStr = out.str();
+  SSL_write(ssl, responseStr.c_str(), static_cast<int>(responseStr.size()));
+
+  TlsContext::freeSslConnection(ssl);
+}
+
+void ApiServer::handleClientPlain(int clientFd) {
   char buffer[8192];
   const ssize_t readBytes = recv(clientFd, buffer, sizeof(buffer) - 1, 0);
   if (readBytes <= 0) {
@@ -1568,6 +1845,10 @@ void ApiServer::handleClient(int clientFd) {
       << "\r\n";
   out << "Content-Type: " << response.contentType << "\r\n";
   out << "Content-Length: " << response.body.size() << "\r\n";
+  out << "Access-Control-Allow-Origin: http://localhost:5173\r\n";
+  out << "Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\n";
+  out << "Access-Control-Allow-Headers: Content-Type, X-API-Key, Authorization\r\n";
+  out << "Access-Control-Max-Age: 3600\r\n";
   out << "Connection: close\r\n\r\n";
   out << response.body;
 
