@@ -42,6 +42,36 @@ export const ORDER_PRIORITY_COLORS = {
   EMERGENCY: 'bg-red-100 text-red-800',
 } as const;
 
+export const RESULT_STATUSES = {
+  PENDING: 'Pending',
+  REVIEWED: 'Reviewed',
+  VALIDATED: 'Validated',
+  REJECTED: 'Rejected',
+  AMENDED: 'Amended',
+} as const;
+
+export const RESULT_STATUS_COLORS = {
+  PENDING: 'bg-gray-100 text-gray-800',
+  REVIEWED: 'bg-blue-100 text-blue-800',
+  VALIDATED: 'bg-green-100 text-green-800',
+  REJECTED: 'bg-red-100 text-red-800',
+  AMENDED: 'bg-yellow-100 text-yellow-800',
+} as const;
+
+export const RESULT_FLAGS = {
+  NORMAL: 'Normal',
+  LOW: 'Low',
+  HIGH: 'High',
+  CRITICAL: 'Critical',
+} as const;
+
+export const RESULT_FLAG_COLORS = {
+  NORMAL: 'bg-green-100 text-green-800',
+  LOW: 'bg-blue-100 text-blue-800',
+  HIGH: 'bg-orange-100 text-orange-800',
+  CRITICAL: 'bg-red-100 text-red-800',
+} as const;
+
 // Authentication storage keys
 export const API_KEY_STORAGE_KEY = 'opensylab_api_key'; // Legacy, kept for backward compatibility
 export const JWT_TOKEN_STORAGE_KEY = 'opensylab_jwt_token';

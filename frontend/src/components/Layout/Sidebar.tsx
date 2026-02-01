@@ -10,6 +10,7 @@ const navItems: NavItem[] = [
   { name: 'Dashboard', path: '/', icon: '📊' },
   { name: 'Samples', path: '/samples', icon: '🧪' },
   { name: 'Orders', path: '/orders', icon: '📋' },
+  { name: 'Results', path: '/results', icon: '🔬' },
 ];
 
 export const Sidebar = () => {

@@ -35,18 +35,31 @@ Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert
   - Protected Routes mit Redirect zu Login
   - Logout-Funktion mit Token-Bereinigung
 - **Dashboard**: Übersichtsseite mit Willkommensnachricht
-- **Probenverwaltung**:
+- **Probenverwaltung** (Samples):
   - Samples-Liste mit Filtering nach Status
   - Pagination (20 Items pro Seite)
   - Sample Create Modal mit Formularvalidierung
   - Sample Edit Modal mit Datenvorausfüllung
   - Status-Dropdown mit allen SAMPLE_STATUSES
   - Real-time Formularvalidierung
+- **Auftragsverwaltung** (Orders):
+  - Orders-Liste mit Dual-Filtering (Status + Priority)
+  - Order Create Modal mit vollständigem Formular
+  - Order Edit Modal mit Datenvorladung
+  - Status- und Priority-Badges mit Farbcodierung
+  - Pagination und Responsive Table
+- **Ergebnisverwaltung** (Results):
+  - Results-Liste mit Dual-Filtering (Status + Flag)
+  - Anzeige von Parameter, Value, Unit, Reference Range
+  - Flag-Badges (NORMAL, LOW, HIGH, CRITICAL)
+  - Status-Badges (PENDING, REVIEWED, VALIDATED, etc.)
+  - Pagination für große Datenmengen
 - **UI-Komponenten**:
-  - Layout mit Header und Navigation
+  - Layout mit Header und Navigation (Sidebar mit 4 Menüpunkten)
   - Card, Button, Input Komponenten
   - Loading States und Error Handling
   - Responsive Design
+  - Modal-basierte CRUD-Workflows
 - **API-Integration**:
   - Axios-basierte API-Client
   - JWT Bearer Token Interceptor
@@ -54,14 +67,10 @@ Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert
   - Fehlerbehandlung mit Backend-Message-Extraktion
 - **Dateien**:
   - `frontend/` - Komplettes React-Frontend-Projekt
-  - `frontend/src/services/auth.ts` - JWT-Auth-Service
-  - `frontend/src/services/samples.ts` - Samples-API-Service
+  - `frontend/src/services/` - API Services (auth, samples, orders, results)
   - `frontend/src/context/AuthContext.tsx` - Auth-State-Management
-  - `frontend/src/pages/Login.tsx` - Login-Seite
-  - `frontend/src/pages/Dashboard.tsx` - Dashboard
-  - `frontend/src/pages/Samples.tsx` - Probenverwaltung
-  - `frontend/src/components/Samples/SampleCreateModal.tsx` - Create-Modal
-  - `frontend/src/components/Samples/SampleEditModal.tsx` - Edit-Modal
+  - `frontend/src/pages/` - Seiten (Login, Dashboard, Samples, Orders, Results)
+  - `frontend/src/components/` - UI-Komponenten (Modals, Common, Layout)
 
 #### 🆕 TLS/HTTPS-Unterstützung
 - **OpenSSL-Integration** für verschlüsselte Verbindungen:

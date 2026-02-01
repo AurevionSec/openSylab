@@ -5,6 +5,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Samples from './pages/Samples';
 import Orders from './pages/Orders';
+import Results from './pages/Results';
 
 function App() {
   return (
@@ -33,6 +34,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <Orders />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/results"
+            element={
+              <ProtectedRoute>
+                <Results />
               </ProtectedRoute>
             }
           />

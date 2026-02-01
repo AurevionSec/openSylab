@@ -60,8 +60,9 @@ Die aktuelle Version bietet umfassende LIMS-Funktionalität mit moderner Webtech
   - Moderne Single Page Application (SPA)
   - Responsive Design mit TailwindCSS
   - Dashboard mit Übersicht
-  - Probenverwaltung mit Filtering und Pagination
-  - Sample Create/Edit Modals
+  - **Probenverwaltung** (Samples): Liste, Filtering, Create/Edit Modals
+  - **Auftragsverwaltung** (Orders): Liste, Dual-Filtering (Status + Priority), Create/Edit
+  - **Ergebnisverwaltung** (Results): Liste, Dual-Filtering (Status + Flag), Anzeige mit Badges
   - Protected Routes mit JWT-Auth
   - Real-time Formularvalidierung
 
@@ -104,10 +105,11 @@ Die aktuelle Version bietet umfassende LIMS-Funktionalität mit moderner Webtech
 
 ### In Entwicklung (zukünftige Versionen)
 
-- Erweiterte Web-UI Features (Orders, Results Management)
+- Dashboard mit Statistiken und Charts
+- User Management UI (Admin Panel)
 - PostgreSQL-Unterstützung für größere Installationen
 - Qualitätskontrolle (QC)
-- Befunderstellung
+- Befunderstellung mit PDF-Export
 - Docker-Containerisierung
 - Multi-Tenant-Fähigkeit
 
@@ -343,13 +345,15 @@ Siehe [CHANGELOG.md](CHANGELOG.md) für detaillierte Änderungen.
 **Aktuelle Version**: v0.5.0 (2026-02-01)
 
 - ✓ React Web-Interface mit TypeScript
-- ✓ REST-API mit vollständigen CRUD-Operationen
+- ✓ REST-API mit vollständigen CRUD-Operationen (GET, POST, PUT, DELETE)
 - ✓ JWT-basierte Authentifizierung
 - ✓ TLS/HTTPS-Verschlüsselung
-- ✓ Sample Management Web-UI (Create, Edit, List, Filter)
+- ✓ Samples Management Web-UI (Create, Edit, List, Filter)
+- ✓ Orders Management Web-UI (Create, Edit, List, Dual-Filter)
+- ✓ Results Management Web-UI (List, Dual-Filter, Badge-Display)
 - ✓ Dashboard und geschützte Routen
 - ✓ 62 Unit-Tests (Backend)
-- ✓ Auftragsverwaltung, Ergebniseingabe, Audit-Trail
+- ✓ Auftragsverwaltung, Ergebniseingabe, Audit-Trail (Backend + Frontend)
 
 ---
 
