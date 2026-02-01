@@ -651,9 +651,10 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
   const bool isGet = method == "get";
   const bool isPost = method == "post";
   const bool isPut = method == "put";
-  if (!isGet && !isPost && !isPut) {
+  const bool isDelete = method == "delete";
+  if (!isGet && !isPost && !isPut && !isDelete) {
     return makeError(405, "validation_error", "Method not allowed",
-                     "Use GET for read endpoints or POST/PUT for writes.");
+                     "Use GET for reads, POST for creates, PUT for updates, DELETE for deletes.");
   }
 
   // Extract query string (path was already extracted earlier)
@@ -1207,6 +1208,81 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                          "{\"data\":" + resultToJson(updated) + "}",
                          "application/json"};
     }
+  }
+
+  // DELETE endpoints
+  if (isDelete) {
+    if (path.rfind("/api/v1/samples/", 0) == 0) {
+      const std::string sampleId =
+          path.substr(std::string("/api/v1/samples/").size());
+      if (sampleId.empty()) {
+        return makeError(400, "validation_error", "Missing sample_id",
+                         "Provide sample_id in URL path.");
+      }
+      auto existing = database_->getSampleByBarcode(sampleId);
+      if (database_->hasError()) {
+        return makeDbErrorResponse(database_->getLastError());
+      }
+      if (!existing) {
+        return makeError(404, "not_found", "Sample not found",
+                         "Verify the sample_id.");
+      }
+
+      if (!database_->deleteSample(existing->getId(), actor)) {
+        return makeDbErrorResponse(database_->getLastError());
+      }
+
+      return ApiResponse{204, "", "application/json"};
+    }
+
+    if (path.rfind("/api/v1/orders/", 0) == 0) {
+      const std::string orderId =
+          path.substr(std::string("/api/v1/orders/").size());
+      if (orderId.empty()) {
+        return makeError(400, "validation_error", "Missing order_id",
+                         "Provide order_id in URL path.");
+      }
+      auto existing = database_->getOrderByOrderId(orderId);
+      if (database_->hasError()) {
+        return makeDbErrorResponse(database_->getLastError());
+      }
+      if (!existing) {
+        return makeError(404, "not_found", "Order not found",
+                         "Verify the order_id.");
+      }
+
+      if (!database_->deleteOrder(existing->getId(), actor)) {
+        return makeDbErrorResponse(database_->getLastError());
+      }
+
+      return ApiResponse{204, "", "application/json"};
+    }
+
+    if (path.rfind("/api/v1/results/", 0) == 0) {
+      const std::string resultId =
+          path.substr(std::string("/api/v1/results/").size());
+      if (resultId.empty()) {
+        return makeError(400, "validation_error", "Missing result_id",
+                         "Provide result_id in URL path.");
+      }
+      auto existing = database_->getTestResultByResultId(resultId);
+      if (database_->hasError()) {
+        return makeDbErrorResponse(database_->getLastError());
+      }
+      if (!existing) {
+        return makeError(404, "not_found", "Result not found",
+                         "Verify the result_id.");
+      }
+
+      if (!database_->deleteTestResult(existing->getId(), actor)) {
+        return makeDbErrorResponse(database_->getLastError());
+      }
+
+      return ApiResponse{204, "", "application/json"};
+    }
+
+    return makeError(404, "not_found", "Endpoint not found",
+                     "Check the requested path.");
   }
 
   if (!isGet) {
