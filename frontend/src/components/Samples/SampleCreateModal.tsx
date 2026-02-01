@@ -2,7 +2,6 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Input } from '../common/Input';
 import { Button } from '../common/Button';
-import { Card } from '../common/Card';
 import { createSample } from '../../services/samples';
 import type { Sample } from '../../types/sample';
 import { SAMPLE_STATUSES } from '../../utils/constants';

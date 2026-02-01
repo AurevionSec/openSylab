@@ -27,13 +27,15 @@ RUN mkdir -p build && cd build && \
     make -j$(nproc)
 
 # Stage 2: Runtime stage
-FROM debian:bookworm-slim
+# Using same GCC image to ensure compatible libstdc++
+FROM gcc:13-bookworm
 
-# Install runtime dependencies only
+# Install only runtime dependencies (build tools already present)
 RUN apt-get update && apt-get install -y \
     libsqlite3-0 \
     libssl3 \
     ca-certificates \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Create app user for security
@@ -59,9 +61,9 @@ EXPOSE 8080
 ENV OPENSYLAB_DB_PATH=/app/data/opensylab.db
 ENV OPENSYLAB_API_PORT=8080
 
-# Health check
+# Health check (simple port check, no auth required)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8080/api/v1/health || exit 1
+    CMD curl -f http://localhost:8080/ || exit 1
 
 # Run the application
 CMD ["/app/OpenSylab", "--api", "--api-port", "8080"]
