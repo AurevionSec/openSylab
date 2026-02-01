@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  # Backend API Server
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: opensylab-backend
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      # Persist SQLite database
+      - opensylab-data:/app/data
+      # Optional: Mount TLS certificates
+      - ./certs:/app/certs:ro
+    environment:
+      - OPENSYLAB_DB_PATH=/app/data/opensylab.db
+      - OPENSYLAB_API_PORT=8080
+      # Optional: Enable TLS
+      # - OPENSYLAB_TLS_CERT=/app/certs/server.crt
+      # - OPENSYLAB_TLS_KEY=/app/certs/server.key
+    networks:
+      - opensylab-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Frontend Web UI
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: opensylab-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - opensylab-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  # Named volume for persistent SQLite database
+  opensylab-data:
+    driver: local
+
+networks:
+  # Internal network for backend-frontend communication
+  opensylab-network:
+    driver: bridge

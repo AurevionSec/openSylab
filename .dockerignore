@@ -1,0 +1,68 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Build artifacts
+build/
+*.o
+*.so
+*.a
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Documentation
+*.md
+docs/
+CHANGELOG.md
+README.MD
+ROADMAP.MD
+LICENSE.txt
+TODO.md
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Frontend
+frontend/
+node_modules/
+
+# Database
+*.db
+*.db-journal
+opensylab.db
+
+# Certificates (don't copy from build context, mount as volume)
+certs/
+*.crt
+*.key
+*.pem
+
+# Scripts
+scripts/
+tools/
+
+# Test data
+config/samples_example.csv
+
+# Analysis reports
+FEATURE_GAP_ANALYSIS*.md
+GTM_STRATEGY*.md
+HTTPS_QUICK_START.md
+INTEGRATION_COMPLETE.md
+TLS_IMPLEMENTATION_REPORT.md
+PROJECT_INDEX.*
+JWT_IMPLEMENTATION_PLAN.md
+
+# Temporary files
+test_jwt_auth
+test_tls_server.cpp
+test_jwt_auth.cpp
+--help
