@@ -2,6 +2,134 @@
 
 Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert.
 
+## [0.6.0] - 2026-02-02
+
+### Neue Features
+
+#### 🆕 User Management (Admin Interface)
+- **User Management Page** für Administratoren:
+  - Liste aller Systembenutzer mit Details (Username, Role, Email, Status, Last Login)
+  - Create User Modal mit Formularvalidierung
+  - Edit User Modal (Username immutable, optionales Passwort-Update)
+  - Delete User mit Bestätigungsdialog
+  - Role Assignment: ADMIN, OPERATOR, VIEWER, CUSTOM
+  - Active/Inactive Toggle für Benutzerkonten
+  - Color-coded Role Badges für visuelle Klarheit
+- **Backend API Endpoints**:
+  - GET `/api/v1/users` - List all users (admin only)
+  - POST `/api/v1/users` - Create user (admin only)
+  - PUT `/api/v1/users/:id` - Update user (admin only)
+  - DELETE `/api/v1/users/:id` - Delete user (admin only)
+  - GET `/api/v1/users/me` - Get current user profile
+  - PUT `/api/v1/users/me/password` - Change password
+- **Dateien**:
+  - `frontend/src/pages/Users.tsx` - User Management Page
+  - `frontend/src/services/users.ts` - User API Service
+  - `frontend/src/types/user.ts` - Enhanced User Types
+
+#### 🆕 Audit Log Viewer (Compliance & Monitoring)
+- **Audit Log Page** für Administratoren:
+  - Vollständiger Audit Trail aller Systemaktionen
+  - Multi-Criteria Filtering (User, Action, Entity, Limit)
+  - Adjustable Result Limit (25, 50, 100, 250 entries)
+  - Color-coded Action Badges (CREATE, UPDATE, DELETE, etc.)
+  - Comprehensive Table Display (Timestamp, User, Action, Entity, Details)
+- **Backend API Endpoint**:
+  - GET `/api/v1/audit` - Get audit log with filters (admin only)
+- **Dateien**:
+  - `frontend/src/pages/AuditLog.tsx` - Audit Log Viewer
+  - `frontend/src/services/audit.ts` - Audit Log Service
+  - `frontend/src/types/audit.ts` - Audit Entry Types
+
+#### 🆕 User Profile & Password Management
+- **Profile Page** für alle Benutzer:
+  - Read-only Account Information Display
+  - Show Username, Role, Full Name, Email, Account Status
+  - Last Login und Account Creation Date
+  - User ID Display
+- **Password Change Functionality**:
+  - Secure Password Change Form
+  - Current Password Verification Required
+  - Password Confirmation Matching
+  - Minimum 8 Character Requirement
+  - Success/Error Feedback
+- **Dateien**:
+  - `frontend/src/pages/Profile.tsx` - User Profile Page
+
+#### 🆕 Enhanced Dashboard Statistics
+- **Multi-Entity Statistics Display**:
+  - Comprehensive Stats für Samples, Orders, Results
+  - Status Breakdown by Entity Type
+  - Server-side Statistics Aggregation
+  - Real-time Data from Stats API
+- **Backend API Endpoint**:
+  - GET `/api/v1/stats` - Get dashboard statistics
+- **Dateien**:
+  - `frontend/src/pages/Dashboard.tsx` - Enhanced Dashboard
+  - `frontend/src/services/stats.ts` - Statistics Service
+  - `frontend/src/types/stats.ts` - Statistics Types
+
+### Verbesserungen
+
+#### 🔒 Role-Based Access Control (RBAC)
+- **Frontend Route Protection**:
+  - Enhanced ProtectedRoute Component mit `requiredRole` Prop
+  - Access Denied Message für unauthorized Access
+  - Automatic Redirect zu Dashboard bei fehlenden Berechtigungen
+- **Backend API Protection**:
+  - JWT Payload Role Verification
+  - Admin-only Endpoints enforcement
+  - Consistent 403 Forbidden Responses
+- **Navigation**:
+  - Role-based Menu Filtering in Sidebar
+  - Admin-only Items hidden für Non-Admin Users
+  - New Menu Items: 👥 Users, 📜 Audit Log, 👤 Profile
+
+#### 📱 UI/UX Improvements
+- **Consistent Design Patterns**:
+  - Modal-based Forms für Create/Edit Operations
+  - Confirmation Dialogs für Destructive Actions
+  - Color-coded Badges für Status/Roles
+  - Responsive Table Layouts
+  - Loading States während Async Operations
+- **Error Handling**:
+  - Graceful Error Display
+  - API Error Messages surfaced to UI
+  - Form Validation Feedback
+  - Clear User Communication
+
+#### 📚 Documentation
+- **New Documentation Files**:
+  - `frontend/UI_EXTENSIONS_V06.md` - Comprehensive v0.6 Feature Guide
+  - Default Credentials Documented (admin/admin)
+  - Usage Guide für Admin und Regular Users
+  - Technical Details und File Structure
+
+### Sicherheit
+
+- **Password Security**: Current Password Verification für Changes
+- **Audit Logging**: All User Actions Tracked
+- **Role-Based Access**: Frontend und Backend Enforcement
+- **Session Management**: JWT Token with Expiration
+
+### Technische Details
+
+- **Backend**: 8 neue API Endpoints für User Management, Audit, Stats
+- **Frontend**: 3 neue Pages (Users, AuditLog, Profile)
+- **Type Safety**: Comprehensive TypeScript Types für alle Entities
+- **API Integration**: Axios-based Services mit JWT Authentication
+
+### Breaking Changes
+
+Keine - alle Änderungen sind additiv und rückwärtskompatibel.
+
+### Default Credentials
+
+⚠️ **IMPORTANT**: Change immediately after first login!
+
+- **Username**: `admin`
+- **Password**: `admin`
+
 ## [0.5.0] - 2026-02-01
 
 ### Neue Features
