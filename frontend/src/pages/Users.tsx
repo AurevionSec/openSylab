@@ -31,9 +31,9 @@ export const Users = () => {
     }
   };
 
-  const handleCreateUser = async (payload: CreateUserPayload) => {
+  const handleCreateUser = async (payload: CreateUserPayload | UpdateUserPayload) => {
     try {
-      await createUser(payload);
+      await createUser(payload as CreateUserPayload);
       await fetchUsers();
       setIsCreateModalOpen(false);
     } catch (err: any) {
@@ -41,9 +41,9 @@ export const Users = () => {
     }
   };
 
-  const handleUpdateUser = async (userId: number, payload: UpdateUserPayload) => {
+  const handleUpdateUser = async (userId: number, payload: CreateUserPayload | UpdateUserPayload) => {
     try {
-      await updateUser(userId, payload);
+      await updateUser(userId, payload as UpdateUserPayload);
       await fetchUsers();
       setEditingUser(null);
     } catch (err: any) {

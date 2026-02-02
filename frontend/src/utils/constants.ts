@@ -72,6 +72,9 @@ export const RESULT_FLAG_COLORS = {
   CRITICAL: 'bg-red-100 text-red-800',
 } as const;
 
+// API Configuration
+export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
+
 // Authentication storage keys
 export const API_KEY_STORAGE_KEY = 'opensylab_api_key'; // Legacy, kept for backward compatibility
 export const JWT_TOKEN_STORAGE_KEY = 'opensylab_jwt_token';
