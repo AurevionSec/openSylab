@@ -6,6 +6,9 @@ import Dashboard from './pages/Dashboard';
 import Samples from './pages/Samples';
 import Orders from './pages/Orders';
 import Results from './pages/Results';
+import Users from './pages/Users';
+import AuditLog from './pages/AuditLog';
+import Profile from './pages/Profile';
 
 function App() {
   return (
@@ -42,6 +45,30 @@ function App() {
             element={
               <ProtectedRoute>
                 <Results />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/users"
+            element={
+              <ProtectedRoute requiredRole="ADMIN">
+                <Users />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/audit-log"
+            element={
+              <ProtectedRoute requiredRole="ADMIN">
+                <AuditLog />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute>
+                <Profile />
               </ProtectedRoute>
             }
           />

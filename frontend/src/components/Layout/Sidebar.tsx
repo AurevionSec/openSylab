@@ -1,9 +1,11 @@
 import { Link, useLocation } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 
 interface NavItem {
   name: string;
   path: string;
   icon: string;
+  adminOnly?: boolean;
 }
 
 const navItems: NavItem[] = [
@@ -11,15 +13,27 @@ const navItems: NavItem[] = [
   { name: 'Samples', path: '/samples', icon: '🧪' },
   { name: 'Orders', path: '/orders', icon: '📋' },
   { name: 'Results', path: '/results', icon: '🔬' },
+  { name: 'Users', path: '/users', icon: '👥', adminOnly: true },
+  { name: 'Audit Log', path: '/audit-log', icon: '📜', adminOnly: true },
+  { name: 'Profile', path: '/profile', icon: '👤' },
 ];
 
 export const Sidebar = () => {
   const location = useLocation();
+  const { user } = useAuth();
+
+  // Filter navigation items based on user role
+  const visibleNavItems = navItems.filter((item) => {
+    if (item.adminOnly && user?.role !== 'ADMIN') {
+      return false;
+    }
+    return true;
+  });
 
   return (
     <aside className="w-64 bg-gray-50 border-r border-gray-200 min-h-screen">
       <nav className="p-4 space-y-2">
-        {navItems.map((item) => {
+        {visibleNavItems.map((item) => {
           const isActive = location.pathname === item.path;
           return (
             <Link
