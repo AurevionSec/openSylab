@@ -502,6 +502,55 @@ std::string ApiRouter::resultToJson(const core::TestResult &result) {
   return out.str();
 }
 
+std::string userToJson(const core::User &user, bool includeSensitive = false) {
+  std::ostringstream out;
+  out << "{"
+      << "\"id\":" << user.getId() << ","
+      << "\"username\":" << jsonString(user.getUsername()) << ","
+      << "\"role\":" << jsonString(user.getRoleString()) << ","
+      << "\"active\":" << (user.isActive() ? "true" : "false") << ","
+      << "\"created_at\":" << static_cast<long long>(user.getCreatedDate()) << ","
+      << "\"last_login\":" << static_cast<long long>(user.getLastLogin()) << ","
+      << "\"full_name\":" << jsonString(user.getFullName()) << ","
+      << "\"email\":" << jsonString(user.getEmail());
+  if (includeSensitive) {
+    out << ",\"password_hash\":" << jsonString(user.getPasswordHash());
+  }
+  out << "}";
+  return out.str();
+}
+
+std::string auditEntryToJson(const core::AuditEntry &entry) {
+  std::ostringstream out;
+  out << "{"
+      << "\"id\":" << entry.getId() << ","
+      << "\"action\":" << jsonString(entry.getActionString()) << ","
+      << "\"entity\":" << jsonString(entry.getEntityString()) << ","
+      << "\"entity_id\":" << jsonString(entry.getEntityId()) << ","
+      << "\"user\":" << jsonString(entry.getUser()) << ","
+      << "\"timestamp\":" << static_cast<long long>(entry.getTimestamp()) << ","
+      << "\"details\":" << jsonString(entry.getDetails())
+      << "}";
+  return out.str();
+}
+
+std::string statsToJson(const db::Database::EntityStats &stats, const std::string &entityType) {
+  std::ostringstream out;
+  out << "{"
+      << "\"entity_type\":" << jsonString(entityType) << ","
+      << "\"total\":" << stats.total << ","
+      << "\"by_status\":[";
+  for (size_t i = 0; i < stats.byStatus.size(); ++i) {
+    if (i > 0) out << ",";
+    out << "{"
+        << "\"status\":" << jsonString(stats.byStatus[i].status) << ","
+        << "\"count\":" << stats.byStatus[i].count
+        << "}";
+  }
+  out << "]}";
+  return out.str();
+}
+
 ApiResponse ApiRouter::handleLogin(const ApiRequest &request) {
   // Parse JSON body
   const std::string body = trimLeadingNewlines(request.body);
@@ -1638,6 +1687,408 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
 
     return ApiResponse{200, "{\"data\":" + resultToJson(*result) + "}",
                        "application/json"};
+  }
+
+  // GET /api/v1/users - List all users (admin only)
+  if (path == "/api/v1/users" && isGet) {
+    // Check if user is admin
+    if (!jwtPayload.has_value() || jwtPayload->role != "ADMIN") {
+      return makeError(403, "forbidden", "Admin access required",
+                       "Only administrators can list users.");
+    }
+
+    auto users = database_->getAllUsers();
+    if (database_->hasError()) {
+      return makeDbErrorResponse(database_->getLastError());
+    }
+
+    std::ostringstream out;
+    out << "{\"data\":[";
+    for (size_t i = 0; i < users.size(); ++i) {
+      if (i > 0) out << ",";
+      out << userToJson(*users[i], false); // Don't include password hash
+    }
+    out << "]}";
+
+    return ApiResponse{200, out.str(), "application/json"};
+  }
+
+  // GET /api/v1/users/me - Get current user profile
+  if (path == "/api/v1/users/me" && isGet) {
+    if (!jwtPayload.has_value()) {
+      return makeError(401, "unauthorized", "JWT required",
+                       "Use JWT authentication to access profile.");
+    }
+
+    auto user = database_->getUser(jwtPayload->userId);
+    if (database_->hasError()) {
+      return makeDbErrorResponse(database_->getLastError());
+    }
+    if (!user) {
+      return makeError(404, "not_found", "User not found",
+                       "User profile not found.");
+    }
+
+    return ApiResponse{200, "{\"data\":" + userToJson(*user, false) + "}",
+                       "application/json"};
+  }
+
+  // POST /api/v1/users - Create new user (admin only)
+  if (path == "/api/v1/users" && isPost) {
+    if (!jwtPayload.has_value() || jwtPayload->role != "ADMIN") {
+      return makeError(403, "forbidden", "Admin access required",
+                       "Only administrators can create users.");
+    }
+
+    const std::string body = trimLeadingNewlines(request.body);
+    if (body.empty()) {
+      return makeError(400, "validation_error", "Missing request body",
+                       "Provide JSON payload in request body.");
+    }
+
+    std::unordered_map<std::string, std::string> payload;
+    std::string parseError;
+    if (!parseJsonObject(body, payload, parseError)) {
+      return makeError(400, "validation_error", "Invalid JSON payload",
+                       parseError);
+    }
+
+    auto usernameIt = payload.find("username");
+    auto passwordIt = payload.find("password");
+    auto roleIt = payload.find("role");
+
+    if (usernameIt == payload.end() || usernameIt->second.empty()) {
+      return makeError(400, "validation_error", "Missing username",
+                       "Provide username in request body.");
+    }
+    if (passwordIt == payload.end() || passwordIt->second.empty()) {
+      return makeError(400, "validation_error", "Missing password",
+                       "Provide password in request body.");
+    }
+
+    core::User::Role role = core::User::Role::OPERATOR; // Default
+    if (roleIt != payload.end() && !roleIt->second.empty()) {
+      try {
+        role = core::User::stringToRole(roleIt->second);
+      } catch (const std::exception &e) {
+        return makeError(400, "validation_error", "Invalid role", e.what());
+      }
+    }
+
+    core::User newUser(usernameIt->second, "", role);
+    newUser.setPassword(passwordIt->second);
+
+    auto fullNameIt = payload.find("full_name");
+    if (fullNameIt != payload.end()) {
+      newUser.setFullName(fullNameIt->second);
+    }
+    auto emailIt = payload.find("email");
+    if (emailIt != payload.end()) {
+      newUser.setEmail(emailIt->second);
+    }
+    auto activeIt = payload.find("active");
+    if (activeIt != payload.end()) {
+      newUser.setActive(activeIt->second == "true" || activeIt->second == "1");
+    }
+
+    if (!database_->createUser(newUser, actor)) {
+      return makeDbErrorResponse(database_->getLastError());
+    }
+
+    auto created = database_->getUserByUsername(newUser.getUsername());
+    if (database_->hasError()) {
+      return makeDbErrorResponse(database_->getLastError());
+    }
+    const core::User &responseUser = created ? *created : newUser;
+    return ApiResponse{200,
+                       "{\"data\":" + userToJson(responseUser, false) + "}",
+                       "application/json"};
+  }
+
+  // PUT /api/v1/users/:id - Update user (admin only)
+  if (isPut && path.rfind("/api/v1/users/", 0) == 0) {
+    const std::string userIdStr =
+        path.substr(std::string("/api/v1/users/").size());
+    if (userIdStr.empty() || userIdStr == "me") {
+      // Handle "me" endpoint separately or fall through
+      goto after_user_update;
+    }
+
+    int userId = 0;
+    if (!parseIntValue(userIdStr, userId) || userId <= 0) {
+      return makeError(400, "validation_error", "Invalid user_id",
+                       "Provide numeric user_id.");
+    }
+
+    if (!jwtPayload.has_value() || jwtPayload->role != "ADMIN") {
+      return makeError(403, "forbidden", "Admin access required",
+                       "Only administrators can update users.");
+    }
+
+    auto existing = database_->getUser(userId);
+    if (database_->hasError()) {
+      return makeDbErrorResponse(database_->getLastError());
+    }
+    if (!existing) {
+      return makeError(404, "not_found", "User not found",
+                       "Verify the user_id.");
+    }
+
+    const std::string body = trimLeadingNewlines(request.body);
+    if (body.empty()) {
+      return makeError(400, "validation_error", "Missing request body",
+                       "Provide JSON payload in request body.");
+    }
+
+    std::unordered_map<std::string, std::string> payload;
+    std::string parseError;
+    if (!parseJsonObject(body, payload, parseError)) {
+      return makeError(400, "validation_error", "Invalid JSON payload",
+                       parseError);
+    }
+
+    core::User updated = *existing;
+
+    auto usernameIt = payload.find("username");
+    if (usernameIt != payload.end()) {
+      updated.setUsername(usernameIt->second);
+    }
+    auto roleIt = payload.find("role");
+    if (roleIt != payload.end() && !roleIt->second.empty()) {
+      try {
+        updated.setRole(core::User::stringToRole(roleIt->second));
+      } catch (const std::exception &e) {
+        return makeError(400, "validation_error", "Invalid role", e.what());
+      }
+    }
+    auto fullNameIt = payload.find("full_name");
+    if (fullNameIt != payload.end()) {
+      updated.setFullName(fullNameIt->second);
+    }
+    auto emailIt = payload.find("email");
+    if (emailIt != payload.end()) {
+      updated.setEmail(emailIt->second);
+    }
+    auto activeIt = payload.find("active");
+    if (activeIt != payload.end()) {
+      updated.setActive(activeIt->second == "true" || activeIt->second == "1");
+    }
+    auto passwordIt = payload.find("password");
+    if (passwordIt != payload.end() && !passwordIt->second.empty()) {
+      updated.setPassword(passwordIt->second);
+    }
+
+    if (!database_->updateUser(updated, actor)) {
+      return makeDbErrorResponse(database_->getLastError());
+    }
+
+    return ApiResponse{200,
+                       "{\"data\":" + userToJson(updated, false) + "}",
+                       "application/json"};
+  }
+
+after_user_update:
+
+  // PUT /api/v1/users/me/password - Change own password
+  if (path == "/api/v1/users/me/password" && isPut) {
+    if (!jwtPayload.has_value()) {
+      return makeError(401, "unauthorized", "JWT required",
+                       "Use JWT authentication to change password.");
+    }
+
+    const std::string body = trimLeadingNewlines(request.body);
+    if (body.empty()) {
+      return makeError(400, "validation_error", "Missing request body",
+                       "Provide JSON payload in request body.");
+    }
+
+    std::unordered_map<std::string, std::string> payload;
+    std::string parseError;
+    if (!parseJsonObject(body, payload, parseError)) {
+      return makeError(400, "validation_error", "Invalid JSON payload",
+                       parseError);
+    }
+
+    auto currentPwdIt = payload.find("current_password");
+    auto newPwdIt = payload.find("new_password");
+
+    if (currentPwdIt == payload.end() || currentPwdIt->second.empty()) {
+      return makeError(400, "validation_error", "Missing current_password",
+                       "Provide current_password in request body.");
+    }
+    if (newPwdIt == payload.end() || newPwdIt->second.empty()) {
+      return makeError(400, "validation_error", "Missing new_password",
+                       "Provide new_password in request body.");
+    }
+
+    auto user = database_->getUser(jwtPayload->userId);
+    if (database_->hasError()) {
+      return makeDbErrorResponse(database_->getLastError());
+    }
+    if (!user) {
+      return makeError(404, "not_found", "User not found",
+                       "User profile not found.");
+    }
+
+    // Verify current password
+    if (!user->verifyPassword(currentPwdIt->second)) {
+      return makeError(401, "unauthorized", "Invalid current password",
+                       "Current password is incorrect.");
+    }
+
+    // Update password
+    user->setPassword(newPwdIt->second);
+    if (!database_->updateUser(*user, actor)) {
+      return makeDbErrorResponse(database_->getLastError());
+    }
+
+    return ApiResponse{200, "{\"success\":true}", "application/json"};
+  }
+
+  // DELETE /api/v1/users/:id - Delete user (admin only)
+  if (isDelete && path.rfind("/api/v1/users/", 0) == 0) {
+    const std::string userIdStr =
+        path.substr(std::string("/api/v1/users/").size());
+    if (userIdStr.empty()) {
+      return makeError(400, "validation_error", "Missing user_id",
+                       "Provide user_id in URL path.");
+    }
+
+    int userId = 0;
+    if (!parseIntValue(userIdStr, userId) || userId <= 0) {
+      return makeError(400, "validation_error", "Invalid user_id",
+                       "Provide numeric user_id.");
+    }
+
+    if (!jwtPayload.has_value() || jwtPayload->role != "ADMIN") {
+      return makeError(403, "forbidden", "Admin access required",
+                       "Only administrators can delete users.");
+    }
+
+    auto existing = database_->getUser(userId);
+    if (database_->hasError()) {
+      return makeDbErrorResponse(database_->getLastError());
+    }
+    if (!existing) {
+      return makeError(404, "not_found", "User not found",
+                       "Verify the user_id.");
+    }
+
+    if (!database_->deleteUser(userId, actor)) {
+      return makeDbErrorResponse(database_->getLastError());
+    }
+
+    return ApiResponse{204, "", "application/json"};
+  }
+
+  // GET /api/v1/audit - Get audit log (admin only)
+  if (path == "/api/v1/audit" && isGet) {
+    if (!jwtPayload.has_value() || jwtPayload->role != "ADMIN") {
+      return makeError(403, "forbidden", "Admin access required",
+                       "Only administrators can view audit logs.");
+    }
+
+    db::Database::AuditLogFilter filter;
+
+    auto limitIt = query.find("limit");
+    if (limitIt != query.end()) {
+      int limitValue = 0;
+      if (parseIntValue(limitIt->second, limitValue) && limitValue > 0) {
+        filter.limit = limitValue;
+      }
+    }
+
+    auto userFilterIt = query.find("user");
+    if (userFilterIt != query.end() && !userFilterIt->second.empty()) {
+      filter.user = userFilterIt->second;
+    }
+
+    auto actionIt = query.find("action");
+    if (actionIt != query.end() && !actionIt->second.empty()) {
+      try {
+        filter.action = core::AuditEntry::stringToAction(actionIt->second);
+      } catch (...) {
+        // Ignore invalid action
+      }
+    }
+
+    auto entityIt = query.find("entity");
+    if (entityIt != query.end() && !entityIt->second.empty()) {
+      try {
+        filter.entity = core::AuditEntry::stringToEntity(entityIt->second);
+      } catch (...) {
+        // Ignore invalid entity
+      }
+    }
+
+    auto fromIt = query.find("from");
+    if (fromIt != query.end()) {
+      std::time_t ts{};
+      if (parseTimeValue(fromIt->second, ts)) {
+        filter.fromTime = ts;
+      }
+    }
+
+    auto toIt = query.find("to");
+    if (toIt != query.end()) {
+      std::time_t ts{};
+      if (parseTimeValue(toIt->second, ts)) {
+        filter.toTime = ts;
+      }
+    }
+
+    auto entries = database_->getAuditLogFiltered(filter);
+    if (database_->hasError()) {
+      return makeDbErrorResponse(database_->getLastError());
+    }
+
+    std::ostringstream out;
+    out << "{\"data\":[";
+    for (size_t i = 0; i < entries.size(); ++i) {
+      if (i > 0) out << ",";
+      out << auditEntryToJson(*entries[i]);
+    }
+    out << "]}";
+
+    return ApiResponse{200, out.str(), "application/json"};
+  }
+
+  // GET /api/v1/stats - Get dashboard statistics
+  if (path == "/api/v1/stats" && isGet) {
+    db::Database::StatsFilter filter;
+
+    auto fromIt = query.find("from");
+    if (fromIt != query.end()) {
+      std::time_t ts{};
+      if (parseTimeValue(fromIt->second, ts)) {
+        filter.fromDate = ts;
+      }
+    }
+
+    auto toIt = query.find("to");
+    if (toIt != query.end()) {
+      std::time_t ts{};
+      if (parseTimeValue(toIt->second, ts)) {
+        filter.toDate = ts;
+      }
+    }
+
+    auto sampleStats = database_->getSampleStats(filter);
+    auto orderStats = database_->getOrderStats(filter);
+    auto resultStats = database_->getResultStats(filter);
+
+    if (database_->hasError()) {
+      return makeDbErrorResponse(database_->getLastError());
+    }
+
+    std::ostringstream out;
+    out << "{"
+        << "\"samples\":" << statsToJson(sampleStats, "samples") << ","
+        << "\"orders\":" << statsToJson(orderStats, "orders") << ","
+        << "\"results\":" << statsToJson(resultStats, "results")
+        << "}";
+
+    return ApiResponse{200, out.str(), "application/json"};
   }
 
   return makeError(404, "not_found", "Endpoint not found",
