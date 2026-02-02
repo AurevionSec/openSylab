@@ -1,0 +1,210 @@
+import { useEffect, useState } from 'react';
+import { Layout } from '../components/Layout/Layout';
+import { Card } from '../components/common/Card';
+import { Input } from '../components/common/Input';
+import { getAuditLog } from '../services/audit';
+import type { AuditEntry, AuditLogFilter, AuditAction, AuditEntity } from '../types/audit';
+import { AUDIT_ACTIONS, AUDIT_ENTITIES, ACTION_COLORS } from '../types/audit';
+
+export const AuditLog = () => {
+  const [entries, setEntries] = useState<AuditEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [filter, setFilter] = useState<AuditLogFilter>({
+    limit: 50,
+  });
+
+  useEffect(() => {
+    fetchAuditLog();
+  }, []);
+
+  const fetchAuditLog = async () => {
+    try {
+      setLoading(true);
+      const data = await getAuditLog(filter);
+      setEntries(data);
+    } catch (err: any) {
+      setError(err.response?.data?.error?.message || 'Failed to load audit log');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleApplyFilter = () => {
+    fetchAuditLog();
+  };
+
+  const handleResetFilter = () => {
+    setFilter({ limit: 50 });
+    setTimeout(() => fetchAuditLog(), 0);
+  };
+
+  if (loading) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="mt-4 text-gray-600">Loading audit log...</p>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  return (
+    <Layout>
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-3xl font-bold text-gray-900">Audit Log</h2>
+          <p className="text-gray-600 mt-1">System activity audit trail for compliance and monitoring</p>
+        </div>
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <p className="text-red-800">{error}</p>
+          </div>
+        )}
+
+        {/* Filters */}
+        <Card title="Filters">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Input
+              type="text"
+              label="User"
+              placeholder="Filter by username"
+              value={filter.user || ''}
+              onChange={(e) => setFilter({ ...filter, user: e.target.value || undefined })}
+            />
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Action
+              </label>
+              <select
+                value={filter.action || ''}
+                onChange={(e) => setFilter({ ...filter, action: (e.target.value as AuditAction) || undefined })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="">All Actions</option>
+                {Object.entries(AUDIT_ACTIONS).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Entity
+              </label>
+              <select
+                value={filter.entity || ''}
+                onChange={(e) => setFilter({ ...filter, entity: (e.target.value as AuditEntity) || undefined })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="">All Entities</option>
+                {Object.entries(AUDIT_ENTITIES).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Limit
+              </label>
+              <select
+                value={filter.limit || 50}
+                onChange={(e) => setFilter({ ...filter, limit: parseInt(e.target.value) })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="25">25 entries</option>
+                <option value="50">50 entries</option>
+                <option value="100">100 entries</option>
+                <option value="250">250 entries</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 mt-4">
+            <button
+              onClick={handleResetFilter}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              Reset
+            </button>
+            <button
+              onClick={handleApplyFilter}
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              Apply Filters
+            </button>
+          </div>
+        </Card>
+
+        {/* Audit Log Table */}
+        <Card title={`Audit Entries (${entries.length})`}>
+          {entries.length === 0 ? (
+            <p className="text-gray-500 text-center py-8">No audit entries found</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead>
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Timestamp
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      User
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Action
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Entity
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Entity ID
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Details
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {entries.map((entry) => (
+                    <tr key={entry.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {new Date(entry.timestamp * 1000).toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {entry.user}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${ACTION_COLORS[entry.action]}`}>
+                          {AUDIT_ACTIONS[entry.action]}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                        {AUDIT_ENTITIES[entry.entity]}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 font-mono">
+                        {entry.entity_id}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-600 max-w-md truncate" title={entry.details}>
+                        {entry.details || '-'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      </div>
+    </Layout>
+  );
+};
+
+export default AuditLog;
