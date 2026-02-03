@@ -4,7 +4,7 @@
 
 OpenSylab ist ein Laborinformations- und Managementsystem (LIMS), das als Open-Source-Projekt ins Leben gerufen wurde, um eine entscheidende Lücke in der Laborwelt zu schließen. Viele kleine medizinische Labore stehen vor der Herausforderung, entweder auf teure proprietäre LIMS zurückzugreifen oder ineffiziente manuelle Prozesse zu nutzen. OpenSylab existiert, um dieser Problematik zu begegnen: Es bietet kostenfrei und quelloffen ein vollwertiges System, mit dem ein klinisches Diagnostiklabor seine gesamten Abläufe digital verwalten kann.
 
-**Aktueller Entwicklungsstand:** Version 0.5.0 ist eine funktionsfähige Version mit CLI-Interface UND moderner React-Weboberfläche. Das System bietet vollständige CRUD-Operationen über REST-API, JWT-basierte Authentifizierung, TLS/HTTPS-Verschlüsselung, Probenverwaltung mit Web-UI, Auftragsverwaltung, Ergebniseingabe mit Plausibilitätsprüfung, Gerätedatenschnittstelle (CSV/HL7), Audit-Trail und Benutzerauthentifizierung. (siehe [ROADMAP.MD](ROADMAP.MD)).
+**Aktueller Entwicklungsstand:** Version 0.6.0 ist eine produktionsnahe Version mit vollständigem LIMS-Frontend. Das System bietet vollständige CRUD-Operationen über REST-API, JWT-basierte Authentifizierung mit Role-Based Access Control (RBAC), TLS/HTTPS-Verschlüsselung, User Management System, Audit Log für Compliance, User Profile Management, Enhanced Dashboard mit Statistiken, und professionelle React-Weboberfläche mit TypeScript (siehe [ROADMAP.MD](ROADMAP.MD)).
 
 ## Manifest
 
@@ -17,7 +17,7 @@ Unser Manifest formuliert die grundlegenden Werte, Ziele und Prinzipien von Open
 - **Ethik und Gemeinwohl**: Gemeinnützig orientiert, kostenlos verfügbar
 - **Dezentralisierung und Unabhängigkeit**: Daten bleiben vor Ort unter voller Kontrolle
 
-## Features von OpenSylab 0.5.0
+## Features von OpenSylab 0.6.0
 
 Die aktuelle Version bietet umfassende LIMS-Funktionalität mit moderner Webtechnologie:
 
@@ -56,23 +56,52 @@ Die aktuelle Version bietet umfassende LIMS-Funktionalität mit moderner Webtech
   - Automatische Token-Validierung und -Erneuerung
   - Rückwärtskompatibilität mit API-Key
 
-- **React Web-Interface** (NEU in v0.5):
+- **User Management System** (NEU in v0.6):
+  - Admin-only CRUD interface für Benutzerverwaltung
+  - Role-Based Access Control (ADMIN, OPERATOR, VIEWER, CUSTOM)
+  - User Profile Management mit Passwortänderung
+  - Benutzer aktivieren/deaktivieren
+  - Vollständige Benutzerdaten (Name, E-Mail, Rolle)
+  - 8 neue API-Endpoints für User Management
+
+- **Audit Log & Compliance** (NEU in v0.6):
+  - Kompletter Audit Trail für alle Operationen
+  - Admin-only Audit Log Viewer
+  - Filterung nach User, Action, Entity, Zeitraum
+  - Compliance-Tracking für ISO 15189
+  - Unveränderliche Audit-Einträge
+  - Detaillierte Aktionsprotokolle
+
+- **Enhanced Dashboard** (NEU in v0.6):
+  - Multi-Entity Statistiken (Samples, Orders, Results)
+  - Status-Breakdowns mit Zählungen
+  - Real-time Daten vom Backend
+  - Server-seitige Aggregation
+  - Übersichtliche Visualisierung
+
+- **React Web-Interface** (v0.5/v0.6):
   - Moderne Single Page Application (SPA)
   - Responsive Design mit TailwindCSS
-  - Dashboard mit Übersicht
+  - Dashboard mit umfassenden Statistiken
   - **Probenverwaltung** (Samples): Liste, Filtering, Create/Edit Modals
   - **Auftragsverwaltung** (Orders): Liste, Dual-Filtering (Status + Priority), Create/Edit
   - **Ergebnisverwaltung** (Results): Liste, Dual-Filtering (Status + Flag), Anzeige mit Badges
-  - Protected Routes mit JWT-Auth
+  - **Benutzerverwaltung** (Users): Admin-only CRUD Interface
+  - **Audit Log**: Admin-only Viewer mit Filterung
+  - **Profile**: Benutzerprofil mit Passwortänderung
+  - Protected Routes mit JWT-Auth und Role-basierter Zugriffskontrolle
   - Real-time Formularvalidierung
 
-- **REST-API** (NEU in v0.5):
+- **REST-API** (v0.5/v0.6):
   - Vollständige CRUD-Operationen (GET, POST, PUT, DELETE)
-  - Endpoints: /api/v1/samples, /api/v1/orders, /api/v1/results
+  - **Core Endpoints**: /api/v1/samples, /api/v1/orders, /api/v1/results
+  - **User Management** (v0.6): /api/v1/users, /api/v1/users/me, /api/v1/users/me/password
+  - **Audit & Stats** (v0.6): /api/v1/audit, /api/v1/stats
   - JSON-basierte Request/Response
   - CORS-Unterstützung für Frontend
   - Konsistente Fehlerbehandlung
   - Audit-Logging für alle Operationen
+  - Role-Based Access Control auf API-Ebene
 
 - **TLS/HTTPS-Unterstützung** (NEU in v0.5):
   - OpenSSL-Integration für verschlüsselte Verbindungen
@@ -103,19 +132,32 @@ Die aktuelle Version bietet umfassende LIMS-Funktionalität mit moderner Webtech
   - CSV-Import über Menü
   - Unicode-Symbole für bessere Lesbarkeit (✓ ✗ ℹ)
 
-### In Entwicklung (zukünftige Versionen)
+### In Entwicklung (v0.7 und später)
 
-- Dashboard mit Statistiken und Charts
-- User Management UI (Admin Panel)
-- PostgreSQL-Unterstützung für größere Installationen
-- Qualitätskontrolle (QC)
-- Befunderstellung mit PDF-Export
-- Docker-Containerisierung
-- Multi-Tenant-Fähigkeit
+- **Sicherheits-Verbesserungen** (v0.7 Priorität):
+  - bcrypt/argon2 Password Hashing (aktuell: DJB2, nur für Development!)
+  - Secrets Management (JWT-Secret externalisieren)
+  - HTTPS-Enforcement für Produktion
+- **Frontend CRUD Completion** (v0.7):
+  - Create/Edit Forms für Samples, Orders, Results
+  - Delete Dialogs mit Soft-Delete
+  - Barcode-Scanning Integration
+- **Docker-Containerisierung** (v0.7):
+  - Multi-stage Dockerfiles
+  - Docker Compose für Production
+  - Health Checks
+- **API-Dokumentation** (v0.7):
+  - OpenAPI 3.0 Specification
+  - Swagger UI at /api/docs
+- **Zukünftige Features**:
+  - PostgreSQL-Unterstützung für größere Installationen
+  - Qualitätskontrolle (QC)
+  - Befunderstellung mit PDF-Export
+  - Multi-Tenant-Fähigkeit
 
-Details siehe [ROADMAP.MD](ROADMAP.MD).
+Details siehe [ROADMAP.MD](ROADMAP.MD) und [TODO.md](TODO.md).
 
-## Technologie-Stack (v0.5.0)
+## Technologie-Stack (v0.6.0)
 
 ### Backend
 
@@ -123,23 +165,25 @@ Details siehe [ROADMAP.MD](ROADMAP.MD).
 - **Build-System**: CMake 3.15+
 - **Datenbank**: SQLite 3.x
 - **REST-API**: Custom HTTP-Server mit JSON-Support
-- **Authentifizierung**: JWT (jwt-cpp v0.7.0)
+- **Authentifizierung**: JWT (jwt-cpp v0.7.0) mit Role-Based Access Control
 - **Verschlüsselung**: OpenSSL 3.x für TLS/HTTPS
 - **Architektur**: Modulares Design mit klarer Trennung:
-  - `core/` - Geschäftslogik und Datenmodelle
-  - `db/` - Datenbankzugriffsschicht
-  - `api/` - REST-API und HTTP-Server
-  - `auth/` - JWT-Authentifizierung
+  - `core/` - Geschäftslogik und Datenmodelle (Sample, Order, TestResult, User, AuditEntry)
+  - `db/` - Datenbankzugriffsschicht mit vollständigem CRUD
+  - `api/` - REST-API und HTTP-Server (30+ Endpoints)
+  - `auth/` - JWT-Authentifizierung mit RBAC
   - `utils/` - CSV-Import und CLI-Interface
 
 ### Frontend
 
 - **Framework**: React 18 mit TypeScript
-- **Build-Tool**: Vite mit Hot Module Replacement
-- **Styling**: TailwindCSS für responsive UI
-- **Routing**: React Router für Single Page Application
+- **Build-Tool**: Vite 5 mit Hot Module Replacement
+- **Styling**: TailwindCSS 3 für responsive UI
+- **Routing**: React Router 6 für Single Page Application
 - **HTTP-Client**: Axios mit JWT-Interceptors
-- **State Management**: React Context API
+- **State Management**: React Context API für Auth
+- **UI-Komponenten**: Custom Modal-basierte CRUD-Forms
+- **Typ-Sicherheit**: Vollständige TypeScript-Typen für alle Entities
 
 ### Geplante Erweiterungen
 
@@ -277,12 +321,13 @@ OpenSylab wird schrittweise entwickelt:
 
 - **v0.1.1**: CLI + SQLite, Basis-Probenverwaltung ✓
 - **v0.2.0**: Aufträge, Ergebnisse, Audit-Trail, Benutzer ✓
-- **v0.5.0** (Aktuell): REST-API, React Web-UI, JWT-Auth, TLS/HTTPS ✓
-- **v0.6**: Docker, erweiterte Web-UI Features
+- **v0.5.0**: REST-API, React Web-UI, JWT-Auth, TLS/HTTPS ✓
+- **v0.6.0** (Aktuell): User Management, Audit Log, Enhanced Dashboard, RBAC ✓
+- **v0.7.0** (Nächste): Production Security, Docker, OpenAPI, Frontend CRUD
 - **v1.0**: Produktionsreifes LIMS mit vollständigem Feature-Set
 - **v2.0+**: Multi-Site, KI-Integration
 
-Details siehe [ROADMAP.MD](ROADMAP.MD).
+Details siehe [ROADMAP.MD](ROADMAP.MD) und [TODO.md](TODO.md).
 
 ## Systemanforderungen (v0.2.0)
 
@@ -342,18 +387,25 @@ OpenSylab wird entwickelt von einer weltweiten Community von Entwicklern, Laborf
 
 Siehe [CHANGELOG.md](CHANGELOG.md) für detaillierte Änderungen.
 
-**Aktuelle Version**: v0.5.0 (2026-02-01)
+**Aktuelle Version**: v0.6.0 (2026-02-03)
 
-- ✓ React Web-Interface mit TypeScript
-- ✓ REST-API mit vollständigen CRUD-Operationen (GET, POST, PUT, DELETE)
-- ✓ JWT-basierte Authentifizierung
-- ✓ TLS/HTTPS-Verschlüsselung
-- ✓ Samples Management Web-UI (Create, Edit, List, Filter)
-- ✓ Orders Management Web-UI (Create, Edit, List, Dual-Filter)
-- ✓ Results Management Web-UI (List, Dual-Filter, Badge-Display)
-- ✓ Dashboard und geschützte Routen
-- ✓ 62 Unit-Tests (Backend)
-- ✓ Auftragsverwaltung, Ergebniseingabe, Audit-Trail (Backend + Frontend)
+- ✓ **User Management System** - Admin-only CRUD Interface für Benutzerverwaltung
+- ✓ **Audit Log Viewer** - Admin-only Compliance-Tracking mit Filterung
+- ✓ **User Profile Management** - Benutzerprofil mit Passwortänderung
+- ✓ **Enhanced Dashboard** - Multi-Entity Statistiken mit Status-Breakdowns
+- ✓ **Role-Based Access Control** - ADMIN, OPERATOR, VIEWER, CUSTOM Rollen
+- ✓ **8 neue API-Endpoints** - User Management, Audit Log, Statistics
+- ✓ **JWT Authentication** - Token-basierte Authentifizierung mit Rollenerkennung
+- ✓ **React TypeScript Frontend** - Vollständige UI mit TailwindCSS
+- ✓ **REST-API** - 30+ Endpoints mit CRUD-Operationen
+- ✓ **TLS/HTTPS** - Verschlüsselte Verbindungen
+- ✓ **62 Unit-Tests** (Backend)
+
+**Sicherheitshinweis v0.6.0**:
+- ⚠️ Default-Credentials: `admin/admin` MÜSSEN in Produktion geändert werden
+- ⚠️ Password-Hashing (DJB2) ist NICHT produktionsreif - nur für Development
+- ⚠️ JWT-Secret ist hardcoded - muss für Produktion externalisiert werden
+- ✓ Diese Punkte werden in v0.7.0 adressiert (bcrypt, Secrets Management)
 
 ---
 
