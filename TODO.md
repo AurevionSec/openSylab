@@ -1,488 +1,408 @@
-# TODO - OpenSylab v0.5 Release Roadmap
+# TODO - OpenSylab v0.6 → v0.7 Roadmap
 
-**Branch:** v0.5 (Development)
-**Target:** v0.5 Alpha Release
-**Status:** ~80-85% Complete (TLS + Frontend MVP + CORS Integration Complete)
-**Generated:** 2026-01-31
-**Last Updated:** 2026-02-01
+**Current Version:** v0.6.0 (Released 2026-02-03)
+**Branch:** main
+**Target:** v0.7.0 Alpha
+**Status:** v0.6.0 Complete ✅ - Planning v0.7
+**Generated:** 2026-02-03
+**Last Updated:** 2026-02-03
+
+---
+
+## v0.6.0 Release Summary ✅
+
+**Released:** 2026-02-03
+**Tag:** v0.6.0
+**Commit:** aec85df
+
+### Completed Features
+
+- ✅ **Complete React Frontend Application**
+  - React 18 + TypeScript + Vite
+  - Tailwind CSS styling
+  - React Router navigation
+  - Full CRUD operations (Samples, Orders, Results)
+
+- ✅ **User Management System**
+  - Admin-only CRUD interface for users
+  - Role-based access control (ADMIN, OPERATOR, VIEWER, CUSTOM)
+  - User profile management
+  - Password change functionality
+  - 8 new API endpoints
+
+- ✅ **Audit Log & Compliance**
+  - Complete audit trail for all operations
+  - Admin-only audit log viewer
+  - Filter by user, action, entity, date range
+  - Compliance tracking for ISO 15189
+
+- ✅ **Enhanced Dashboard**
+  - Multi-entity statistics (Samples, Orders, Results)
+  - Status breakdowns with counts
+  - Real-time data from backend
+  - Server-side aggregation
+
+- ✅ **JWT Authentication**
+  - JWT-based authentication with jwt-cpp
+  - Token expiration (1 hour)
+  - Role verification in JWT payload
+  - Secure password hashing (DJB2 with salt)
+
+- ✅ **Documentation**
+  - Complete UI_EXTENSIONS_V06.md guide
+  - Updated CHANGELOG.md with v0.6.0 notes
+  - Default credentials documented
+  - Usage guides for admins and users
+
+### Statistics
+- **22 new files**
+- **6,436 insertions**
+- **38 deletions**
+- **8 new API endpoints**
+- **3 new UI pages** (Users, Audit Log, Profile)
+- **Version bump:** 0.2.0 → 0.6.0
 
 ---
 
 ## Priority Levels
 
-- **P0** - Release Blocker (MUST have for v0.5 Alpha)
-- **P1** - High Priority (Should have for v0.5 Alpha)
-- **P2** - Medium Priority (Nice to have for v0.5, can defer to v0.6)
+- **P0** - Critical (MUST have for v0.7)
+- **P1** - High Priority (Should have for v0.7)
+- **P2** - Medium Priority (Nice to have, can defer to v0.8)
 - **P3** - Low Priority (Future versions)
 
 ---
 
-## Release Blockers (P0)
+## v0.7.0 Planning (Next Release)
 
-### 🔒 Security & TLS/HTTPS
+### 🔒 Security Enhancements (P0)
 
-- [x] **[P0]** ✅ Implement OpenSSL integration for TLS/HTTPS **COMPLETED 2026-02-01**
-  - [x] Add OpenSSL dependency to CMakeLists.txt
-  - [x] Create TLS context manager class (`TlsContext`)
-  - [x] Implement SSL_accept() wrapper in ApiServer
-  - [x] Add certificate loading from file/config
-  - [x] Support self-signed certificates for development (`scripts/generate_cert.sh`)
-  - [x] Add certificate validation for production
-  - [x] Update ApiServer::bindAndListen() for TLS socket
-  - [x] Update ApiServer::handleClient() for SSL_read/SSL_write
-  - **Completed in:** 3 hours (parallel execution)
-  - **Documentation:** `TLS_IMPLEMENTATION_REPORT.md`, `HTTPS_QUICK_START.md`
+- [ ] **[P0]** Replace DJB2 password hashing with bcrypt/argon2
+  - [ ] Add bcrypt library dependency
+  - [ ] Update User::hashPassword() implementation
+  - [ ] Add password strength validation
+  - [ ] Migrate existing password hashes
+  - [ ] Update password change UI with strength indicator
+  - **Estimate:** 2-3 days
+  - **Security:** Current DJB2 is NOT production-ready
 
-- [ ] **[P0]** Implement JWT-based authentication
-  - [ ] Add JWT library dependency (e.g., jwt-cpp)
-  - [ ] Create JWT token generation utility
-  - [ ] Implement token validation middleware
-  - [ ] Add token expiration and refresh logic
-  - [ ] Replace API-Key auth with JWT in ApiRouter
-  - [ ] Update login endpoint to issue JWT tokens
-  - [ ] Add JWT claims (user_id, role, exp)
-  - [ ] Implement token blacklist for logout
-  - **Estimate:** 3-5 days
-  - **Depends on:** jwt-cpp or similar library
+- [ ] **[P0]** Implement proper secrets management
+  - [ ] Move JWT secret to environment variable
+  - [ ] Add config file for secrets (opensylab.conf)
+  - [ ] Document secret rotation procedures
+  - [ ] Add --config flag to load configuration
+  - **Estimate:** 1-2 days
 
-### 🌐 Web Frontend (React MVP)
-
-- [x] **[P0]** ✅ Setup React project structure **COMPLETED 2026-02-01**
-  - [x] Initialize React app with Vite
-  - [x] Setup TypeScript configuration
-  - [x] Configure ESLint and Prettier
-  - [x] Setup folder structure (components/, pages/, services/, utils/, types/)
-  - [x] Add Tailwind CSS for styling
-  - [x] Configure API client to backend (localhost:8080)
-  - **Completed in:** 2 hours (parallel execution)
-  - **Location:** `frontend/`
-
-- [x] **[P0]** ✅ Implement authentication UI **COMPLETED 2026-02-01**
-  - [x] Create Login component
-  - [x] Create authentication service (login, logout, API key storage)
-  - [x] Implement protected route wrapper
-  - [x] Add authentication context/provider
-  - [x] Create basic layout with logout button
-  - **Note:** Using API-Key authentication (JWT deferred to next sprint)
-  - **Completed in:** 2 hours (parallel execution)
-
-- [~] **[P0]** Implement Sample Management UI **PARTIALLY COMPLETE**
-  - [x] Create SampleList component (table view)
-  - [x] Add pagination controls
-  - [x] Implement search/filter UI (by status, date)
-  - [x] Create SampleDetail display
-  - [ ] Add CreateSample form
-  - [ ] Add EditSample form
-  - [x] Implement API service calls (GET, POST, PUT)
-  - [x] Add loading states and error handling
-  - [x] Add data transformation layer (backend ↔ frontend format)
-  - **Status:** Read-only UI complete, create/edit forms pending
-  - **Location:** `frontend/src/pages/Samples.tsx`, `frontend/src/services/samples.ts`
-
-- [x] **[P0]** ✅ Implement Dashboard (minimal) **COMPLETED 2026-02-01**
-  - [x] Create Dashboard layout
-  - [x] Add statistics cards (total samples, status breakdown)
-  - [x] Display recent samples table
-  - [x] Add sample status visualization
-  - **Completed in:** 2 hours (parallel execution)
-  - **Location:** `frontend/src/pages/Dashboard.tsx`
-
-- [x] **[P0]** ✅ Build and deployment configuration **COMPLETED 2026-02-01**
-  - [x] Create development build script (`npm run dev`)
-  - [x] Create production build script (`npm run build`)
-  - [ ] Configure static file serving from ApiServer (deferred)
-  - [x] Add CORS headers to API responses
-  - [x] Create deployment documentation
-  - **Documentation:** `INTEGRATION_COMPLETE.md`, `frontend/INTEGRATION.md`
-
-### 📝 Documentation Updates
-
-- [ ] **[P0]** Update CHANGELOG.md for v0.5
-  - [ ] Document all new features (30+ commits)
-  - [ ] List API endpoints and methods
-  - [ ] Document breaking changes (if any)
-  - [ ] Add migration guide from v0.2.0
-  - [ ] Credit contributors
-  - **Estimate:** 1 day
-
-- [ ] **[P0]** Update README.MD for v0.5
-  - [ ] Update feature list (add REST API, Web UI)
-  - [ ] Update installation instructions (HTTPS certs, frontend build)
-  - [ ] Add API usage examples
-  - [ ] Update architecture diagram (add Web Browser → API → DB)
-  - [ ] Update technology stack (React, TLS, JWT)
-  - **Estimate:** 1 day
-
-- [ ] **[P0]** Bump version to 0.5.0
-  - [ ] Update CMakeLists.txt VERSION to 0.5.0
-  - [ ] Update main.cpp version string
-  - [ ] Update package.json (frontend) version
-  - [ ] Tag git commit as v0.5.0
-  - **Estimate:** 15 minutes
-
----
-
-## High Priority (P1)
-
-### 🔧 API Improvements
-
-- [x] **[P1]** ✅ Add CORS support to ApiServer **COMPLETED 2026-02-01**
-  - [x] Implement CORS headers in response handlers
-  - [x] Add OPTIONS method handler (preflight support)
-  - [x] Configure allowed origins (localhost:5173 for development)
-  - [x] Add CORS headers to all responses (TLS and Plain HTTP)
-  - **Completed in:** 1 hour
-  - **Location:** `src/api/ApiServer.cpp:1631-1634, 1709-1712`
-  - **Note:** OPTIONS requests handled before authentication check
-
-- [ ] **[P1]** Implement rate limiting
-  - [ ] Create rate limiter class (token bucket algorithm)
-  - [ ] Add per-IP rate limiting
-  - [ ] Add per-API-key rate limiting
-  - [ ] Return 429 Too Many Requests on limit exceeded
-  - [ ] Make limits configurable
+- [ ] **[P0]** Add HTTPS enforcement
+  - [ ] Force HTTPS in production mode
+  - [ ] Add HTTP → HTTPS redirect
+  - [ ] Document certificate setup for production
+  - [ ] Add Let's Encrypt integration guide
   - **Estimate:** 2 days
 
-- [ ] **[P1]** Add DELETE endpoints
-  - [ ] Implement DELETE /api/v1/samples/{id}
-  - [ ] Implement DELETE /api/v1/orders/{id}
-  - [ ] Implement DELETE /api/v1/results/{id}
-  - [ ] Add soft-delete support (mark as archived)
-  - [ ] Update tests
-  - **Estimate:** 1 day
+### 🚀 Core Features (P1)
 
-- [ ] **[P1]** Improve error responses
-  - [ ] Standardize error JSON format
-  - [ ] Add request_id to error responses
-  - [ ] Add detailed validation errors (field-level)
-  - [ ] Log errors to audit trail
-  - **Estimate:** 1 day
+- [ ] **[P1]** Complete Sample CRUD in Frontend
+  - [x] Sample list view
+  - [x] Sample detail view
+  - [ ] Create sample modal/form
+  - [ ] Edit sample modal/form
+  - [ ] Delete confirmation dialog
+  - [ ] Barcode scanning integration
+  - **Estimate:** 3-4 days
 
-### 📚 API Documentation
+- [ ] **[P1]** Complete Order Management UI
+  - [x] Order list view
+  - [x] Order detail view
+  - [ ] Create order form
+  - [ ] Edit order form
+  - [ ] Link orders to samples
+  - [ ] Status workflow transitions
+  - **Estimate:** 3-4 days
 
-- [ ] **[P1]** Generate OpenAPI/Swagger specification
-  - [ ] Write OpenAPI 3.0 YAML spec
-  - [ ] Document all endpoints (GET, POST, PUT, DELETE)
+- [ ] **[P1]** Complete Result Management UI
+  - [x] Result list view
+  - [x] Result detail view
+  - [ ] Result entry form
+  - [ ] Validation workflow
+  - [ ] Plausibility checking
+  - [ ] Reference range validation
+  - **Estimate:** 4-5 days
+
+- [ ] **[P1]** Add DELETE endpoints to API
+  - [ ] DELETE /api/v1/samples/:id
+  - [ ] DELETE /api/v1/orders/:id
+  - [ ] DELETE /api/v1/results/:id
+  - [ ] Implement soft-delete (mark as archived)
+  - [ ] Add audit log entries for deletes
+  - [ ] Update frontend to use DELETE
+  - **Estimate:** 2 days
+
+### 🐳 Infrastructure (P1)
+
+- [ ] **[P1]** Production Docker setup
+  - [ ] Multi-stage Dockerfile for backend
+  - [ ] Dockerfile for frontend (nginx)
+  - [ ] Docker Compose for production
+  - [ ] Environment variable configuration
+  - [ ] Volume mounts for data persistence
+  - [ ] Health check endpoints
+  - **Estimate:** 3-4 days
+
+- [ ] **[P1]** Configuration file system
+  - [ ] Define opensylab.conf format (YAML/INI)
+  - [ ] Add config parser (libconfig++ or yaml-cpp)
+  - [ ] Support: database path, API port, TLS certs, CORS origins
+  - [ ] Add --config CLI flag
+  - [ ] Document all configuration options
+  - **Estimate:** 2-3 days
+
+### 📚 Documentation (P1)
+
+- [ ] **[P1]** API Documentation
+  - [ ] Create OpenAPI 3.0 specification
+  - [ ] Document all 30+ endpoints
   - [ ] Add request/response schemas
-  - [ ] Add authentication section (JWT)
-  - [ ] Add example requests/responses
+  - [ ] Add authentication documentation
+  - [ ] Setup Swagger UI at /api/docs
   - **Estimate:** 3-4 days
 
-- [ ] **[P1]** Setup Swagger UI
-  - [ ] Serve Swagger UI from /api/docs
-  - [ ] Configure Swagger UI with OpenAPI spec
-  - [ ] Add "Try it out" functionality
-  - **Estimate:** 1 day
-  - **Depends on:** OpenAPI spec
-
-### 🧪 Testing
-
-- [ ] **[P1]** Complete API integration tests
-  - [ ] Test all GET endpoints with filters
-  - [ ] Test POST endpoints with validation
-  - [ ] Test PUT endpoints with conflict detection
-  - [ ] Test DELETE endpoints (when implemented)
-  - [ ] Test authentication flows (JWT)
-  - [ ] Test error cases (400, 401, 404, 409, 500)
-  - [ ] Test concurrent requests
-  - **Estimate:** 3-4 days
-
-- [ ] **[P1]** Add frontend unit tests
-  - [ ] Setup Jest and React Testing Library
-  - [ ] Test authentication flow
-  - [ ] Test SampleList component
-  - [ ] Test form validation
-  - [ ] Test API service calls (mocked)
+- [ ] **[P1]** Production Deployment Guide
+  - [ ] Server requirements (CPU, RAM, disk)
+  - [ ] Installation steps for Ubuntu/Debian
+  - [ ] HTTPS certificate setup
+  - [ ] Database backup procedures
+  - [ ] Monitoring and logging setup
+  - [ ] Security hardening checklist
   - **Estimate:** 2-3 days
 
-- [ ] **[P1]** Add E2E tests with Cypress/Playwright
-  - [ ] Setup Cypress or Playwright
-  - [ ] Test login flow
-  - [ ] Test sample CRUD operations
-  - [ ] Test dashboard navigation
-  - [ ] Test error handling
-  - **Estimate:** 3-4 days
+### 🧪 Testing (P1)
 
-### 🏗️ Infrastructure
-
-- [ ] **[P1]** Create development Docker setup
-  - [ ] Write Dockerfile for backend (C++ build)
-  - [ ] Write Dockerfile for frontend (React build)
-  - [ ] Create docker-compose.yml (backend + frontend + db)
-  - [ ] Add environment variable configuration
-  - [ ] Document Docker usage in README
+- [ ] **[P1]** Integration tests for new endpoints
+  - [ ] Test user management CRUD
+  - [ ] Test audit log filtering
+  - [ ] Test statistics endpoints
+  - [ ] Test role-based access control
+  - [ ] Test password change flow
   - **Estimate:** 2-3 days
 
-- [ ] **[P1]** Add configuration file support
-  - [ ] Create opensylab.conf format (INI or YAML)
-  - [ ] Add config parser
-  - [ ] Support database path, API port, TLS cert paths
-  - [ ] Support CORS origins, rate limits
-  - [ ] Add --config flag to main.cpp
-  - **Estimate:** 2 days
+- [ ] **[P1]** Frontend unit tests
+  - [ ] Setup Jest + React Testing Library
+  - [ ] Test authentication context
+  - [ ] Test protected routes
+  - [ ] Test user management components
+  - [ ] Test audit log components
+  - [ ] Test profile page
+  - **Estimate:** 3-4 days
 
 ---
 
 ## Medium Priority (P2)
 
-### 🐘 PostgreSQL Support
-
-- [ ] **[P2]** Implement PostgreSQL database adapter
-  - [ ] Add libpq-dev or libpqxx dependency
-  - [ ] Create PostgresDatabase class (inherits from Database interface)
-  - [ ] Refactor Database to be abstract base class
-  - [ ] Implement all CRUD operations for PostgreSQL
-  - [ ] Update schema initialization for PostgreSQL syntax
-  - [ ] Add connection pooling
-  - [ ] Add database selection via config (sqlite vs postgres)
-  - **Estimate:** 1-2 weeks
-
-- [ ] **[P2]** Create database migration system
-  - [ ] Design migration file format
-  - [ ] Create migration runner
-  - [ ] Write migration: v0.2 → v0.5 (SQLite)
-  - [ ] Write migration: v0.2 → v0.5 (PostgreSQL)
-  - [ ] Add --migrate CLI command
-  - [ ] Document migration process
-  - **Estimate:** 3-5 days
-
 ### 🌐 Frontend Enhancements
 
-- [ ] **[P2]** Add Order Management UI
-  - [ ] Create OrderList component
-  - [ ] Create OrderDetail component
-  - [ ] Add CreateOrder form
-  - [ ] Add priority and status badges
-  - [ ] Link orders to samples
+- [ ] **[P2]** Add data visualization
+  - [ ] Integrate Chart.js or Recharts
+  - [ ] Sample status pie chart
+  - [ ] Orders over time line chart
+  - [ ] Results distribution charts
   - **Estimate:** 3-4 days
 
-- [ ] **[P2]** Add Result Management UI
-  - [ ] Create ResultList component
-  - [ ] Create ResultDetail component
-  - [ ] Add result entry form
-  - [ ] Display plausibility flags (colors)
-  - [ ] Show reference ranges
-  - **Estimate:** 3-4 days
-
-- [ ] **[P2]** Add CSV Import UI
-  - [ ] Create file upload component
-  - [ ] Show upload progress
-  - [ ] Display import results (success/errors)
-  - [ ] Add error detail view
+- [ ] **[P2]** CSV Import UI
+  - [ ] File upload component
+  - [ ] Progress indicator
+  - [ ] Import results display
+  - [ ] Error handling and reporting
   - **Estimate:** 2-3 days
 
-- [ ] **[P2]** Improve Dashboard
-  - [ ] Add charts (samples by status, orders over time)
-  - [ ] Add filtering controls
-  - [ ] Add export functionality
-  - **Estimate:** 2-3 days
-
-- [ ] **[P2]** Add responsive design for mobile/tablet
+- [ ] **[P2]** Mobile responsive design
   - [ ] Test on mobile devices
-  - [ ] Adjust layout for small screens
-  - [ ] Add mobile navigation menu
+  - [ ] Responsive navigation menu
+  - [ ] Touch-friendly UI components
+  - [ ] Mobile-optimized tables
+  - **Estimate:** 3-4 days
+
+- [ ] **[P2]** Advanced filtering
+  - [ ] Multi-field filter builder
+  - [ ] Save filter presets
+  - [ ] Export filtered data
   - **Estimate:** 2-3 days
 
-### 🔐 Security Enhancements
+### 🐘 Database Improvements
 
-- [ ] **[P2]** Implement LDAP/Active Directory integration
-  - [ ] Add LDAP library dependency
-  - [ ] Create LDAP authentication adapter
-  - [ ] Add LDAP config to opensylab.conf
-  - [ ] Support fallback to local auth
-  - [ ] Test with AD server
+- [ ] **[P2]** PostgreSQL support
+  - [ ] Add libpqxx dependency
+  - [ ] Create PostgresDatabase adapter
+  - [ ] Refactor Database to abstract base class
+  - [ ] Implement connection pooling
+  - [ ] Add database selection in config
+  - **Estimate:** 1-2 weeks
+
+- [ ] **[P2]** Database migrations
+  - [ ] Design migration file format
+  - [ ] Create migration runner
+  - [ ] Write migrations: v0.2 → v0.6
+  - [ ] Add --migrate CLI command
   - **Estimate:** 4-5 days
 
-- [ ] **[P2]** Add Two-Factor Authentication (2FA)
-  - [ ] Implement TOTP (Google Authenticator compatible)
-  - [ ] Add 2FA setup UI
-  - [ ] Add 2FA verification step in login
-  - [ ] Store 2FA secrets securely
-  - **Estimate:** 3-4 days
+### 🔐 Advanced Security
 
-- [ ] **[P2]** Add input sanitization and validation
-  - [ ] Add XSS protection (escape HTML in inputs)
-  - [ ] Add SQL injection protection (parameterized queries)
-  - [ ] Add file upload validation (size, type)
-  - [ ] Add Content Security Policy headers
+- [ ] **[P2]** Two-Factor Authentication
+  - [ ] TOTP implementation (Google Authenticator)
+  - [ ] 2FA setup UI
+  - [ ] QR code generation
+  - [ ] Backup codes
+  - **Estimate:** 4-5 days
+
+- [ ] **[P2]** LDAP/Active Directory
+  - [ ] Add LDAP library
+  - [ ] LDAP authentication adapter
+  - [ ] Fallback to local auth
+  - [ ] User sync from LDAP
+  - **Estimate:** 5-6 days
+
+- [ ] **[P2]** Rate limiting
+  - [ ] Token bucket algorithm
+  - [ ] Per-IP rate limiting
+  - [ ] Per-user rate limiting
+  - [ ] Return 429 on limit exceeded
   - **Estimate:** 2-3 days
 
-### 📊 Statistics & Reporting
+### 📊 Reporting
 
-- [ ] **[P2]** Add graphical statistics to frontend
-  - [ ] Integrate Chart.js or Recharts
-  - [ ] Create sample status pie chart
-  - [ ] Create orders over time line chart
-  - [ ] Create results distribution chart
-  - **Estimate:** 2-3 days
+- [ ] **[P2]** PDF report generation
+  - [ ] Add PDF library (libharu)
+  - [ ] Sample report template
+  - [ ] Order report template
+  - [ ] Result report with graphs
+  - [ ] PDF download endpoints
+  - **Estimate:** 4-5 days
 
-- [ ] **[P2]** Add PDF report generation
-  - [ ] Add PDF library (e.g., libharu)
-  - [ ] Create sample report template
-  - [ ] Create order report template
-  - [ ] Add PDF download endpoint
-  - **Estimate:** 3-5 days
-
-### 🧪 Additional Testing
-
-- [ ] **[P2]** Add load testing
-  - [ ] Setup k6 or Apache JMeter
-  - [ ] Create load test scenarios (API endpoints)
-  - [ ] Test concurrent user scenarios
-  - [ ] Identify performance bottlenecks
-  - [ ] Document performance benchmarks
-  - **Estimate:** 2-3 days
-
-- [ ] **[P2]** Add security testing
-  - [ ] Run OWASP ZAP against API
-  - [ ] Test SQL injection vulnerabilities
-  - [ ] Test XSS vulnerabilities
-  - [ ] Test authentication bypass attempts
-  - [ ] Document and fix findings
+- [ ] **[P2]** Excel/CSV export
+  - [ ] Export samples to CSV/Excel
+  - [ ] Export orders to CSV/Excel
+  - [ ] Export results to CSV/Excel
+  - [ ] Export audit log to CSV
   - **Estimate:** 2-3 days
 
 ---
 
 ## Low Priority (P3)
 
-### 🚀 Performance Optimizations
+### 🚀 Performance
 
-- [ ] **[P3]** Add caching layer
-  - [ ] Implement Redis integration (optional)
-  - [ ] Cache frequent queries (sample lists)
-  - [ ] Add cache invalidation on updates
-  - [ ] Make caching configurable
+- [ ] **[P3]** Caching layer
+  - [ ] Redis integration (optional)
+  - [ ] Cache frequent queries
+  - [ ] Cache invalidation strategy
   - **Estimate:** 3-4 days
 
-- [ ] **[P3]** Optimize database queries
-  - [ ] Add indexes on frequently queried columns
-  - [ ] Analyze slow query log
-  - [ ] Optimize N+1 query issues
-  - **Estimate:** 2-3 days
-
-- [ ] **[P3]** Implement async I/O for API server
-  - [ ] Refactor to use async sockets (e.g., libuv, Boost.Asio)
-  - [ ] Add thread pool for request handling
-  - [ ] Test concurrent request performance
+- [ ] **[P3]** Async I/O
+  - [ ] Refactor to libuv or Boost.Asio
+  - [ ] Thread pool for requests
+  - [ ] Performance benchmarks
   - **Estimate:** 1-2 weeks
-
-### 📱 Mobile App (Future)
-
-- [ ] **[P3]** Design mobile app architecture
-  - [ ] Choose framework (React Native, Flutter)
-  - [ ] Define mobile-specific features
-  - [ ] Create wireframes
-  - **Estimate:** 1 week (research/design)
 
 ### 🌍 Internationalization
 
-- [ ] **[P3]** Add i18n support to frontend
+- [ ] **[P3]** Frontend i18n
   - [ ] Setup react-i18next
-  - [ ] Extract all UI strings
-  - [ ] Add English translations
-  - [ ] Add German translations
+  - [ ] Extract all strings
+  - [ ] English translations
+  - [ ] German translations
   - **Estimate:** 3-4 days
 
-- [ ] **[P3]** Add i18n support to API
-  - [ ] Add Accept-Language header support
+- [ ] **[P3]** API i18n
+  - [ ] Accept-Language header support
   - [ ] Translate error messages
-  - [ ] Support date/time formatting by locale
+  - [ ] Locale-specific date/time formatting
   - **Estimate:** 2-3 days
 
-### 📦 Additional Features
+### 📱 Additional Features
 
-- [ ] **[P3]** Add user profile management
-  - [ ] Create user profile page
-  - [ ] Allow password change
-  - [ ] Allow email/name updates
-  - [ ] Add avatar upload
-  - **Estimate:** 2-3 days
-
-- [ ] **[P3]** Add notification system
-  - [ ] Design notification model
-  - [ ] Add WebSocket support for real-time notifications
-  - [ ] Create notification UI component
-  - [ ] Add email notifications (optional)
+- [ ] **[P3]** Notification system
+  - [ ] WebSocket support
+  - [ ] Real-time notifications UI
+  - [ ] Email notifications (optional)
   - **Estimate:** 5-7 days
 
-- [ ] **[P3]** Add advanced search
-  - [ ] Full-text search across all entities
-  - [ ] Add search suggestions
-  - [ ] Add search history
+- [ ] **[P3]** Advanced search
+  - [ ] Full-text search
+  - [ ] Search suggestions
+  - [ ] Search history
+  - **Estimate:** 3-4 days
+
+- [ ] **[P3]** Barcode integration
+  - [ ] Barcode scanner support
+  - [ ] Barcode generation
+  - [ ] Label printing
   - **Estimate:** 3-4 days
 
 ---
 
-## Deferred to v0.6+
-
-### 🐳 Dockerization (v0.6)
-
-- [ ] Production-ready Docker images
-- [ ] Multi-stage Docker builds
-- [ ] Docker Compose for production
-- [ ] Kubernetes manifests
-- [ ] Helm charts
-- See: `ROADMAP.MD` v0.6 section
+## Deferred to v0.8+
 
 ### 🏢 Enterprise Features (v1.0+)
 
 - [ ] Multi-tenancy support
 - [ ] Advanced RBAC with custom permissions
-- [ ] Compliance reports (ISO 15189, DSGVO)
-- [ ] Backup and recovery automation
+- [ ] Compliance reports (ISO 15189, GDPR)
+- [ ] Backup automation
 - [ ] High availability setup
-- See: `ROADMAP.MD` v1.0 section
+- [ ] Kubernetes deployment
+- [ ] SSO integration (SAML, OAuth)
+
+### 📱 Mobile App (Future)
+
+- [ ] React Native or Flutter app
+- [ ] Mobile-specific workflows
+- [ ] Offline mode support
+- [ ] Push notifications
 
 ---
 
 ## Summary
 
-**P0 (Release Blockers):** 20 tasks → 14 completed ✅, 5 remaining, 1 partial
-**P1 (High Priority):** 18 tasks → 1 completed ✅, 17 remaining
-**P2 (Medium Priority):** 24 tasks
-**P3 (Low Priority):** 13 tasks
+**v0.6.0 Achievements:**
+- ✅ Complete React frontend with TypeScript
+- ✅ User management with RBAC
+- ✅ Audit logging for compliance
+- ✅ Enhanced dashboard with statistics
+- ✅ JWT authentication
+- ✅ Professional LIMS UI/UX
 
-**Total:** 75 tasks → 15 completed (20% done)
+**v0.7.0 Focus:**
+- 🔒 Production-ready security (bcrypt, secrets management, HTTPS)
+- 🚀 Complete CRUD operations in frontend
+- 🐳 Docker containerization for production
+- 📚 OpenAPI documentation
+- 🧪 Comprehensive testing
 
-**Major Milestones Completed (2026-02-01):**
-- ✅ TLS/HTTPS backend with OpenSSL
-- ✅ React TypeScript frontend with Vite
-- ✅ CORS integration (frontend ↔ backend)
-- ✅ Authentication flow (API-Key based)
-- ✅ Dashboard UI with live data
-- ✅ Sample management (read-only)
-- ✅ Data transformation layer
-- ✅ Integration testing complete
+**Estimated Timeline:**
+- v0.7.0 Alpha: 4-6 weeks
+- v0.8.0 Beta: +6-8 weeks
+- v1.0.0 Production: +8-12 weeks
 
-**Remaining for v0.5 Alpha:**
-- JWT authentication (replace API-Key)
-- Sample create/edit forms
-- Documentation updates (CHANGELOG, README)
-- Version bump to 0.5.0
-
-**Estimated Time to v0.5 Alpha:**
-- Remaining P0 tasks: ~2-3 weeks
-- Selected P1 tasks: +1-2 weeks
-
-**Recommended Focus:**
-1. ~~Complete P0 tasks first (TLS, Frontend MVP, Documentation)~~ → 70% complete
-2. Complete remaining P0: JWT, Sample forms, Documentation
-3. Select critical P1 tasks (DELETE endpoints, basic tests)
-4. Defer P2/P3 to post-Alpha or v0.6
+**Current Development Status:**
+- **v0.6.0:** ✅ RELEASED (2026-02-03)
+- **v0.7.0:** 🏗️ PLANNING
+- **Branch:** main (v0.6 merged)
+- **Contributors:** Development Team + Claude Code + Happy
 
 ---
 
 ## Notes
 
-- All checkboxes are unchecked for new tasks
-- Legacy backlog items (from previous TODO.md) are completed and archived
-- Use `git commit` messages to reference TODO items (e.g., "feat(auth): implement JWT [TODO: P0-JWT]")
+- Default credentials (admin/admin) MUST be changed in production
+- Current password hashing (DJB2) is NOT production-ready - use for development only
+- JWT secret is hardcoded - MUST be externalized for production
+- All P0 security tasks should be completed before production deployment
 - Update this file as tasks are completed
-- Review and adjust priorities as development progresses
+- Use semantic versioning for all releases
 
 ---
 
-**Last Updated:** 2026-02-01 (Integration Milestone)
+**Last Updated:** 2026-02-03 (v0.6.0 Release)
 **Maintainer:** Development Team
-**Status:** Active Development (v0.5 branch)
-**Parallel Development:** Backend (TLS) + Frontend (React) completed successfully
+**Status:** Planning v0.7.0
+**Next Milestone:** Production-ready security + Complete CRUD
