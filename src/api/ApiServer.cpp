@@ -6,6 +6,7 @@
 #include <cstring>
 #include <ctime>
 #include <iomanip>
+#include <iostream>
 #include <netinet/in.h>
 #include <sstream>
 #include <sys/socket.h>
@@ -440,10 +441,23 @@ bool parseJsonObject(const std::string &input,
 
 ApiRouter::ApiRouter(std::shared_ptr<db::Database> database)
     : database_(std::move(database)) {
-  // Initialize JWT authentication
-  // TODO: Load secret from config file or environment variable in production!
+  // Initialize JWT authentication from environment variable
   auth::JwtAuth::JwtConfig jwtConfig;
-  jwtConfig.secret = "opensylab-dev-secret-min-256-bits-change-in-production-12345";
+
+  // Load JWT secret from environment variable (REQUIRED in production)
+  const char* envSecret = std::getenv("OPENSYLAB_JWT_SECRET");
+  if (envSecret != nullptr && std::strlen(envSecret) >= 32) {
+    jwtConfig.secret = envSecret;
+  } else {
+    // Fallback to development secret ONLY if environment variable not set
+    // WARNING: This is NOT secure for production!
+    const char* devSecret = "opensylab-dev-secret-min-256-bits-change-in-production-12345";
+    jwtConfig.secret = devSecret;
+
+    // Log warning about using development secret
+    std::cerr << "[WARNING] Using development JWT secret! Set OPENSYLAB_JWT_SECRET environment variable for production.\n";
+  }
+
   jwtConfig.expirationMinutes = 60;
   jwtConfig.issuer = "opensylab";
 
