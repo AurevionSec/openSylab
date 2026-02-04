@@ -217,6 +217,124 @@ bool parseTimeValue(const std::string &value, std::time_t &out) {
   }
 }
 
+// ===== VALIDATION HELPERS =====
+
+// Validate string length (min and max inclusive)
+bool validateStringLength(const std::string &value, size_t minLen, size_t maxLen, std::string &error) {
+  const std::string trimmed = trim(value);
+
+  if (trimmed.empty() && minLen > 0) {
+    error = "Value cannot be empty or whitespace-only";
+    return false;
+  }
+
+  if (trimmed.size() < minLen) {
+    error = "Value must be at least " + std::to_string(minLen) + " characters";
+    return false;
+  }
+
+  if (trimmed.size() > maxLen) {
+    error = "Value must not exceed " + std::to_string(maxLen) + " characters";
+    return false;
+  }
+
+  return true;
+}
+
+// Validate password strength (min 8 chars, must contain letters and numbers)
+bool validatePassword(const std::string &password, std::string &error) {
+  if (password.size() < 8) {
+    error = "Password must be at least 8 characters";
+    return false;
+  }
+
+  if (password.size() > 128) {
+    error = "Password must not exceed 128 characters";
+    return false;
+  }
+
+  bool hasLetter = false;
+  bool hasDigit = false;
+
+  for (char ch : password) {
+    if (std::isalpha(static_cast<unsigned char>(ch))) {
+      hasLetter = true;
+    }
+    if (std::isdigit(static_cast<unsigned char>(ch))) {
+      hasDigit = true;
+    }
+    if (hasLetter && hasDigit) {
+      break;
+    }
+  }
+
+  if (!hasLetter || !hasDigit) {
+    error = "Password must contain both letters and numbers";
+    return false;
+  }
+
+  return true;
+}
+
+// Validate email format (basic check)
+bool validateEmail(const std::string &email, std::string &error) {
+  const std::string trimmed = trim(email);
+
+  if (trimmed.size() < 5 || trimmed.size() > 255) {
+    error = "Email must be between 5 and 255 characters";
+    return false;
+  }
+
+  const size_t atPos = trimmed.find('@');
+  if (atPos == std::string::npos || atPos == 0 || atPos == trimmed.size() - 1) {
+    error = "Email must contain '@' with text before and after";
+    return false;
+  }
+
+  const size_t dotPos = trimmed.find('.', atPos);
+  if (dotPos == std::string::npos || dotPos == trimmed.size() - 1) {
+    error = "Email must contain '.' after '@'";
+    return false;
+  }
+
+  return true;
+}
+
+// Validate username format (alphanumeric + underscore only, 3-64 chars)
+bool validateUsername(const std::string &username, std::string &error) {
+  const std::string trimmed = trim(username);
+
+  if (trimmed.size() < 3 || trimmed.size() > 64) {
+    error = "Username must be between 3 and 64 characters";
+    return false;
+  }
+
+  for (char ch : trimmed) {
+    if (!std::isalnum(static_cast<unsigned char>(ch)) && ch != '_') {
+      error = "Username must contain only letters, numbers, and underscores";
+      return false;
+    }
+  }
+
+  return true;
+}
+
+// Validate and cap limit parameter (DoS protection)
+constexpr int MAX_PAGINATION_LIMIT = 1000;
+
+bool validateAndCapLimit(int &limit, std::string &error) {
+  if (limit <= 0) {
+    error = "Limit must be positive";
+    return false;
+  }
+
+  if (limit > MAX_PAGINATION_LIMIT) {
+    limit = MAX_PAGINATION_LIMIT;  // Auto-cap to max
+  }
+
+  return true;
+}
+
 std::string extractApiKey(const std::unordered_map<std::string, std::string> &headers) {
   auto it = headers.find("x-api-key");
   if (it != headers.end()) {
@@ -756,13 +874,30 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                          "Provide patient_id in request body.");
       }
 
+      // Validate sample_id and patient_id length
+      std::string validationError;
+      if (!validateStringLength(payload["sample_id"], 1, 64, validationError)) {
+        return makeError(400, "validation_error", "Invalid sample_id", validationError);
+      }
+      if (!validateStringLength(payload["patient_id"], 1, 64, validationError)) {
+        return makeError(400, "validation_error", "Invalid patient_id", validationError);
+      }
+
       core::Sample sample(payload["sample_id"], payload["patient_id"]);
       auto nameIt = payload.find("patient_name");
       if (nameIt != payload.end()) {
+        // Validate patient_name length if provided
+        if (!nameIt->second.empty() && !validateStringLength(nameIt->second, 1, 255, validationError)) {
+          return makeError(400, "validation_error", "Invalid patient_name", validationError);
+        }
         sample.setPatientName(nameIt->second);
       }
       auto descIt = payload.find("description");
       if (descIt != payload.end()) {
+        // Validate description length if provided
+        if (!descIt->second.empty() && !validateStringLength(descIt->second, 1, 5000, validationError)) {
+          return makeError(400, "validation_error", "Invalid description", validationError);
+        }
         sample.setDescription(descIt->second);
       }
       auto statusIt = payload.find("status");
@@ -816,6 +951,18 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                          "Provide test_type in request body.");
       }
 
+      // Validate required field lengths
+      std::string validationError;
+      if (!validateStringLength(payload["order_id"], 1, 64, validationError)) {
+        return makeError(400, "validation_error", "Invalid order_id", validationError);
+      }
+      if (!validateStringLength(payload["sample_id"], 1, 64, validationError)) {
+        return makeError(400, "validation_error", "Invalid sample_id", validationError);
+      }
+      if (!validateStringLength(payload["test_type"], 1, 255, validationError)) {
+        return makeError(400, "validation_error", "Invalid test_type", validationError);
+      }
+
       core::Order order(payload["order_id"], payload["sample_id"],
                         payload["test_type"]);
       auto statusIt = payload.find("status");
@@ -858,10 +1005,18 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       }
       auto requesterIt = payload.find("requested_by");
       if (requesterIt != payload.end()) {
+        // Validate requested_by length if provided
+        if (!requesterIt->second.empty() && !validateStringLength(requesterIt->second, 1, 255, validationError)) {
+          return makeError(400, "validation_error", "Invalid requested_by", validationError);
+        }
         order.setRequestedBy(requesterIt->second);
       }
       auto notesIt = payload.find("notes");
       if (notesIt != payload.end()) {
+        // Validate notes length if provided
+        if (!notesIt->second.empty() && !validateStringLength(notesIt->second, 1, 5000, validationError)) {
+          return makeError(400, "validation_error", "Invalid notes", validationError);
+        }
         order.setNotes(notesIt->second);
       }
 
@@ -913,31 +1068,60 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                          "Provide numeric order_id.");
       }
 
+      // Validate required field lengths
+      std::string validationError;
+      if (!validateStringLength(payload["result_id"], 1, 64, validationError)) {
+        return makeError(400, "validation_error", "Invalid result_id", validationError);
+      }
+      if (!validateStringLength(payload["test_parameter"], 1, 255, validationError)) {
+        return makeError(400, "validation_error", "Invalid test_parameter", validationError);
+      }
+      if (!validateStringLength(payload["value"], 1, 255, validationError)) {
+        return makeError(400, "validation_error", "Invalid value", validationError);
+      }
+      if (!validateStringLength(payload["unit"], 1, 255, validationError)) {
+        return makeError(400, "validation_error", "Invalid unit", validationError);
+      }
+
       core::TestResult result(payload["result_id"], orderId,
                               payload["test_parameter"]);
       result.setValue(payload["value"]);
       result.setUnit(payload["unit"]);
       auto refRangeIt = payload.find("reference_range");
       if (refRangeIt != payload.end()) {
+        // Validate reference_range length if provided
+        if (!refRangeIt->second.empty() && !validateStringLength(refRangeIt->second, 1, 255, validationError)) {
+          return makeError(400, "validation_error", "Invalid reference_range", validationError);
+        }
         result.setReferenceRange(refRangeIt->second);
       }
       auto refLowIt = payload.find("reference_low");
+      auto refHighIt = payload.find("reference_high");
+      double refLow = 0.0;
+      double refHigh = 0.0;
+      bool hasRefLow = false;
+      bool hasRefHigh = false;
+
       if (refLowIt != payload.end() && !refLowIt->second.empty()) {
-        double refLow = 0.0;
         if (!parseDoubleValue(refLowIt->second, refLow)) {
           return makeError(400, "validation_error", "Invalid reference_low",
                            "Provide numeric reference_low.");
         }
+        hasRefLow = true;
         result.setReferenceLow(refLow);
       }
-      auto refHighIt = payload.find("reference_high");
       if (refHighIt != payload.end() && !refHighIt->second.empty()) {
-        double refHigh = 0.0;
         if (!parseDoubleValue(refHighIt->second, refHigh)) {
           return makeError(400, "validation_error", "Invalid reference_high",
                            "Provide numeric reference_high.");
         }
+        hasRefHigh = true;
         result.setReferenceHigh(refHigh);
+      }
+      // Validate that reference_high > reference_low when both are provided
+      if (hasRefLow && hasRefHigh && refHigh <= refLow) {
+        return makeError(400, "validation_error", "Invalid reference range",
+                         "reference_high must be greater than reference_low.");
       }
       auto statusIt = payload.find("status");
       if (statusIt != payload.end() && !statusIt->second.empty()) {
@@ -964,10 +1148,18 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       }
       auto measuredByIt = payload.find("measured_by");
       if (measuredByIt != payload.end()) {
+        // Validate measured_by length if provided
+        if (!measuredByIt->second.empty() && !validateStringLength(measuredByIt->second, 1, 255, validationError)) {
+          return makeError(400, "validation_error", "Invalid measured_by", validationError);
+        }
         result.setMeasuredBy(measuredByIt->second);
       }
       auto commentIt = payload.find("comment");
       if (commentIt != payload.end()) {
+        // Validate comment length if provided
+        if (!commentIt->second.empty() && !validateStringLength(commentIt->second, 1, 5000, validationError)) {
+          return makeError(400, "validation_error", "Invalid comment", validationError);
+        }
         result.setComment(commentIt->second);
       }
       auto flagIt = payload.find("flag");
@@ -1022,15 +1214,29 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                          "Provide patient_id in request body.");
       }
 
+      // Validate patient_id length
+      std::string validationError;
+      if (!validateStringLength(patientIt->second, 1, 64, validationError)) {
+        return makeError(400, "validation_error", "Invalid patient_id", validationError);
+      }
+
       core::Sample updated = *existing;
       updated.setSampleId(sampleId);
       updated.setPatientId(patientIt->second);
       auto nameIt = payload.find("patient_name");
       if (nameIt != payload.end()) {
+        // Validate patient_name length if provided
+        if (!nameIt->second.empty() && !validateStringLength(nameIt->second, 1, 255, validationError)) {
+          return makeError(400, "validation_error", "Invalid patient_name", validationError);
+        }
         updated.setPatientName(nameIt->second);
       }
       auto descIt = payload.find("description");
       if (descIt != payload.end()) {
+        // Validate description length if provided
+        if (!descIt->second.empty() && !validateStringLength(descIt->second, 1, 5000, validationError)) {
+          return makeError(400, "validation_error", "Invalid description", validationError);
+        }
         updated.setDescription(descIt->second);
       }
       auto statusIt = payload.find("status");
@@ -1093,6 +1299,15 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                          "Provide test_type in request body.");
       }
 
+      // Validate required field lengths
+      std::string validationError;
+      if (!validateStringLength(sampleIt->second, 1, 64, validationError)) {
+        return makeError(400, "validation_error", "Invalid sample_id", validationError);
+      }
+      if (!validateStringLength(testIt->second, 1, 255, validationError)) {
+        return makeError(400, "validation_error", "Invalid test_type", validationError);
+      }
+
       core::Order updated = *existing;
       updated.setOrderId(orderId);
       updated.setSampleId(sampleIt->second);
@@ -1137,10 +1352,18 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       }
       auto requesterIt = payload.find("requested_by");
       if (requesterIt != payload.end()) {
+        // Validate requested_by length if provided
+        if (!requesterIt->second.empty() && !validateStringLength(requesterIt->second, 1, 255, validationError)) {
+          return makeError(400, "validation_error", "Invalid requested_by", validationError);
+        }
         updated.setRequestedBy(requesterIt->second);
       }
       auto notesIt = payload.find("notes");
       if (notesIt != payload.end()) {
+        // Validate notes length if provided
+        if (!notesIt->second.empty() && !validateStringLength(notesIt->second, 1, 5000, validationError)) {
+          return makeError(400, "validation_error", "Invalid notes", validationError);
+        }
         updated.setNotes(notesIt->second);
       }
 
@@ -1190,6 +1413,18 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                          "Provide unit in request body.");
       }
 
+      // Validate required field lengths
+      std::string validationError;
+      if (!validateStringLength(paramIt->second, 1, 255, validationError)) {
+        return makeError(400, "validation_error", "Invalid test_parameter", validationError);
+      }
+      if (!validateStringLength(valueIt->second, 1, 255, validationError)) {
+        return makeError(400, "validation_error", "Invalid value", validationError);
+      }
+      if (!validateStringLength(unitIt->second, 1, 255, validationError)) {
+        return makeError(400, "validation_error", "Invalid unit", validationError);
+      }
+
       core::TestResult updated = *existing;
       updated.setResultId(resultId);
       updated.setTestParameter(paramIt->second);
@@ -1206,9 +1441,17 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       }
       auto refRangeIt = payload.find("reference_range");
       if (refRangeIt != payload.end()) {
+        // Validate reference_range length if provided
+        if (!refRangeIt->second.empty() && !validateStringLength(refRangeIt->second, 1, 255, validationError)) {
+          return makeError(400, "validation_error", "Invalid reference_range", validationError);
+        }
         updated.setReferenceRange(refRangeIt->second);
       }
       auto refLowIt = payload.find("reference_low");
+      auto refHighIt = payload.find("reference_high");
+      bool updatedRefLow = false;
+      bool updatedRefHigh = false;
+
       if (refLowIt != payload.end() && !refLowIt->second.empty()) {
         double refLow = 0.0;
         if (!parseDoubleValue(refLowIt->second, refLow)) {
@@ -1216,8 +1459,8 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                            "Provide numeric reference_low.");
         }
         updated.setReferenceLow(refLow);
+        updatedRefLow = true;
       }
-      auto refHighIt = payload.find("reference_high");
       if (refHighIt != payload.end() && !refHighIt->second.empty()) {
         double refHigh = 0.0;
         if (!parseDoubleValue(refHighIt->second, refHigh)) {
@@ -1225,6 +1468,17 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                            "Provide numeric reference_high.");
         }
         updated.setReferenceHigh(refHigh);
+        updatedRefHigh = true;
+      }
+      // Validate that reference_high > reference_low (check final state if either was updated)
+      if (updatedRefLow || updatedRefHigh) {
+        double finalRefLow = updated.getReferenceLow();
+        double finalRefHigh = updated.getReferenceHigh();
+        // Only validate if both have non-zero values
+        if (finalRefLow != 0.0 && finalRefHigh != 0.0 && finalRefHigh <= finalRefLow) {
+          return makeError(400, "validation_error", "Invalid reference range",
+                           "reference_high must be greater than reference_low.");
+        }
       }
       auto statusIt = payload.find("status");
       if (statusIt != payload.end() && !statusIt->second.empty()) {
@@ -1247,10 +1501,18 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       }
       auto measuredByIt = payload.find("measured_by");
       if (measuredByIt != payload.end()) {
+        // Validate measured_by length if provided
+        if (!measuredByIt->second.empty() && !validateStringLength(measuredByIt->second, 1, 255, validationError)) {
+          return makeError(400, "validation_error", "Invalid measured_by", validationError);
+        }
         updated.setMeasuredBy(measuredByIt->second);
       }
       auto commentIt = payload.find("comment");
       if (commentIt != payload.end()) {
+        // Validate comment length if provided
+        if (!commentIt->second.empty() && !validateStringLength(commentIt->second, 1, 5000, validationError)) {
+          return makeError(400, "validation_error", "Invalid comment", validationError);
+        }
         updated.setComment(commentIt->second);
       }
       auto flagIt = payload.find("flag");
@@ -1348,7 +1610,9 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                      "Check the requested path.");
   }
 
-  if (!isGet) {
+  // Allow user management endpoints (POST/PUT /api/v1/users/...) to proceed
+  // They are handled later in the routing logic
+  if (!isGet && !(path.rfind("/api/v1/users", 0) == 0 && (isPost || isPut))) {
     return makeError(405, "validation_error", "Method not allowed",
                      "Use POST/PUT for write endpoints.");
   }
@@ -1372,9 +1636,14 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
     auto limitIt = query.find("limit");
     if (limitIt != query.end()) {
       int limitValue = 0;
-      if (!parseIntValue(limitIt->second, limitValue) || limitValue <= 0) {
+      if (!parseIntValue(limitIt->second, limitValue)) {
         return makeError(400, "validation_error", "Invalid limit",
-                         "Provide positive integer limit.");
+                         "Provide integer limit.");
+      }
+      // Validate and cap limit to prevent DoS
+      std::string validationError;
+      if (!validateAndCapLimit(limitValue, validationError)) {
+        return makeError(400, "validation_error", "Invalid limit", validationError);
       }
       filter.limit = limitValue;
     }
@@ -1392,6 +1661,10 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       filter.offset = offsetValue;
     }
     auto fromIt = query.find("from");
+    auto toIt = query.find("to");
+    bool hasFrom = false;
+    bool hasTo = false;
+
     if (fromIt != query.end()) {
       std::time_t ts{};
       if (!parseTimeValue(fromIt->second, ts)) {
@@ -1399,8 +1672,8 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                          "Provide Unix timestamp for from.");
       }
       filter.fromDate = ts;
+      hasFrom = true;
     }
-    auto toIt = query.find("to");
     if (toIt != query.end()) {
       std::time_t ts{};
       if (!parseTimeValue(toIt->second, ts)) {
@@ -1408,6 +1681,12 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                          "Provide Unix timestamp for to.");
       }
       filter.toDate = ts;
+      hasTo = true;
+    }
+    // Validate that from <= to when both are provided
+    if (hasFrom && hasTo && filter.fromDate > filter.toDate) {
+      return makeError(400, "validation_error", "Invalid date range",
+                       "'from' date must be less than or equal to 'to' date.");
     }
 
     auto samples = database_->getSamplesByFilter(filter);
@@ -1512,9 +1791,14 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
     auto limitIt = query.find("limit");
     if (limitIt != query.end()) {
       int limitValue = 0;
-      if (!parseIntValue(limitIt->second, limitValue) || limitValue <= 0) {
+      if (!parseIntValue(limitIt->second, limitValue)) {
         return makeError(400, "validation_error", "Invalid limit",
-                         "Provide positive integer limit.");
+                         "Provide integer limit.");
+      }
+      // Validate and cap limit to prevent DoS
+      std::string validationError;
+      if (!validateAndCapLimit(limitValue, validationError)) {
+        return makeError(400, "validation_error", "Invalid limit", validationError);
       }
       filter.limit = limitValue;
     }
@@ -1609,9 +1893,14 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
     auto limitIt = query.find("limit");
     if (limitIt != query.end()) {
       int limitValue = 0;
-      if (!parseIntValue(limitIt->second, limitValue) || limitValue <= 0) {
+      if (!parseIntValue(limitIt->second, limitValue)) {
         return makeError(400, "validation_error", "Invalid limit",
-                         "Provide positive integer limit.");
+                         "Provide integer limit.");
+      }
+      // Validate and cap limit to prevent DoS
+      std::string validationError;
+      if (!validateAndCapLimit(limitValue, validationError)) {
+        return makeError(400, "validation_error", "Invalid limit", validationError);
       }
       limit = limitValue;
     }
@@ -1780,6 +2069,17 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                        "Provide password in request body.");
     }
 
+    // Validate username format
+    std::string validationError;
+    if (!validateUsername(usernameIt->second, validationError)) {
+      return makeError(400, "validation_error", "Invalid username", validationError);
+    }
+
+    // Validate password strength
+    if (!validatePassword(passwordIt->second, validationError)) {
+      return makeError(400, "validation_error", "Invalid password", validationError);
+    }
+
     core::User::Role role = core::User::Role::OPERATOR; // Default
     if (roleIt != payload.end() && !roleIt->second.empty()) {
       try {
@@ -1794,10 +2094,16 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
 
     auto fullNameIt = payload.find("full_name");
     if (fullNameIt != payload.end()) {
+      if (!fullNameIt->second.empty() && !validateStringLength(fullNameIt->second, 1, 255, validationError)) {
+        return makeError(400, "validation_error", "Invalid full_name", validationError);
+      }
       newUser.setFullName(fullNameIt->second);
     }
     auto emailIt = payload.find("email");
     if (emailIt != payload.end()) {
+      if (!emailIt->second.empty() && !validateEmail(emailIt->second, validationError)) {
+        return makeError(400, "validation_error", "Invalid email", validationError);
+      }
       newUser.setEmail(emailIt->second);
     }
     auto activeIt = payload.find("active");
@@ -1865,6 +2171,11 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
 
     auto usernameIt = payload.find("username");
     if (usernameIt != payload.end()) {
+      // Validate username format
+      std::string validationError;
+      if (!validateUsername(usernameIt->second, validationError)) {
+        return makeError(400, "validation_error", "Invalid username", validationError);
+      }
       updated.setUsername(usernameIt->second);
     }
     auto roleIt = payload.find("role");
@@ -1877,10 +2188,24 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
     }
     auto fullNameIt = payload.find("full_name");
     if (fullNameIt != payload.end()) {
+      // Validate full_name length if provided and not empty
+      if (!fullNameIt->second.empty()) {
+        std::string validationError;
+        if (!validateStringLength(fullNameIt->second, 1, 255, validationError)) {
+          return makeError(400, "validation_error", "Invalid full_name", validationError);
+        }
+      }
       updated.setFullName(fullNameIt->second);
     }
     auto emailIt = payload.find("email");
     if (emailIt != payload.end()) {
+      // Validate email format if provided and not empty
+      if (!emailIt->second.empty()) {
+        std::string validationError;
+        if (!validateEmail(emailIt->second, validationError)) {
+          return makeError(400, "validation_error", "Invalid email", validationError);
+        }
+      }
       updated.setEmail(emailIt->second);
     }
     auto activeIt = payload.find("active");
@@ -1889,6 +2214,11 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
     }
     auto passwordIt = payload.find("password");
     if (passwordIt != payload.end() && !passwordIt->second.empty()) {
+      // Validate password strength
+      std::string validationError;
+      if (!validatePassword(passwordIt->second, validationError)) {
+        return makeError(400, "validation_error", "Invalid password", validationError);
+      }
       updated.setPassword(passwordIt->second);
     }
 
@@ -1933,6 +2263,12 @@ after_user_update:
     if (newPwdIt == payload.end() || newPwdIt->second.empty()) {
       return makeError(400, "validation_error", "Missing new_password",
                        "Provide new_password in request body.");
+    }
+
+    // Validate new password strength
+    std::string validationError;
+    if (!validatePassword(newPwdIt->second, validationError)) {
+      return makeError(400, "validation_error", "Invalid new_password", validationError);
     }
 
     auto user = database_->getUser(jwtPayload->userId);
@@ -2008,6 +2344,11 @@ after_user_update:
     if (limitIt != query.end()) {
       int limitValue = 0;
       if (parseIntValue(limitIt->second, limitValue) && limitValue > 0) {
+        // Validate and cap limit to prevent DoS
+        std::string validationError;
+        if (!validateAndCapLimit(limitValue, validationError)) {
+          return makeError(400, "validation_error", "Invalid limit", validationError);
+        }
         filter.limit = limitValue;
       }
     }
