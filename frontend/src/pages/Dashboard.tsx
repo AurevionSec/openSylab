@@ -3,6 +3,8 @@ import { Layout } from '../components/Layout/Layout';
 import { Card } from '../components/common/Card';
 import { getDashboardStats } from '../services/stats';
 import { getSamples } from '../services/samples';
+import { getOrders } from '../services/orders';
+import { getResults } from '../services/results';
 import type { Sample } from '../types/sample';
 import type { DashboardStats } from '../types/stats';
 import { SAMPLE_STATUSES, STATUS_COLORS } from '../utils/constants';
@@ -22,11 +24,64 @@ export const Dashboard = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch stats and recent samples in parallel
-        const [statsData, samplesData] = await Promise.all([
-          getDashboardStats(),
-          getSamples({ limit: 100 }),
+        // Try to fetch stats, but continue even if it fails
+        let statsData: DashboardStats | null = null;
+        try {
+          statsData = await getDashboardStats();
+        } catch (statsErr) {
+          console.warn('Stats endpoint not available, using fallback', statsErr);
+          // Fallback: create empty stats structure
+          statsData = {
+            samples: { entity_type: 'samples', total: 0, by_status: [] },
+            orders: { entity_type: 'orders', total: 0, by_status: [] },
+            results: { entity_type: 'results', total: 0, by_status: [] },
+          };
+        }
+
+        // Fetch all entity data
+        const [samplesData, ordersData, resultsData] = await Promise.all([
+          getSamples({ limit: 1000 }),
+          getOrders({ limit: 1000 }),
+          getResults({ limit: 1000 }),
         ]);
+
+        // If stats weren't available, calculate from actual data
+        if (statsData && statsData.samples.total === 0 && samplesData.samples.length > 0) {
+          statsData.samples.total = samplesData.samples.length;
+          const sampleStatusCounts = new Map<string, number>();
+          samplesData.samples.forEach(s => {
+            sampleStatusCounts.set(s.status, (sampleStatusCounts.get(s.status) || 0) + 1);
+          });
+          statsData.samples.by_status = Array.from(sampleStatusCounts.entries()).map(([status, count]) => ({
+            status,
+            count,
+          }));
+        }
+
+        if (statsData && statsData.orders.total === 0 && ordersData.orders.length > 0) {
+          statsData.orders.total = ordersData.orders.length;
+          const orderStatusCounts = new Map<string, number>();
+          ordersData.orders.forEach(o => {
+            orderStatusCounts.set(o.status, (orderStatusCounts.get(o.status) || 0) + 1);
+          });
+          statsData.orders.by_status = Array.from(orderStatusCounts.entries()).map(([status, count]) => ({
+            status,
+            count,
+          }));
+        }
+
+        if (statsData && statsData.results.total === 0 && resultsData.results.length > 0) {
+          statsData.results.total = resultsData.results.length;
+          const resultStatusCounts = new Map<string, number>();
+          resultsData.results.forEach(r => {
+            resultStatusCounts.set(r.status, (resultStatusCounts.get(r.status) || 0) + 1);
+          });
+          statsData.results.by_status = Array.from(resultStatusCounts.entries()).map(([status, count]) => ({
+            status,
+            count,
+          }));
+        }
+
         setStats(statsData);
         setSamples(samplesData.samples);
       } catch (err) {

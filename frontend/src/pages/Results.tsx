@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout/Layout';
 import { Card } from '../components/common/Card';
-import { getResults } from '../services/results';
+import { Button } from '../components/common/Button';
+import { DeleteConfirmDialog } from '../components/common/DeleteConfirmDialog';
+import { ResultCreateModal } from '../components/Results/ResultCreateModal';
+import { ResultEditModal } from '../components/Results/ResultEditModal';
+import { getResults, deleteResult } from '../services/results';
 import type { TestResult } from '../types/result';
 import { RESULT_STATUSES, RESULT_STATUS_COLORS, RESULT_FLAGS, RESULT_FLAG_COLORS } from '../utils/constants';
 
@@ -13,6 +17,11 @@ export const Results = () => {
   const [selectedFlag, setSelectedFlag] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalResults, setTotalResults] = useState(0);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [selectedResult, setSelectedResult] = useState<TestResult | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [resultToDelete, setResultToDelete] = useState<TestResult | null>(null);
   const itemsPerPage = 20;
 
   useEffect(() => {
@@ -39,6 +48,93 @@ export const Results = () => {
     fetchResults();
   }, [selectedStatus, selectedFlag, currentPage]);
 
+  const handleCreateSuccess = (newResult: TestResult) => {
+    console.log('[Results] Result created successfully:', newResult);
+    // Refresh the results list
+    const fetchResults = async () => {
+      setLoading(true);
+      try {
+        const data = await getResults({
+          status: selectedStatus || undefined,
+          flag: selectedFlag || undefined,
+          limit: itemsPerPage,
+          offset: (currentPage - 1) * itemsPerPage,
+        });
+        setResults(data.results);
+        setTotalResults(data.total);
+      } catch (err) {
+        setError('Failed to load results');
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchResults();
+  };
+
+  const handleEditClick = (result: TestResult) => {
+    setSelectedResult(result);
+    setIsEditModalOpen(true);
+  };
+
+  const handleEditSuccess = (updatedResult: TestResult) => {
+    console.log('[Results] Result updated successfully:', updatedResult);
+    // Refresh the results list
+    const fetchResults = async () => {
+      setLoading(true);
+      try {
+        const data = await getResults({
+          status: selectedStatus || undefined,
+          flag: selectedFlag || undefined,
+          limit: itemsPerPage,
+          offset: (currentPage - 1) * itemsPerPage,
+        });
+        setResults(data.results);
+        setTotalResults(data.total);
+      } catch (err) {
+        setError('Failed to load results');
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchResults();
+  };
+
+  const handleDeleteClick = (result: TestResult) => {
+    setResultToDelete(result);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!resultToDelete) return;
+
+    console.log('[Results] Deleting result:', resultToDelete.id);
+    await deleteResult(resultToDelete.id.toString());
+
+    console.log('[Results] Result deleted successfully');
+    // Refresh the results list
+    const fetchResults = async () => {
+      setLoading(true);
+      try {
+        const data = await getResults({
+          status: selectedStatus || undefined,
+          flag: selectedFlag || undefined,
+          limit: itemsPerPage,
+          offset: (currentPage - 1) * itemsPerPage,
+        });
+        setResults(data.results);
+        setTotalResults(data.total);
+      } catch (err) {
+        setError('Failed to load results');
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    await fetchResults();
+  };
+
   const totalPages = Math.ceil(totalResults / itemsPerPage);
 
   return (
@@ -46,6 +142,22 @@ export const Results = () => {
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <h2 className="text-3xl font-bold text-gray-900">Test Results</h2>
+          <Button onClick={() => setIsCreateModalOpen(true)}>
+            <span className="flex items-center gap-2">
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path d="M12 4v16m8-8H4"></path>
+              </svg>
+              Create Result
+            </span>
+          </Button>
         </div>
 
         <Card>
@@ -123,6 +235,7 @@ export const Results = () => {
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reference</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Flag</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -148,6 +261,50 @@ export const Results = () => {
                           <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${RESULT_STATUS_COLORS[result.status]}`}>
                             {RESULT_STATUSES[result.status]}
                           </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => handleEditClick(result)}
+                            >
+                              <span className="flex items-center gap-1">
+                                <svg
+                                  className="w-4 h-4"
+                                  fill="none"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth="2"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                </svg>
+                                Edit
+                              </span>
+                            </Button>
+                            <Button
+                              variant="danger"
+                              size="sm"
+                              onClick={() => handleDeleteClick(result)}
+                            >
+                              <span className="flex items-center gap-1">
+                                <svg
+                                  className="w-4 h-4"
+                                  fill="none"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth="2"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                </svg>
+                                Delete
+                              </span>
+                            </Button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -201,6 +358,34 @@ export const Results = () => {
           </div>
         </Card>
       </div>
+
+      <ResultCreateModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onSuccess={handleCreateSuccess}
+      />
+
+      <ResultEditModal
+        isOpen={isEditModalOpen}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setSelectedResult(null);
+        }}
+        result={selectedResult}
+        onSuccess={handleEditSuccess}
+      />
+
+      <DeleteConfirmDialog
+        isOpen={isDeleteDialogOpen}
+        onClose={() => {
+          setIsDeleteDialogOpen(false);
+          setResultToDelete(null);
+        }}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Test Result"
+        message="Are you sure you want to delete this test result? This will permanently remove all associated data."
+        itemName={resultToDelete?.result_id}
+      />
     </Layout>
   );
 };

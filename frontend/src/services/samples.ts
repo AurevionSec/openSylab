@@ -49,21 +49,21 @@ export const getSamples = async (filters?: SampleFilter): Promise<SampleListResp
   };
 };
 
-export const getSampleById = async (id: number): Promise<Sample> => {
-  const response = await api.get<Sample>(`/samples/${id}`);
-  return response.data;
+export const getSampleById = async (id: string): Promise<Sample> => {
+  const response = await api.get<{ data: any }>(`/samples/${id}`);
+  return transformSample(response.data.data);
 };
 
 export const createSample = async (sample: Omit<Sample, 'id' | 'created_at' | 'updated_at'>): Promise<Sample> => {
-  const response = await api.post<Sample>('/samples', sample);
-  return response.data;
+  const response = await api.post<{ data: any }>('/samples', sample);
+  return transformSample(response.data.data);
 };
 
-export const updateSample = async (id: number, sample: Partial<Sample>): Promise<Sample> => {
-  const response = await api.put<Sample>(`/samples/${id}`, sample);
-  return response.data;
+export const updateSample = async (id: string, sample: Partial<Sample>): Promise<Sample> => {
+  const response = await api.put<{ data: any }>(`/samples/${id}`, sample);
+  return transformSample(response.data.data);
 };
 
-export const deleteSample = async (id: number): Promise<void> => {
+export const deleteSample = async (id: string): Promise<void> => {
   await api.delete(`/samples/${id}`);
 };

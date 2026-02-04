@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout/Layout';
 import { Card } from '../components/common/Card';
 import { Button } from '../components/common/Button';
+import { DeleteConfirmDialog } from '../components/common/DeleteConfirmDialog';
 import { OrderCreateModal } from '../components/Orders/OrderCreateModal';
 import { OrderEditModal } from '../components/Orders/OrderEditModal';
-import { getOrders } from '../services/orders';
+import { getOrders, deleteOrder } from '../services/orders';
 import type { Order } from '../types/order';
 import { ORDER_STATUSES, ORDER_STATUS_COLORS, ORDER_PRIORITIES, ORDER_PRIORITY_COLORS } from '../utils/constants';
 
@@ -19,6 +20,8 @@ export const Orders = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [orderToDelete, setOrderToDelete] = useState<Order | null>(null);
   const itemsPerPage = 20;
 
   useEffect(() => {
@@ -101,6 +104,40 @@ export const Orders = () => {
       }
     };
     fetchOrders();
+  };
+
+  const handleDeleteClick = (order: Order) => {
+    setOrderToDelete(order);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!orderToDelete) return;
+
+    console.log('[Orders] Deleting order:', orderToDelete.id);
+    await deleteOrder(orderToDelete.id.toString());
+
+    console.log('[Orders] Order deleted successfully');
+    // Refresh the orders list
+    const fetchOrders = async () => {
+      setLoading(true);
+      try {
+        const data = await getOrders({
+          status: selectedStatus || undefined,
+          priority: selectedPriority || undefined,
+          limit: itemsPerPage,
+          offset: (currentPage - 1) * itemsPerPage,
+        });
+        setOrders(data.orders);
+        setTotalOrders(data.total);
+      } catch (err) {
+        setError('Failed to load orders');
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    await fetchOrders();
   };
 
   const totalPages = Math.ceil(totalOrders / itemsPerPage);
@@ -286,26 +323,48 @@ export const Orders = () => {
                           {new Date(order.requested_date).toLocaleDateString()}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => handleEditClick(order.order_id)}
-                          >
-                            <span className="flex items-center gap-1">
-                              <svg
-                                className="w-4 h-4"
-                                fill="none"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth="2"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                              >
-                                <path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
-                              </svg>
-                              Edit
-                            </span>
-                          </Button>
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => handleEditClick(order.order_id)}
+                            >
+                              <span className="flex items-center gap-1">
+                                <svg
+                                  className="w-4 h-4"
+                                  fill="none"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth="2"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                </svg>
+                                Edit
+                              </span>
+                            </Button>
+                            <Button
+                              variant="danger"
+                              size="sm"
+                              onClick={() => handleDeleteClick(order)}
+                            >
+                              <span className="flex items-center gap-1">
+                                <svg
+                                  className="w-4 h-4"
+                                  fill="none"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth="2"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                </svg>
+                                Delete
+                              </span>
+                            </Button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -396,6 +455,18 @@ export const Orders = () => {
           setSelectedOrderId(null);
         }}
         onSuccess={handleEditSuccess}
+      />
+
+      <DeleteConfirmDialog
+        isOpen={isDeleteDialogOpen}
+        onClose={() => {
+          setIsDeleteDialogOpen(false);
+          setOrderToDelete(null);
+        }}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Order"
+        message="Are you sure you want to delete this order? This will permanently remove all associated data."
+        itemName={orderToDelete?.order_id}
       />
     </Layout>
   );

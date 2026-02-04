@@ -8,7 +8,7 @@ import { SAMPLE_STATUSES } from '../../utils/constants';
 
 interface SampleEditModalProps {
   isOpen: boolean;
-  sampleId: number | null;
+  sampleId: string | null;
   onClose: () => void;
   onSuccess?: (sample: Sample) => void;
 }
