@@ -7,7 +7,7 @@ import { OrderCreateModal } from '../components/Orders/OrderCreateModal';
 import { OrderEditModal } from '../components/Orders/OrderEditModal';
 import { getOrders, deleteOrder } from '../services/orders';
 import type { Order } from '../types/order';
-import { ORDER_STATUSES, ORDER_STATUS_COLORS, ORDER_PRIORITIES, ORDER_PRIORITY_COLORS } from '../utils/constants';
+import { ORDER_STATUSES, ORDER_PRIORITIES } from '../utils/constants';
 
 export const Orders = () => {
   const [orders, setOrders] = useState<Order[]>([]);

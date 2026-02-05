@@ -7,7 +7,7 @@ import { SampleCreateModal } from '../components/Samples/SampleCreateModal';
 import { SampleEditModal } from '../components/Samples/SampleEditModal';
 import { getSamples, deleteSample } from '../services/samples';
 import type { Sample } from '../types/sample';
-import { SAMPLE_STATUSES, STATUS_COLORS } from '../utils/constants';
+import { SAMPLE_STATUSES } from '../utils/constants';
 
 export const Samples = () => {
   const [samples, setSamples] = useState<Sample[]>([]);

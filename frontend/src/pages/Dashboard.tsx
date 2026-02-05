@@ -6,13 +6,6 @@ import { getOrders } from '../services/orders';
 import { getResults } from '../services/results';
 import type { Sample } from '../types/sample';
 import type { DashboardStats } from '../types/stats';
-import { SAMPLE_STATUSES } from '../utils/constants';
-
-interface StatusCount {
-  status: keyof typeof SAMPLE_STATUSES;
-  count: number;
-  label: string;
-}
 
 export const Dashboard = () => {
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -93,15 +86,6 @@ export const Dashboard = () => {
 
     fetchData();
   }, []);
-
-  const statusCounts: StatusCount[] = Object.keys(SAMPLE_STATUSES).map((status) => {
-    const statusKey = status as keyof typeof SAMPLE_STATUSES;
-    return {
-      status: statusKey,
-      count: samples.filter((s) => s.status === status).length,
-      label: SAMPLE_STATUSES[statusKey],
-    };
-  });
 
   const recentSamples = samples
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())

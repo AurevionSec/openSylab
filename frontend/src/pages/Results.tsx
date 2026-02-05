@@ -7,7 +7,7 @@ import { ResultCreateModal } from '../components/Results/ResultCreateModal';
 import { ResultEditModal } from '../components/Results/ResultEditModal';
 import { getResults, deleteResult } from '../services/results';
 import type { TestResult } from '../types/result';
-import { RESULT_STATUSES, RESULT_STATUS_COLORS, RESULT_FLAGS, RESULT_FLAG_COLORS } from '../utils/constants';
+import { RESULT_STATUSES, RESULT_FLAGS } from '../utils/constants';
 
 export const Results = () => {
   const [results, setResults] = useState<TestResult[]>([]);
@@ -255,7 +255,8 @@ export const Results = () => {
                         <td className="px-6 py-2.5 whitespace-nowrap border-b border-[#E2E8F0]">
                           <span className={`px-2 py-1 text-[10px] font-bold uppercase tracking-wider border inline-block ${
                             result.flag === 'CRITICAL' ? 'border-[#FF3B30] text-[#FF3B30] bg-[#FF3B30]/5' :
-                            result.flag === 'ABNORMAL' ? 'border-[#CCFF00] text-[#1A1C20] bg-[#CCFF00]/10' :
+                            result.flag === 'HIGH' ? 'border-[#CCFF00] text-[#1A1C20] bg-[#CCFF00]/10' :
+                            result.flag === 'LOW' ? 'border-[#0055FF] text-[#0055FF] bg-[#0055FF]/5' :
                             'border-[#10B981] text-[#10B981] bg-[#10B981]/5'
                           }`}>
                             {RESULT_FLAGS[result.flag]}
@@ -265,7 +266,8 @@ export const Results = () => {
                           <span className={`px-2 py-1 text-[10px] font-bold uppercase tracking-wider border inline-block ${
                             result.status === 'PENDING' ? 'border-[#0055FF] text-[#0055FF] bg-[#0055FF]/5' :
                             result.status === 'VALIDATED' ? 'border-[#10B981] text-[#10B981] bg-[#10B981]/5' :
-                            result.status === 'RELEASED' ? 'border-[#5E6C84] text-[#5E6C84] bg-[#5E6C84]/5' :
+                            result.status === 'REVIEWED' ? 'border-[#0055FF] text-[#0055FF] bg-[#0055FF]/5' :
+                            result.status === 'REJECTED' ? 'border-[#FF3B30] text-[#FF3B30] bg-[#FF3B30]/5' :
                             'border-[#5E6C84] text-[#5E6C84] bg-[#5E6C84]/5'
                           }`}>
                             {RESULT_STATUSES[result.status]}
