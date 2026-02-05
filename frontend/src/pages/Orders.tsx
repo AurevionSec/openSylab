@@ -178,7 +178,7 @@ export const Orders = () => {
                     setSelectedStatus(e.target.value);
                     setCurrentPage(1);
                   }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="">All Statuses</option>
                   {Object.entries(ORDER_STATUSES).map(([key, label]) => (
@@ -199,7 +199,7 @@ export const Orders = () => {
                     setSelectedPriority(e.target.value);
                     setCurrentPage(1);
                   }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="">All Priorities</option>
                   {Object.entries(ORDER_PRIORITIES).map(([key, label]) => (
@@ -212,7 +212,7 @@ export const Orders = () => {
             </div>
 
             {error && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+              <div className="bg-red-50 border border-red-200 rounded p-4 mb-6">
                 <p className="text-red-800">{error}</p>
               </div>
             )}
@@ -231,96 +231,73 @@ export const Orders = () => {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
+                <table className="min-w-full">
+                  <thead className="bg-[#F4F5F7]">
                     <tr>
-                      <th
-                        scope="col"
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                      >
+                      <th className="px-6 py-3 text-left text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">
                         Order ID
                       </th>
-                      <th
-                        scope="col"
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                      >
+                      <th className="px-6 py-3 text-left text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">
                         Sample ID
                       </th>
-                      <th
-                        scope="col"
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                      >
+                      <th className="px-6 py-3 text-left text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">
                         Test Type
                       </th>
-                      <th
-                        scope="col"
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                      >
+                      <th className="px-6 py-3 text-left text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">
                         Status
                       </th>
-                      <th
-                        scope="col"
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                      >
+                      <th className="px-6 py-3 text-left text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">
                         Priority
                       </th>
-                      <th
-                        scope="col"
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                      >
+                      <th className="px-6 py-3 text-left text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">
                         Requested By
                       </th>
-                      <th
-                        scope="col"
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                      >
+                      <th className="px-6 py-3 text-left text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">
                         Requested Date
                       </th>
-                      <th
-                        scope="col"
-                        className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
-                      >
+                      <th className="px-6 py-3 text-right text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">
                         Actions
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {orders.map((order) => (
-                      <tr key={order.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900">
-                            {order.order_id}
-                          </div>
+                  <tbody className="bg-white">
+                    {orders.map((order, idx) => (
+                      <tr key={order.id} className={`hover:bg-[#F4F5F7] transition-colors duration-100 ${idx % 2 === 1 ? 'bg-[#FAFBFC]' : ''}`}>
+                        <td className="px-6 py-2.5 whitespace-nowrap text-sm font-mono font-bold text-[#1A1C20] border-b border-[#E2E8F0]">
+                          {order.order_id}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">{order.sample_id}</div>
+                        <td className="px-6 py-2.5 whitespace-nowrap text-sm font-mono text-[#5E6C84] border-b border-[#E2E8F0]">
+                          {order.sample_id}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">{order.test_type}</div>
+                        <td className="px-6 py-2.5 whitespace-nowrap text-sm font-medium text-[#1A1C20] border-b border-[#E2E8F0]">
+                          {order.test_type}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span
-                            className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                              ORDER_STATUS_COLORS[order.status]
-                            }`}
-                          >
-                            {ORDER_STATUSES[order.status]}
+                        <td className="px-6 py-2.5 whitespace-nowrap border-b border-[#E2E8F0]">
+                          <span className={`px-2 py-1 text-[10px] font-bold uppercase tracking-wider border inline-block ${
+                            order.status === 'REQUESTED' ? 'border-[#0055FF] text-[#0055FF] bg-[#0055FF]/5' :
+                            order.status === 'IN_PROGRESS' ? 'border-[#CCFF00] text-[#1A1C20] bg-[#CCFF00]/10' :
+                            order.status === 'COMPLETED' ? 'border-[#10B981] text-[#10B981] bg-[#10B981]/5' :
+                            order.status === 'VALIDATED' ? 'border-[#10B981] text-[#10B981] bg-[#10B981]/5' :
+                            order.status === 'CANCELLED' ? 'border-[#FF3B30] text-[#FF3B30] bg-[#FF3B30]/5' :
+                            'border-[#5E6C84] text-[#5E6C84] bg-[#5E6C84]/5'
+                          }`}>
+                            {order.status.replace('_', ' ')}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span
-                            className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                              ORDER_PRIORITY_COLORS[order.priority]
-                            }`}
-                          >
-                            {ORDER_PRIORITIES[order.priority]}
+                        <td className="px-6 py-2.5 whitespace-nowrap border-b border-[#E2E8F0]">
+                          <span className={`px-2 py-1 text-[10px] font-bold uppercase tracking-wider border inline-block ${
+                            order.priority === 'EMERGENCY' ? 'border-[#FF3B30] text-[#FF3B30] bg-[#FF3B30]/5' :
+                            order.priority === 'URGENT' ? 'border-[#CCFF00] text-[#1A1C20] bg-[#CCFF00]/10' :
+                            'border-[#5E6C84] text-[#5E6C84] bg-[#5E6C84]/5'
+                          }`}>
+                            {order.priority}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <td className="px-6 py-2.5 whitespace-nowrap text-sm text-[#5E6C84] border-b border-[#E2E8F0]">
                           {order.requested_by}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {new Date(order.requested_date).toLocaleDateString()}
+                        <td className="px-6 py-2.5 whitespace-nowrap text-sm font-mono text-[#5E6C84] border-b border-[#E2E8F0]">
+                          {new Date(order.requested_date).toLocaleDateString('de-DE')}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                           <div className="flex items-center justify-end gap-2">

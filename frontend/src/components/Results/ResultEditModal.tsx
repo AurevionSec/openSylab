@@ -89,7 +89,7 @@ export const ResultEditModal = ({ isOpen, onClose, result, onSuccess }: ResultEd
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-bold text-gray-900">Edit Test Result</h2>
@@ -106,7 +106,7 @@ export const ResultEditModal = ({ isOpen, onClose, result, onSuccess }: ResultEd
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <div className="bg-red-50 border border-red-200 rounded p-4">
                 <p className="text-red-800 text-sm">{error}</p>
               </div>
             )}
@@ -141,13 +141,13 @@ export const ResultEditModal = ({ isOpen, onClose, result, onSuccess }: ResultEd
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Flag *</label>
-                  <select value={formData.flag} onChange={(e) => handleChange('flag', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" required>
+                  <select value={formData.flag} onChange={(e) => handleChange('flag', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#0055FF] focus:border-transparent" required>
                     {Object.entries(RESULT_FLAGS).map(([key, label]) => (<option key={key} value={key}>{label}</option>))}
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Status *</label>
-                  <select value={formData.status} onChange={(e) => handleChange('status', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" required>
+                  <select value={formData.status} onChange={(e) => handleChange('status', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#0055FF] focus:border-transparent" required>
                     {Object.entries(RESULT_STATUSES).map(([key, label]) => (<option key={key} value={key}>{label}</option>))}
                   </select>
                 </div>
@@ -161,7 +161,7 @@ export const ResultEditModal = ({ isOpen, onClose, result, onSuccess }: ResultEd
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-              <textarea value={formData.notes} onChange={(e) => handleChange('notes', e.target.value)} placeholder="Enter additional notes (optional)" rows={4} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none" />
+              <textarea value={formData.notes} onChange={(e) => handleChange('notes', e.target.value)} placeholder="Enter additional notes (optional)" rows={4} className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#0055FF] focus:border-transparent resize-none" />
             </div>
 
             <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">

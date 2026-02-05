@@ -173,7 +173,7 @@ export const Results = () => {
                     setSelectedStatus(e.target.value);
                     setCurrentPage(1);
                   }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="">All Statuses</option>
                   {Object.entries(RESULT_STATUSES).map(([key, label]) => (
@@ -194,7 +194,7 @@ export const Results = () => {
                     setSelectedFlag(e.target.value);
                     setCurrentPage(1);
                   }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="">All Flags</option>
                   {Object.entries(RESULT_FLAGS).map(([key, label]) => (
@@ -207,7 +207,7 @@ export const Results = () => {
             </div>
 
             {error && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+              <div className="bg-red-50 border border-red-200 rounded p-4 mb-6">
                 <p className="text-red-800">{error}</p>
               </div>
             )}
@@ -225,44 +225,53 @@ export const Results = () => {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
+                <table className="min-w-full">
+                  <thead className="bg-[#F4F5F7]">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Result ID</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order ID</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Parameter</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Value</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reference</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Flag</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+                      <th className="px-6 py-3 text-left text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">Result ID</th>
+                      <th className="px-6 py-3 text-left text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">Order ID</th>
+                      <th className="px-6 py-3 text-left text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">Parameter</th>
+                      <th className="px-6 py-3 text-left text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">Value</th>
+                      <th className="px-6 py-3 text-left text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">Reference</th>
+                      <th className="px-6 py-3 text-left text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">Flag</th>
+                      <th className="px-6 py-3 text-left text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">Status</th>
+                      <th className="px-6 py-3 text-right text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {results.map((result) => (
-                      <tr key={result.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                  <tbody className="bg-white">
+                    {results.map((result, idx) => (
+                      <tr key={result.id} className={`hover:bg-[#F4F5F7] transition-colors duration-100 ${idx % 2 === 1 ? 'bg-[#FAFBFC]' : ''}`}>
+                        <td className="px-6 py-2.5 whitespace-nowrap text-sm font-mono font-bold text-[#1A1C20] border-b border-[#E2E8F0]">
                           {result.result_id}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{result.order_id}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{result.parameter}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-6 py-2.5 whitespace-nowrap text-sm font-mono text-[#5E6C84] border-b border-[#E2E8F0]">{result.order_id}</td>
+                        <td className="px-6 py-2.5 whitespace-nowrap text-sm font-medium text-[#1A1C20] border-b border-[#E2E8F0]">{result.parameter}</td>
+                        <td className="px-6 py-2.5 whitespace-nowrap text-sm font-mono text-[#1A1C20] border-b border-[#E2E8F0]">
                           {result.value} {result.unit}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <td className="px-6 py-2.5 whitespace-nowrap text-sm font-mono text-[#5E6C84] border-b border-[#E2E8F0]">
                           {result.reference_min} - {result.reference_max}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${RESULT_FLAG_COLORS[result.flag]}`}>
+                        <td className="px-6 py-2.5 whitespace-nowrap border-b border-[#E2E8F0]">
+                          <span className={`px-2 py-1 text-[10px] font-bold uppercase tracking-wider border inline-block ${
+                            result.flag === 'CRITICAL' ? 'border-[#FF3B30] text-[#FF3B30] bg-[#FF3B30]/5' :
+                            result.flag === 'ABNORMAL' ? 'border-[#CCFF00] text-[#1A1C20] bg-[#CCFF00]/10' :
+                            'border-[#10B981] text-[#10B981] bg-[#10B981]/5'
+                          }`}>
                             {RESULT_FLAGS[result.flag]}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${RESULT_STATUS_COLORS[result.status]}`}>
+                        <td className="px-6 py-2.5 whitespace-nowrap border-b border-[#E2E8F0]">
+                          <span className={`px-2 py-1 text-[10px] font-bold uppercase tracking-wider border inline-block ${
+                            result.status === 'PENDING' ? 'border-[#0055FF] text-[#0055FF] bg-[#0055FF]/5' :
+                            result.status === 'VALIDATED' ? 'border-[#10B981] text-[#10B981] bg-[#10B981]/5' :
+                            result.status === 'RELEASED' ? 'border-[#5E6C84] text-[#5E6C84] bg-[#5E6C84]/5' :
+                            'border-[#5E6C84] text-[#5E6C84] bg-[#5E6C84]/5'
+                          }`}>
                             {RESULT_STATUSES[result.status]}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium border-b border-[#E2E8F0]">
                           <div className="flex items-center justify-end gap-2">
                             <Button
                               variant="secondary"

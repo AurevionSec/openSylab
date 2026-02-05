@@ -62,7 +62,7 @@ export const AuditLog = () => {
         </div>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="bg-red-50 border border-red-200 rounded p-4">
             <p className="text-red-800">{error}</p>
           </div>
         )}
@@ -85,7 +85,7 @@ export const AuditLog = () => {
               <select
                 value={filter.action || ''}
                 onChange={(e) => setFilter({ ...filter, action: (e.target.value as AuditAction) || undefined })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#0055FF] focus:border-transparent"
               >
                 <option value="">All Actions</option>
                 {Object.entries(AUDIT_ACTIONS).map(([value, label]) => (
@@ -101,7 +101,7 @@ export const AuditLog = () => {
               <select
                 value={filter.entity || ''}
                 onChange={(e) => setFilter({ ...filter, entity: (e.target.value as AuditEntity) || undefined })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#0055FF] focus:border-transparent"
               >
                 <option value="">All Entities</option>
                 {Object.entries(AUDIT_ENTITIES).map(([value, label]) => (
@@ -117,7 +117,7 @@ export const AuditLog = () => {
               <select
                 value={filter.limit || 50}
                 onChange={(e) => setFilter({ ...filter, limit: parseInt(e.target.value) })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#0055FF] focus:border-transparent"
               >
                 <option value="25">25 entries</option>
                 <option value="50">50 entries</option>
@@ -130,13 +130,13 @@ export const AuditLog = () => {
           <div className="flex justify-end gap-3 mt-4">
             <button
               onClick={handleResetFilter}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#0055FF]"
             >
               Reset
             </button>
             <button
               onClick={handleApplyFilter}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-[#0055FF]"
             >
               Apply Filters
             </button>

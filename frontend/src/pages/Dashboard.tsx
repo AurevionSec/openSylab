@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout/Layout';
-import { Card } from '../components/common/Card';
 import { getDashboardStats } from '../services/stats';
 import { getSamples } from '../services/samples';
 import { getOrders } from '../services/orders';
 import { getResults } from '../services/results';
 import type { Sample } from '../types/sample';
 import type { DashboardStats } from '../types/stats';
-import { SAMPLE_STATUSES, STATUS_COLORS } from '../utils/constants';
+import { SAMPLE_STATUSES } from '../utils/constants';
 
 interface StatusCount {
   status: keyof typeof SAMPLE_STATUSES;
@@ -131,117 +130,149 @@ export const Dashboard = () => {
     );
   }
 
+  // Status badge color mapping (Neo-Clinical style)
+  const getStatusColor = (status: string) => {
+    const statusMap: Record<string, string> = {
+      'REGISTERED': 'border-[#0055FF] text-[#0055FF] bg-[#0055FF]/5',
+      'IN_ANALYSIS': 'border-[#CCFF00] text-[#1A1C20] bg-[#CCFF00]/10',
+      'ANALYZED': 'border-[#5E6C84] text-[#5E6C84] bg-[#5E6C84]/5',
+      'VALIDATED': 'border-[#10B981] text-[#10B981] bg-[#10B981]/5',
+      'ARCHIVED': 'border-[#5E6C84] text-[#5E6C84] bg-[#5E6C84]/5',
+      'PENDING': 'border-[#CCFF00] text-[#1A1C20] bg-[#CCFF00]/10',
+      'COMPLETED': 'border-[#10B981] text-[#10B981] bg-[#10B981]/5',
+      'REQUESTED': 'border-[#0055FF] text-[#0055FF] bg-[#0055FF]/5',
+      'IN_PROGRESS': 'border-[#CCFF00] text-[#1A1C20] bg-[#CCFF00]/10',
+      'CANCELLED': 'border-[#FF3B30] text-[#FF3B30] bg-[#FF3B30]/5',
+    };
+    return statusMap[status] || 'border-[#5E6C84] text-[#5E6C84] bg-[#5E6C84]/5';
+  };
+
   return (
     <Layout>
-      <div className="space-y-6">
-        <div>
-          <h2 className="text-3xl font-bold text-gray-900">Dashboard</h2>
-          <p className="text-gray-600 mt-1">Overview of laboratory operations and activities</p>
+      <div className="space-y-4">
+        {/* Header - Neo-Clinical style */}
+        <div className="border-b border-[#E2E8F0] pb-4">
+          <h1 className="text-2xl font-bold text-[#1A1C20] tracking-tight uppercase">System Overview</h1>
+          <p className="text-[#5E6C84] text-sm mt-1 font-mono">Real-time laboratory operations monitoring</p>
         </div>
 
-        {/* Entity Overview Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card title="Total Samples">
-            <div className="text-4xl font-bold text-blue-600">{stats?.samples.total || 0}</div>
-            <p className="text-gray-600 mt-2">Samples in system</p>
+        {/* Bento Box Grid - Primary Metrics */}
+        <div className="grid grid-cols-3 gap-4">
+          {/* Samples Metric */}
+          <div className="bg-white border border-[#E2E8F0] p-6 hover:border-[#0055FF] transition-colors duration-150">
+            <div className="flex items-baseline justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-[#5E6C84]">Samples</span>
+              <span className="text-4xl font-mono font-bold text-[#1A1C20] tabular-nums">
+                {String(stats?.samples.total || 0).padStart(3, '0')}
+              </span>
+            </div>
             {stats && stats.samples.by_status.length > 0 && (
-              <div className="mt-4 space-y-1">
+              <div className="mt-4 space-y-2 pt-4 border-t border-[#E2E8F0]">
                 {stats.samples.by_status.slice(0, 3).map((s) => (
-                  <div key={s.status} className="flex justify-between text-sm">
-                    <span className="text-gray-600">{s.status}:</span>
-                    <span className="font-medium">{s.count}</span>
+                  <div key={s.status} className="flex justify-between items-center">
+                    <span className={`px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border ${getStatusColor(s.status)}`}>
+                      {s.status.replace('_', ' ')}
+                    </span>
+                    <span className="font-mono text-sm font-bold tabular-nums text-[#1A1C20]">{s.count}</span>
                   </div>
                 ))}
               </div>
             )}
-          </Card>
+          </div>
 
-          <Card title="Total Orders">
-            <div className="text-4xl font-bold text-green-600">{stats?.orders.total || 0}</div>
-            <p className="text-gray-600 mt-2">Orders processed</p>
+          {/* Orders Metric */}
+          <div className="bg-white border border-[#E2E8F0] p-6 hover:border-[#0055FF] transition-colors duration-150">
+            <div className="flex items-baseline justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-[#5E6C84]">Orders</span>
+              <span className="text-4xl font-mono font-bold text-[#1A1C20] tabular-nums">
+                {String(stats?.orders.total || 0).padStart(3, '0')}
+              </span>
+            </div>
             {stats && stats.orders.by_status.length > 0 && (
-              <div className="mt-4 space-y-1">
+              <div className="mt-4 space-y-2 pt-4 border-t border-[#E2E8F0]">
                 {stats.orders.by_status.slice(0, 3).map((s) => (
-                  <div key={s.status} className="flex justify-between text-sm">
-                    <span className="text-gray-600">{s.status}:</span>
-                    <span className="font-medium">{s.count}</span>
+                  <div key={s.status} className="flex justify-between items-center">
+                    <span className={`px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border ${getStatusColor(s.status)}`}>
+                      {s.status.replace('_', ' ')}
+                    </span>
+                    <span className="font-mono text-sm font-bold tabular-nums text-[#1A1C20]">{s.count}</span>
                   </div>
                 ))}
               </div>
             )}
-          </Card>
+          </div>
 
-          <Card title="Total Results">
-            <div className="text-4xl font-bold text-purple-600">{stats?.results.total || 0}</div>
-            <p className="text-gray-600 mt-2">Test results</p>
+          {/* Results Metric */}
+          <div className="bg-white border border-[#E2E8F0] p-6 hover:border-[#0055FF] transition-colors duration-150">
+            <div className="flex items-baseline justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-[#5E6C84]">Results</span>
+              <span className="text-4xl font-mono font-bold text-[#1A1C20] tabular-nums">
+                {String(stats?.results.total || 0).padStart(3, '0')}
+              </span>
+            </div>
             {stats && stats.results.by_status.length > 0 && (
-              <div className="mt-4 space-y-1">
+              <div className="mt-4 space-y-2 pt-4 border-t border-[#E2E8F0]">
                 {stats.results.by_status.slice(0, 3).map((s) => (
-                  <div key={s.status} className="flex justify-between text-sm">
-                    <span className="text-gray-600">{s.status}:</span>
-                    <span className="font-medium">{s.count}</span>
+                  <div key={s.status} className="flex justify-between items-center">
+                    <span className={`px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border ${getStatusColor(s.status)}`}>
+                      {s.status.replace('_', ' ')}
+                    </span>
+                    <span className="font-mono text-sm font-bold tabular-nums text-[#1A1C20]">{s.count}</span>
                   </div>
                 ))}
               </div>
             )}
-          </Card>
+          </div>
         </div>
 
-        {/* Sample Status Breakdown */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {statusCounts.map(({ status, count, label }) => (
-            <Card key={status} title={label}>
-              <div className="text-4xl font-bold text-gray-900">{count}</div>
-              <div className="mt-2">
-                <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${STATUS_COLORS[status]}`}>
-                  {status.replace('_', ' ')}
-                </span>
-              </div>
-            </Card>
-          ))}
-        </div>
-
-        <Card title="Recent Samples">
+        {/* Recent Activity Table - Dense, Clinical Style */}
+        <div className="bg-white border border-[#E2E8F0]">
+          <div className="px-6 py-4 border-b border-[#E2E8F0]">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-[#5E6C84]">Recent Samples</h2>
+          </div>
           {recentSamples.length === 0 ? (
-            <p className="text-gray-500 text-center py-8">No samples found</p>
+            <div className="px-6 py-12 text-center">
+              <p className="text-[#5E6C84] font-mono text-sm">NO DATA AVAILABLE</p>
+            </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead>
+              <table className="min-w-full">
+                <thead className="bg-[#F4F5F7]">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">
                       Sample ID
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">
                       Patient
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">
                       Status
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">
                       Created
                     </th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {recentSamples.map((sample) => (
-                    <tr key={sample.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                <tbody className="bg-white">
+                  {recentSamples.map((sample, idx) => (
+                    <tr
+                      key={sample.id}
+                      className={`hover:bg-[#F4F5F7] transition-colors duration-100 ${idx % 2 === 1 ? 'bg-[#FAFBFC]' : ''}`}
+                    >
+                      <td className="px-6 py-2.5 whitespace-nowrap text-sm font-mono font-bold text-[#1A1C20] border-b border-[#E2E8F0]">
                         {sample.sample_id}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                        <div>
-                          <div className="font-medium">{sample.patient_name}</div>
-                          <div className="text-gray-500">{sample.patient_id}</div>
-                        </div>
+                      <td className="px-6 py-2.5 whitespace-nowrap text-sm border-b border-[#E2E8F0]">
+                        <div className="font-medium text-[#1A1C20]">{sample.patient_name}</div>
+                        <div className="font-mono text-xs text-[#5E6C84]">{sample.patient_id}</div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${STATUS_COLORS[sample.status]}`}>
-                          {SAMPLE_STATUSES[sample.status]}
+                      <td className="px-6 py-2.5 whitespace-nowrap border-b border-[#E2E8F0]">
+                        <span className={`px-2 py-1 text-[10px] font-bold uppercase tracking-wider border inline-block ${getStatusColor(sample.status)}`}>
+                          {sample.status.replace('_', ' ')}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {new Date(sample.created_at).toLocaleDateString()}
+                      <td className="px-6 py-2.5 whitespace-nowrap text-sm font-mono text-[#5E6C84] border-b border-[#E2E8F0]">
+                        {new Date(sample.created_at).toLocaleDateString('de-DE')}
                       </td>
                     </tr>
                   ))}
@@ -249,7 +280,7 @@ export const Dashboard = () => {
               </table>
             </div>
           )}
-        </Card>
+        </div>
       </div>
     </Layout>
   );

@@ -46,7 +46,7 @@ export const Profile = () => {
   if (error || !user) {
     return (
       <Layout>
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+        <div className="bg-red-50 border border-red-200 rounded p-4">
           <p className="text-red-800">{error || 'Failed to load profile'}</p>
         </div>
       </Layout>
@@ -69,7 +69,7 @@ export const Profile = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Username
                 </label>
-                <p className="text-gray-900 font-mono bg-gray-50 px-3 py-2 rounded-lg">
+                <p className="text-gray-900 font-mono bg-gray-50 px-3 py-2 rounded">
                   {user.username}
                 </p>
               </div>
@@ -89,7 +89,7 @@ export const Profile = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Full Name
                 </label>
-                <p className="text-gray-900 bg-gray-50 px-3 py-2 rounded-lg">
+                <p className="text-gray-900 bg-gray-50 px-3 py-2 rounded">
                   {user.full_name || '-'}
                 </p>
               </div>
@@ -98,7 +98,7 @@ export const Profile = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Email
                 </label>
-                <p className="text-gray-900 bg-gray-50 px-3 py-2 rounded-lg">
+                <p className="text-gray-900 bg-gray-50 px-3 py-2 rounded">
                   {user.email || '-'}
                 </p>
               </div>
@@ -118,7 +118,7 @@ export const Profile = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Last Login
                 </label>
-                <p className="text-gray-900 bg-gray-50 px-3 py-2 rounded-lg">
+                <p className="text-gray-900 bg-gray-50 px-3 py-2 rounded">
                   {user.last_login ? new Date(user.last_login * 1000).toLocaleString() : 'Never'}
                 </p>
               </div>
@@ -127,7 +127,7 @@ export const Profile = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Account Created
                 </label>
-                <p className="text-gray-900 bg-gray-50 px-3 py-2 rounded-lg">
+                <p className="text-gray-900 bg-gray-50 px-3 py-2 rounded">
                   {new Date(user.created_at * 1000).toLocaleDateString()}
                 </p>
               </div>
@@ -136,7 +136,7 @@ export const Profile = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   User ID
                 </label>
-                <p className="text-gray-900 font-mono bg-gray-50 px-3 py-2 rounded-lg">
+                <p className="text-gray-900 font-mono bg-gray-50 px-3 py-2 rounded">
                   #{user.id}
                 </p>
               </div>
@@ -216,15 +216,15 @@ const ChangePasswordForm = ({ onSuccess, onCancel }: ChangePasswordFormProps) =>
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 bg-gray-50 p-4 rounded-lg">
+    <form onSubmit={handleSubmit} className="space-y-4 bg-gray-50 p-4 rounded">
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+        <div className="bg-red-50 border border-red-200 rounded p-4">
           <p className="text-red-800 text-sm">{error}</p>
         </div>
       )}
 
       {success && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+        <div className="bg-green-50 border border-green-200 rounded p-4">
           <p className="text-green-800 text-sm">Password changed successfully!</p>
         </div>
       )}

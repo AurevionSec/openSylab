@@ -1,3 +1,203 @@
+/* --- OPENSYLAB SYSTEM CORE v0.6 --- */
+/* Theme: Neo-Clinical Industrial     */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+    /* Palette: Sterile & Slate */
+    --bg-body: #F4F5F7;       /* Clinical Grey */
+    --bg-surface: #FFFFFF;    /* Pure White */
+    --bg-sidebar: #1A1C20;    /* Anthrazit */
+
+    --text-primary: #111827;  /* High Contrast Black */
+    --text-secondary: #6B7280;/* Technical Grey */
+    --text-on-dark: #E5E7EB;
+
+    --border-subtle: #E5E7EB;
+    --border-focus: #2563EB;  /* System Blue */
+
+    /* Semantic Colors */
+    --status-blue-bg: #EFF6FF;
+    --status-blue-text: #1D4ED8;
+    --status-green-bg: #ECFDF5;
+    --status-green-text: #047857;
+    --status-alert-bg: #FEF2F2;
+    --status-alert-text: #B91C1C;
+}
+
+/* --- 1. GLOBAL RESET & TYPOGRAPHY --- */
+body {
+    background-color: var(--bg-body);
+    color: var(--text-primary);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; /* KILL SERIFS */
+    margin: 0;
+    padding: 0;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.5;
+}
+
+h1, h2, h3, h4, h5 {
+    font-weight: 700;
+    letter-spacing: -0.02em; /* Tight tracking for headers */
+    color: #111827;
+    margin-bottom: 1rem;
+}
+
+/* --- 2. LAYOUT ARCHITECTURE --- */
+/* Erzeugt den "Bento Box" Look für Container */
+.container, main, section {
+    padding: 2rem;
+    max-width: 1600px; /* Kein Full-Width Stretch mehr */
+    margin: 0 auto;
+}
+
+/* --- 3. DATA TABLES (THE HEART) --- */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--bg-surface);
+    border-radius: 4px; /* Minimal Radius */
+    overflow: hidden;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06); /* Card Effect */
+    margin-bottom: 2rem;
+}
+
+thead {
+    background-color: #F9FAFB;
+    border-bottom: 2px solid var(--border-subtle);
+}
+
+th {
+    text-align: left;
+    padding: 0.75rem 1.5rem;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+td {
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--border-subtle);
+    font-size: 0.875rem;
+    color: var(--text-primary);
+    vertical-align: middle;
+}
+
+/* DATA IS CODE: IDs und Werte in Monospace */
+td:first-child,
+td[data-type="id"],
+td[data-type="value"] {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 500;
+}
+
+tr:last-child td {
+    border-bottom: none;
+}
+
+tr:hover {
+    background-color: #F8FAFC; /* Subtiler Hover-Effekt */
+}
+
+/* --- 4. BADGES & STATUS (FIXING THE WIREFRAME LOOK) --- */
+/* Wendet dies auf deine Status-Spans an */
+.badge, span[class*="status"] {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.75rem;
+    border-radius: 4px; /* Rechteckig > Rund */
+    font-size: 0.75rem;
+    font-weight: 600;
+    font-family: 'Inter', sans-serif;
+    text-transform: uppercase;
+    border: none !important; /* Killt die alten Outlines */
+}
+
+/* Specific Badge Colors - Du musst die Klassen im HTML evtl. anpassen */
+.status-registered, .badge-blue {
+    background-color: var(--status-blue-bg);
+    color: var(--status-blue-text);
+}
+
+.status-normal, .status-validated, .badge-green {
+    background-color: var(--status-green-bg);
+    color: var(--status-green-text);
+}
+
+.status-pending, .badge-yellow {
+    background-color: #FFFBEB;
+    color: #B45309;
+}
+
+/* --- 5. FORMS & INPUTS (MEDICAL EQUIPMENT FEEL) --- */
+input[type="text"],
+input[type="number"],
+select,
+textarea {
+    display: block;
+    width: 100%;
+    background-color: #fff;
+    border: 1px solid var(--border-subtle);
+    border-radius: 0px; /* Industrial Sharpness */
+    padding: 0.6rem;
+    font-family: 'JetBrains Mono', monospace; /* Eingaben sind Daten */
+    font-size: 0.9rem;
+    transition: all 0.2s ease;
+}
+
+input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: var(--border-focus);
+    box-shadow: 0 0 0 1px var(--border-focus); /* Hard Focus Ring */
+}
+
+label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 0.4rem;
+    margin-top: 1rem;
+}
+
+/* --- 6. SIDEBAR FIX --- */
+/* Annahme: Deine Sidebar hat eine ID oder Klasse wie .sidebar oder nav */
+.sidebar, nav {
+    background-color: var(--bg-sidebar);
+    color: var(--text-on-dark);
+}
+
+/* Buttons (Actions) */
+button, .btn {
+    background-color: #fff;
+    border: 1px solid var(--border-subtle);
+    color: var(--text-primary);
+    padding: 0.5rem 1rem;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 0.1s;
+}
+
+button:hover, .btn:hover {
+    background-color: #F3F4F6;
+    border-color: #D1D5DB;
+}
+
+/* Primäre Buttons (Create New...) */
+button.primary, .btn-primary {
+    background-color: #111827; /* Schwarz */
+    color: #fff;
+    border: 1px solid #111827;
+}
+
+button.primary:hover {
+    background-color: #000;
+}

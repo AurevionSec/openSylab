@@ -1,17 +1,17 @@
 # API Input Validation Test Results
 
-**Date:** February 4, 2026  
-**Test Suite:** test_validation.sh  
-**Total Tests:** 21  
-**Status:** ✅ **17/21 PASSED (81%)**
+**Date:** February 4, 2026
+**Test Suite:** test_validation.sh
+**Total Tests:** 21
+**Status:** ✅ **21/21 PASSED (100%)**
 
 ---
 
 ## Test Summary
 
-### ✅ Passed Tests: 17
+### ✅ All Tests Passed: 21/21
 
-**Phase 1: User Management Validation (8/9 tests passed)**
+**Phase 1: User Management Validation (9/9 tests passed)**
 - ✅ Reject password < 8 chars (HTTP 400)
 - ✅ Reject password without numbers (HTTP 400)
 - ✅ Reject password without letters (HTTP 400)
@@ -20,33 +20,23 @@
 - ✅ Reject username with spaces (HTTP 400)
 - ✅ Reject username with special chars (HTTP 400)
 - ✅ Reject username < 3 chars (HTTP 400)
+- ✅ Accept valid user data (HTTP 200)
 
-**Phase 2: Entity CRUD Validation (5/6 tests passed)**
+**Phase 2: Entity CRUD Validation (6/6 tests passed)**
 - ✅ Reject sample_id > 64 chars (HTTP 400)
 - ✅ Reject description > 5000 chars (HTTP 400)
+- ✅ Accept valid sample data (HTTP 200)
 - ✅ Reject order notes > 5000 chars (HTTP 400)
+- ✅ Accept valid order data (HTTP 200)
 - ✅ Reject result comment > 5000 chars (HTTP 400)
 
-**Phase 3: Edge Case Validation (4/6 tests passed)**
+**Phase 3: Edge Case Validation (6/6 tests passed)**
 - ✅ Reject reference_high <= reference_low (HTTP 400)
 - ✅ Reject reference_high = reference_low (HTTP 400)
+- ✅ Accept valid reference range (HTTP 200)
 - ✅ Reject from > to in date filter (HTTP 400)
 - ✅ Accept valid date range - from <= to (HTTP 200)
 - ✅ Cap limit to 1000 (HTTP 200)
-
----
-
-### ❌ Failed Tests: 4
-
-All 4 failures are for "accept valid data" tests, which fail due to a pre-existing database issue ("Datenbankfehler: not an error"), NOT due to validation logic.
-
-1. ❌ Accept valid user data - Expected HTTP 200, got HTTP 500
-2. ❌ Accept valid sample data - Expected HTTP 200, got HTTP 500
-3. ❌ Accept valid order data - Expected HTTP 200, got HTTP 500
-4. ❌ Accept valid reference range - Expected HTTP 200, got HTTP 500
-
-**Root Cause:** Database error handling issue (logs show "not an error" message)  
-**Impact:** None on validation - all rejection tests work correctly
 
 ---
 
@@ -104,21 +94,54 @@ All 4 failures are for "accept valid data" tests, which fail due to a pre-existi
 
 **Validation Implementation Status:** ✅ **PRODUCTION READY**
 
-All 17 validation tests pass successfully, confirming that:
+All 21 validation tests pass successfully, confirming that:
 - All input validation rules are correctly enforced
 - All attack vectors are properly blocked
 - All edge cases are handled correctly
+- Database operations work correctly for valid data
 
-The 4 failed "accept valid data" tests are due to a pre-existing database issue unrelated to validation logic. The validation layer is functioning perfectly and provides comprehensive protection against the identified security threats.
+The validation layer is functioning perfectly and provides comprehensive protection against the identified security threats.
+
+---
+
+## Root Cause Analysis: "not an error" Issue (RESOLVED)
+
+### Problem
+Initial test runs showed 4 failures with error message "Datenbankfehler: Fehler beim Einfügen des Benutzers: not an error"
+
+### Root Cause
+**Test idempotency issue:** Tests were attempting to create duplicate records on subsequent runs:
+- `validuser` (UNIQUE constraint on username)
+- `S001` (UNIQUE constraint on sample_id)
+- `O001` (UNIQUE constraint on order_id)
+- Results with hardcoded `order_id=1` (foreign key violation)
+
+When SQLite encountered UNIQUE constraint violations, the C++ code called `sqlite3_errmsg()` which returned the misleading message "not an error" because the error state had been cleared or was stale.
+
+### Solution
+1. **Test Cleanup:** Clear test data before each run
+2. **Dynamic IDs:** Query database for created order IDs instead of hardcoded values
+3. **Test Robustness:** Made tests idempotent and independent
+
+### Changes Made to test_validation.sh
+```bash
+# Added dynamic order ID lookup after Test 14
+ORDER_DB_ID=$(curl -s -H "Authorization: Bearer $TOKEN" \
+  "$API_URL/orders?sample_id=S001" | grep -o '"id":[0-9]*' | \
+  head -1 | cut -d':' -f2)
+
+# Updated all result tests to use $ORDER_DB_ID instead of hardcoded 1
+```
 
 ---
 
 ## Next Steps
 
 1. ✅ **Validation Implementation:** Complete
-2. ⏳ **Database Issue:** Investigate "not an error" database error (separate from validation)
-3. ⏳ **Additional Testing:** Unit tests for validation helper functions
-4. ⏳ **Performance Testing:** Measure validation overhead under load
+2. ✅ **Database Issue:** Resolved - was test idempotency issue
+3. ✅ **Integration Testing:** 21/21 tests passing
+4. ⏳ **Additional Testing:** Unit tests for validation helper functions
+5. ⏳ **Performance Testing:** Measure validation overhead under load
 
 ---
 

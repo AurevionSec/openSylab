@@ -85,7 +85,7 @@ export const ResultCreateModal = ({ isOpen, onClose, onSuccess }: ResultCreateMo
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-bold text-gray-900">Create New Test Result</h2>
@@ -110,7 +110,7 @@ export const ResultCreateModal = ({ isOpen, onClose, onSuccess }: ResultCreateMo
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <div className="bg-red-50 border border-red-200 rounded p-4">
                 <p className="text-red-800 text-sm">{error}</p>
               </div>
             )}
@@ -205,7 +205,7 @@ export const ResultCreateModal = ({ isOpen, onClose, onSuccess }: ResultCreateMo
                   <select
                     value={formData.flag}
                     onChange={(e) => handleChange('flag', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#0055FF] focus:border-transparent"
                     required
                   >
                     {Object.entries(RESULT_FLAGS).map(([key, label]) => (
@@ -223,7 +223,7 @@ export const ResultCreateModal = ({ isOpen, onClose, onSuccess }: ResultCreateMo
                   <select
                     value={formData.status}
                     onChange={(e) => handleChange('status', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#0055FF] focus:border-transparent"
                     required
                   >
                     {Object.entries(RESULT_STATUSES).map(([key, label]) => (
@@ -260,7 +260,7 @@ export const ResultCreateModal = ({ isOpen, onClose, onSuccess }: ResultCreateMo
                 onChange={(e) => handleChange('notes', e.target.value)}
                 placeholder="Enter additional notes (optional)"
                 rows={4}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#0055FF] focus:border-transparent resize-none"
               />
             </div>
 

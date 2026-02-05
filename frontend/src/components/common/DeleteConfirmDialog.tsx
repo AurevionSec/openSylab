@@ -65,7 +65,7 @@ export const DeleteConfirmDialog = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+      <div className="bg-white rounded shadow-xl max-w-md w-full">
         <div className="p-6">
           {/* Header with warning icon */}
           <div className="flex items-start mb-4">
@@ -104,7 +104,7 @@ export const DeleteConfirmDialog = ({
 
           {/* Error message */}
           {error && (
-            <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3">
+            <div className="mb-4 bg-red-50 border border-red-200 rounded p-3">
               <p className="text-red-800 text-sm">{error}</p>
             </div>
           )}

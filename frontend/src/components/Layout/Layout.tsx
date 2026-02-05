@@ -8,10 +8,10 @@ interface LayoutProps {
 
 export const Layout = ({ children }: LayoutProps) => {
   return (
-    <div className="min-h-screen bg-gray-100">
-      <Header />
-      <div className="flex">
-        <Sidebar />
+    <div className="min-h-screen bg-[#F4F5F7] flex">
+      <Sidebar />
+      <div className="flex-1 flex flex-col">
+        <Header />
         <main className="flex-1 p-6 lg:p-8">
           {children}
         </main>
