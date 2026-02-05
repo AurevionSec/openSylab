@@ -1,126 +1,190 @@
-import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
-interface NavItem {
-  name: string;
-  path: string;
-  icon: string;
-  label: string;
-  adminOnly?: boolean;
-}
-
-const navItems: NavItem[] = [
-  { name: 'Dashboard', path: '/', icon: '■', label: 'OVERVIEW', adminOnly: false },
-  { name: 'Samples', path: '/samples', icon: '◆', label: 'SAMPLES', adminOnly: false },
-  { name: 'Orders', path: '/orders', icon: '▣', label: 'ORDERS', adminOnly: false },
-  { name: 'Results', path: '/results', icon: '◈', label: 'RESULTS', adminOnly: false },
-  { name: 'Users', path: '/users', icon: '▲', label: 'USERS', adminOnly: true },
-  { name: 'Audit Log', path: '/audit-log', icon: '▼', label: 'AUDIT', adminOnly: true },
-  { name: 'Profile', path: '/profile', icon: '●', label: 'PROFILE', adminOnly: false },
-];
-
 export const Sidebar = () => {
   const location = useLocation();
-  const { user } = useAuth();
-  const [isExpanded, setIsExpanded] = useState(false);
+  const { user, logout } = useAuth();
 
-  // Filter navigation items based on user role
-  const visibleNavItems = navItems.filter((item) => {
-    if (item.adminOnly && user?.role !== 'ADMIN') {
-      return false;
-    }
-    return true;
-  });
+  const isActive = (path: string) => location.pathname === path;
+
+  const navItems = [
+    {
+      name: 'Dashboard',
+      path: '/',
+      icon: (
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+        </svg>
+      ),
+    },
+    {
+      name: 'Samples',
+      path: '/samples',
+      icon: (
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+        </svg>
+      ),
+      badge: '24',
+    },
+    {
+      name: 'Orders',
+      path: '/orders',
+      icon: (
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+        </svg>
+      ),
+    },
+    {
+      name: 'Results',
+      path: '/results',
+      icon: (
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+        </svg>
+      ),
+    },
+  ];
+
+  const systemItems = [
+    {
+      name: 'Audit Log',
+      path: '/audit',
+      icon: (
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      ),
+    },
+    {
+      name: 'Users',
+      path: '/users',
+      icon: (
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+        </svg>
+      ),
+    },
+    {
+      name: 'Profile',
+      path: '/profile',
+      icon: (
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+        </svg>
+      ),
+    },
+  ];
+
+  const getUserInitials = () => {
+    if (!user?.username) return 'U';
+    return user.username.substring(0, 2).toUpperCase();
+  };
+
+  const getRoleDisplay = () => {
+    if (!user?.role) return 'User';
+    return user.role.charAt(0) + user.role.slice(1).toLowerCase();
+  };
 
   return (
-    <aside
-      className={`bg-[#16181D] border-r border-[#1A1C20] min-h-screen transition-all duration-200 ${
-        isExpanded ? 'w-56' : 'w-16'
-      }`}
-      onMouseEnter={() => setIsExpanded(true)}
-      onMouseLeave={() => setIsExpanded(false)}
-    >
-      {/* Logo/Branding Area */}
-      <div className="h-16 flex items-center justify-center border-b border-[#1A1C20]">
-        <div className="text-[#0055FF] font-mono font-bold text-sm">
-          {isExpanded ? 'OPENSYLAB' : 'OS'}
+    <aside className="fixed inset-y-0 left-0 w-64 bg-[#1A1C20] border-r border-gray-800 flex flex-col z-50 transition-all duration-300">
+      {/* Header */}
+      <div className="h-16 flex items-center px-6 border-b border-gray-800 bg-[#15171a]">
+        <div className="font-['Inter'] font-bold text-xl tracking-tight text-white">
+          OpenSylab<span className="text-[#2563EB] text-xs align-top ml-1">v0.6</span>
         </div>
       </div>
 
-      {/* Navigation */}
-      <nav className="py-4">
-        {visibleNavItems.map((item) => {
-          const isActive = location.pathname === item.path;
-          return (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={`
-                group relative flex items-center h-12
-                transition-all duration-150
-                ${isActive
-                  ? 'bg-[#0055FF]/10 border-l-2 border-[#0055FF]'
-                  : 'border-l-2 border-transparent hover:bg-[#1A1C20] hover:border-l-2 hover:border-[#5E6C84]'
-                }
-              `}
-              aria-current={isActive ? 'page' : undefined}
+      {/* Main Navigation */}
+      <nav className="flex-1 overflow-y-auto py-6 space-y-1">
+        {navItems.map((item) => (
+          <Link
+            key={item.path}
+            to={item.path}
+            className={`group flex items-center px-5 py-3 text-sm font-medium transition-colors border-l-4 ${
+              isActive(item.path)
+                ? 'text-white bg-gray-800 border-[#2563EB]'
+                : 'text-gray-400 hover:text-white hover:bg-gray-800 border-transparent'
+            }`}
+          >
+            <span
+              className={`mr-3 ${
+                isActive(item.path)
+                  ? 'text-[#2563EB]'
+                  : 'text-gray-500 group-hover:text-white transition-colors'
+              }`}
             >
-              {/* Icon */}
-              <div className={`
-                w-16 flex items-center justify-center text-xl font-mono
-                ${isActive ? 'text-[#0055FF]' : 'text-[#5E6C84] group-hover:text-[#E0E0E0]'}
-              `}>
-                {item.icon}
-              </div>
+              {item.icon}
+            </span>
+            {item.name}
+            {item.badge && (
+              <span className="ml-auto bg-gray-900 text-gray-300 py-0.5 px-2 rounded-full text-xs font-mono">
+                {item.badge}
+              </span>
+            )}
+          </Link>
+        ))}
 
-              {/* Label (visible when expanded) */}
-              {isExpanded && (
-                <span className={`
-                  font-mono text-xs font-bold tracking-wider uppercase
-                  transition-opacity duration-150
-                  ${isActive ? 'text-[#0055FF]' : 'text-[#5E6C84] group-hover:text-[#E0E0E0]'}
-                `}>
-                  {item.label}
-                </span>
-              )}
-
-              {/* Tooltip (visible when collapsed) */}
-              {!isExpanded && (
-                <div className="
-                  absolute left-16 ml-2 px-3 py-1.5
-                  bg-[#1A1C20] border border-[#5E6C84]
-                  text-[#E0E0E0] text-xs font-mono font-bold uppercase tracking-wider
-                  opacity-0 group-hover:opacity-100 pointer-events-none
-                  transition-opacity duration-150
-                  whitespace-nowrap z-50
-                ">
-                  {item.label}
-                  {/* Arrow */}
-                  <div className="absolute left-0 top-1/2 -translate-x-1 -translate-y-1/2
-                                  w-2 h-2 bg-[#1A1C20] border-l border-b border-[#5E6C84]
-                                  transform rotate-45"></div>
-                </div>
-              )}
-
-              {/* Active indicator line */}
-              {isActive && (
-                <div className="absolute right-0 top-0 bottom-0 w-0.5 bg-[#0055FF]"></div>
-              )}
-            </Link>
-          );
-        })}
-      </nav>
-
-      {/* Bottom System Info (when expanded) */}
-      {isExpanded && (
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-[#1A1C20]">
-          <div className="text-[10px] font-mono text-[#5E6C84] uppercase tracking-wider">
-            <div>v0.6.0</div>
-            <div className="text-[8px] mt-1">{user?.role}</div>
+        {/* System Section */}
+        <div className="pt-4 pb-2">
+          <div className="px-5 text-xs font-semibold text-gray-600 uppercase tracking-wider">
+            System
           </div>
         </div>
-      )}
+
+        {systemItems.map((item) => (
+          <Link
+            key={item.path}
+            to={item.path}
+            className={`group flex items-center px-5 py-3 text-sm font-medium transition-colors border-l-4 ${
+              isActive(item.path)
+                ? 'text-white bg-gray-800 border-[#2563EB]'
+                : 'text-gray-400 hover:text-white hover:bg-gray-800 border-transparent'
+            }`}
+          >
+            <span
+              className={`mr-3 ${
+                isActive(item.path)
+                  ? 'text-[#2563EB]'
+                  : 'text-gray-500 group-hover:text-white transition-colors'
+              }`}
+            >
+              {item.icon}
+            </span>
+            {item.name}
+          </Link>
+        ))}
+      </nav>
+
+      {/* User Footer */}
+      <div className="border-t border-gray-800 p-4 bg-[#15171a]">
+        <div className="flex items-center">
+          <div className="flex-shrink-0">
+            <div className="h-8 w-8 rounded bg-gray-700 flex items-center justify-center text-white font-bold text-xs">
+              {getUserInitials()}
+            </div>
+          </div>
+          <div className="ml-3">
+            <p className="text-sm font-medium text-white">{user?.username || 'User'}</p>
+            <p className="text-xs text-gray-500">{getRoleDisplay()}</p>
+          </div>
+          <button
+            onClick={logout}
+            className="ml-auto text-gray-500 hover:text-white transition-colors"
+            title="Logout"
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+              />
+            </svg>
+          </button>
+        </div>
+      </div>
     </aside>
   );
 };
