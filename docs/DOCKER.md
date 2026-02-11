@@ -1,7 +1,7 @@
 # OpenSylab Docker Deployment Guide
 
-**Version:** 0.6.0
-**Date:** 2026-02-01
+**Version:** 0.6.0 + Polish Phase
+**Date:** 2026-02-11
 **Status:** Production-Ready
 
 ---
@@ -152,6 +152,7 @@ Both containers use **multi-stage builds** to minimize image size:
 |----------|---------|-------------|
 | `OPENSYLAB_DB_PATH` | `/app/data/opensylab.db` | SQLite database path |
 | `OPENSYLAB_API_PORT` | `8080` | API server port |
+| `OPENSYLAB_JWT_SECRET` | (development default) | **REQUIRED** JWT secret key (min. 32 chars) ⚠️ |
 | `OPENSYLAB_TLS_CERT` | - | TLS certificate path (optional) |
 | `OPENSYLAB_TLS_KEY` | - | TLS private key path (optional) |
 
@@ -163,6 +164,24 @@ services:
     environment:
       - OPENSYLAB_DB_PATH=/app/data/opensylab.db
       - OPENSYLAB_API_PORT=8080
+      - OPENSYLAB_JWT_SECRET=your-secure-random-secret-min-32-characters
+```
+
+**⚠️ IMPORTANT - JWT Secret Security:**
+
+The `OPENSYLAB_JWT_SECRET` environment variable is **critical for production security**:
+- Must be at least 32 characters long
+- Use a cryptographically secure random string
+- Never commit secrets to version control
+- Change the default value immediately in production
+
+**Generate a secure secret:**
+```bash
+# Linux/macOS
+openssl rand -base64 48
+
+# Or use a password generator
+head -c 48 /dev/urandom | base64
 ```
 
 #### Frontend Container
@@ -579,6 +598,6 @@ See `docs/KUBERNETES.md` (planned for v1.0+).
 
 ---
 
-**Last Updated:** 2026-02-01
-**OpenSylab Version:** v0.6.0
-**Document Version:** 1.0
+**Last Updated:** 2026-02-11
+**OpenSylab Version:** v0.6.0 + Polish Phase
+**Document Version:** 1.1

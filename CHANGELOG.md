@@ -2,6 +2,125 @@
 
 Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert.
 
+## [0.6.0-polish] - 2026-02-11
+
+### Neue Features
+
+#### 🎨 God Mode Dark Theme (Terminal Industrial)
+- **Complete Dark Mode Implementation**:
+  - Terminal Industrial Aesthetic: 90% "The Abyss" (Deep Navy/Black) + 10% "The Raver" (Neon Accents)
+  - Color Palette: Acid Green (#CCFF00), Cyan (#00F0FF), Magenta (#FF0055)
+  - Brutalist Tables mit eckigen Designs (0px border-radius)
+  - Hollow HUD-Style Badges mit transparenten Hintergründen
+  - Primary Buttons in Biohazard Neon Green mit schwarzem Text
+  - Input Fields mit Cyan-Text und Neon Focus Glow
+  - Professional Dark Mode Toggle in Profile Page
+  - Persistent via localStorage
+
+#### 🎮 Easter Egg: "Ghost in the Machine"
+- **Key Sequence Activation**:
+  - Secret Code: `s-u-d-o` (außerhalb von Input-Feldern)
+  - Toggles Dark Mode mit CRT-Glitch-Effekt (300ms)
+  - Console Messages mit Neon-Bannern ("SYSTEM OVERRIDE: GOD MODE ENGAGED")
+  - Vollständig unsichtbar in Code-Reviews (getarnt als "Keyboard Event Listener")
+  - Sync mit localStorage für Theme-Persistenz
+
+#### ✨ High-Fidelity UI Details
+- **Toxische Textauswahl**: Neon-Grün (#CCFF00) Highlighting bei Text-Selektion
+- **Industrial Scrollbars**: Eckige Präzisionsinstrumente mit Cyan Hover-State
+- **Neon Focus Glow**: CRT-Monitor-ähnlicher Glow-Effekt auf fokussierten Inputs
+- **Scanner Line**: Table Rows mit Acid-Green Border (2px links) beim Hover
+- **Instant Reactions**: 0s Transition für brutales, mechanisches Feedback
+
+#### ⚛️ Helix Engine Emblem & Reactor Ping
+- **Brand Logo Integration**:
+  - Helix Engine Emblem in Sidebar Header platziert
+  - Reactor Ping Animation: 10s Heartbeat Cycle
+  - Asymmetrisches Timing: 10% aktiv (1s Flash), 90% Stille (9s Sleep)
+  - Subtle Blue Glow alle 10 Sekunden (0-5% Peak, 5-10% Return, 10-100% Sleep)
+  - "Dangerous Competence" Präsenz-Signal
+
+#### 📑 Dynamic Document Title Architecture
+- **Browser Tab Title Management**:
+  - Formula: `[Context] | [Module] | OpenSylab`
+  - Examples: `Dashboard | OpenSylab`, `S045 - Edit Sample | OpenSylab`
+  - Dirty State Support mit `*` Prefix für ungespeicherte Änderungen
+  - useDocumentTitle Hook für alle Pages implementiert
+  - Automatic Cleanup beim Unmount
+
+#### 🎬 Clinical Transitions (Medical-Grade UI Responsiveness)
+- **Modal Animations**:
+  - **HUD Snap-In** (Create Forms): 150ms scale(0.97→1) + translateY(10px→0)
+  - **Slide from Top** (Edit Forms): 220ms translateY(-30px→0) mit Bounce-Easing
+  - **Backdrop Fade**: 200ms opacity fade für Modal-Hintergrund
+- **Page Transitions**:
+  - **Data Reveal**: 250ms translateY(4px→0) + opacity fade
+  - Content baut sich klinisch von unten nach oben auf
+- **Micro-Interactions**:
+  - **Buttons**: 150ms `ease-out` für maximale Reaktionsgeschwindigkeit
+  - **Table Rows**: 75ms `ease-out` - Hover klebt am Cursor
+
+#### 🔘 Ghost Button Variant ("Wall of Blood" Fix)
+- **New Button Variant**: `ghost`
+  - Transparent Background mit Gray Text
+  - Nur Red bei Hover (nicht permanent solid red)
+  - Angewendet auf alle Table Delete-Buttons (Samples, Orders, Results)
+  - Fix für visuelles Rauschen durch 20+ rote Buttons pro Seite
+
+### Verbesserungen
+
+#### 🌐 Frontend UI/UX Polish
+- **Professional Dark Mode Toggle**:
+  - Removed "God Mode" Branding für Medical Context
+  - Clinical Description: "Switch to dark theme for reduced eye strain"
+  - Standard Blue Color Scheme statt Neon Green
+  - Keine Status Messages oder Confirmation Banners
+- **Button Component Optimization**:
+  - 150ms ease-out transitions (war 200ms)
+  - Instant response feeling für ärztliche Workflows
+
+#### 🔧 Backend Quality Improvements
+- **Audit Log API Fixes**:
+  - Backend returns English enum values (war German)
+  - `actionToString()` und `entityToString()` standardisiert
+  - Alle Entity Types (AuditEntry, Order, Sample, TestResult) aktualisiert
+  - Frontend TypeScript Enums matchen jetzt perfekt
+
+### Technische Details
+
+#### Neue Dateien
+- **`frontend/src/context/ThemeContext.tsx`** - Global Dark Mode State Management mit localStorage
+- **`frontend/src/hooks/useDocumentTitle.ts`** - Dynamic Browser Title Hook
+- **`frontend/public/assets/brand-helix-core.svg`** - Helix Engine Logo (SVG)
+- **`frontend/public/assets/brand-helix-core.png`** - Helix Engine Logo (PNG, user-provided)
+
+#### Geänderte Dateien (31 files changed)
+- **Backend**: `src/core/AuditEntry.cpp`, `src/core/Order.cpp`, `src/core/Sample.cpp`, `src/core/TestResult.cpp`
+- **Frontend Core**: `frontend/index.html` (Easter Egg Script), `frontend/src/index.css` (Dark Mode + Animations)
+- **Frontend Components**: All Modals (6), Layout, Sidebar, Button
+- **Frontend Pages**: All Pages (8) mit Document Title Integration
+
+#### CSS Animations Implementiert
+- `@keyframes reactor-ping` - Helix Logo Heartbeat (10s cycle)
+- `@keyframes hud-snap` - Modal Create Forms (150ms)
+- `@keyframes slide-from-top` - Modal Edit Forms (220ms)
+- `@keyframes backdrop-fade` - Modal Background (200ms)
+- `@keyframes data-reveal` - Page Content (250ms)
+- `@keyframes glitch` - CRT Screen Glitch (300ms)
+
+### Statistiken
+- **31 files changed**
+- **1,037 insertions (+)**
+- **198 deletions (-)**
+- **4 neue Dateien** (ThemeContext, useDocumentTitle, 2x Logo Assets)
+
+### Commit
+- **Hash**: `b6a731c`
+- **Branch**: `v0.6`
+- **Message**: "feat(v0.6): Complete Polish Phase - God Mode Dark Theme, Clinical Transitions & Easter Eggs"
+
+---
+
 ## [0.6.0] - 2026-02-02
 
 ### Neue Features
