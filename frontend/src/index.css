@@ -103,6 +103,11 @@ tr:hover {
     background-color: #F8FAFC; /* Subtiler Hover-Effekt */
 }
 
+/* Table Row Micro-Interaction: Instant Response */
+tbody tr {
+    transition: background-color 75ms ease-out;
+}
+
 /* --- 4. BADGES & STATUS (FIXING THE WIREFRAME LOOK) --- */
 /* Wendet dies auf deine Status-Spans an */
 .badge, span[class*="status"] {
@@ -171,7 +176,8 @@ label {
     color: var(--text-on-dark);
 }
 
-/* Buttons (Actions) */
+/* Buttons (Actions) - COMMENTED OUT: Using Button component with Tailwind instead */
+/*
 button, .btn {
     background-color: #fff;
     border: 1px solid var(--border-subtle);
@@ -188,14 +194,469 @@ button:hover, .btn:hover {
     background-color: #F3F4F6;
     border-color: #D1D5DB;
 }
+*/
 
-/* Primäre Buttons (Create New...) */
+/* Primäre Buttons (Create New...) - COMMENTED OUT: Using Button component with Tailwind instead */
+/*
 button.primary, .btn-primary {
-    background-color: #111827; /* Schwarz */
+    background-color: #111827;
     color: #fff;
     border: 1px solid #111827;
 }
 
 button.primary:hover {
     background-color: #000;
+}
+*/
+
+/* =====================================================================
+   GOD MODE: TERMINAL INDUSTRIAL - DARK THEME
+   System Status: [OVERDRIVE]
+   "Dangerous Competence" Aesthetic
+   ===================================================================== */
+
+.dark {
+    /* 90% The Abyss: Techwear Navy & Anthrazit */
+    --bg-body: #030407;       /* Fast perfektes Schwarz */
+    --bg-surface: #0B0E14;    /* Tiefstes Industrial Navy */
+    --bg-sidebar: #05060A;    /* Der Abgrund */
+
+    /* Typography: High Contrast */
+    --text-primary: #F8FAFC;  /* Eisweiß */
+    --text-secondary: #64748B;/* Klinisches Grau */
+    --text-on-dark: #E5E7EB;
+
+    /* 10% The Raver: Aggressive Accents */
+    --accent-acid: #CCFF00;   /* Biohazard Neon Grün */
+    --accent-cyber: #00F0FF;  /* Kaltes Cyan */
+    --accent-alert: #FF0055;  /* Synthetisches Magenta/Rot */
+
+    --border-subtle: #1E293B; /* Harte, kalte Linien */
+    --border-focus: var(--accent-acid);
+
+    /* Status Colors Dark Mode */
+    --status-blue-bg: rgba(0, 240, 255, 0.1);
+    --status-blue-text: var(--accent-cyber);
+    --status-green-bg: rgba(204, 255, 0, 0.1);
+    --status-green-text: var(--accent-acid);
+    --status-alert-bg: rgba(255, 0, 85, 0.1);
+    --status-alert-text: var(--accent-alert);
+}
+
+/* 1. Global Overrides */
+.dark body {
+    background-color: var(--bg-body);
+    color: var(--text-primary);
+}
+
+.dark h1, .dark h2, .dark h3, .dark h4, .dark h5 {
+    color: var(--text-primary);
+    font-family: 'JetBrains Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* 2. Brutalistische Tabellen */
+.dark table {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    box-shadow: none; /* Wir brauchen keinen weichen Schatten im Terminal */
+}
+
+.dark thead {
+    background-color: #05060A;
+    border-bottom: 2px solid var(--border-subtle);
+}
+
+.dark th {
+    color: var(--text-secondary);
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.1em;
+}
+
+.dark tr:hover {
+    background-color: #11151E;
+}
+
+.dark td {
+    border-color: var(--border-subtle);
+    color: var(--text-primary);
+}
+
+/* 3. Primary Buttons: "Dangerous Competence" */
+.dark button[class*="bg-[#2563EB]"],
+.dark .btn-primary {
+    background-color: var(--accent-acid) !important;
+    color: #000000 !important;
+    border: none;
+    border-radius: 0px !important;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    text-transform: uppercase;
+    box-shadow: 0 0 0 rgba(204, 255, 0, 0);
+    transition: all 0.1s ease-in;
+}
+
+.dark button[class*="bg-[#2563EB]"]:hover,
+.dark .btn-primary:hover {
+    background-color: #D4FF33 !important;
+    box-shadow: 0 0 12px rgba(204, 255, 0, 0.4);
+    transform: translateY(-1px);
+}
+
+/* 4. Status Badges: HUD Style (Hollow Outlines) */
+.dark .badge,
+.dark span[class*="status"],
+.dark span[class*="bg-blue"],
+.dark span[class*="bg-green"],
+.dark span[class*="bg-yellow"],
+.dark span[class*="bg-red"],
+.dark span[class*="bg-orange"] {
+    background: transparent !important;
+    border-width: 1px !important;
+    border-style: solid !important;
+    border-radius: 0px !important;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.08em;
+}
+
+.dark span[class*="bg-green"],
+.dark .badge-success,
+.dark .status-validated,
+.dark .status-normal {
+    border-color: var(--accent-acid) !important;
+    color: var(--accent-acid) !important;
+}
+
+.dark span[class*="bg-blue"],
+.dark .badge-info,
+.dark .status-registered,
+.dark .status-entered,
+.dark .status-reviewed {
+    border-color: var(--accent-cyber) !important;
+    color: var(--accent-cyber) !important;
+    box-shadow: inset 0 0 5px rgba(0, 240, 255, 0.1);
+}
+
+.dark span[class*="bg-red"],
+.dark span[class*="bg-orange"],
+.dark .badge-danger,
+.dark .status-cancelled,
+.dark .status-critical,
+.dark .status-high,
+.dark .status-rejected {
+    border-color: var(--accent-alert) !important;
+    color: var(--accent-alert) !important;
+}
+
+.dark span[class*="bg-yellow"],
+.dark .status-pending {
+    border-color: #FFC107 !important;
+    color: #FFC107 !important;
+}
+
+/* 5. Eingabefelder: Terminal Prompt */
+.dark input,
+.dark select,
+.dark textarea {
+    background-color: var(--bg-sidebar);
+    border: 1px solid var(--border-subtle);
+    color: var(--accent-cyber);
+    border-radius: 0px;
+}
+
+.dark input:focus,
+.dark select:focus,
+.dark textarea:focus {
+    border-color: var(--accent-acid);
+    box-shadow: 0 0 8px rgba(204, 255, 0, 0.2);
+    outline: none;
+}
+
+.dark label {
+    color: var(--text-secondary);
+}
+
+/* 6. Cards */
+.dark .bg-white {
+    background-color: var(--bg-surface) !important;
+}
+
+.dark [class*="bg-gray-"] {
+    background-color: var(--bg-surface) !important;
+}
+
+.dark [class*="text-gray-900"] {
+    color: var(--text-primary) !important;
+}
+
+.dark [class*="text-gray-600"],
+.dark [class*="text-gray-700"] {
+    color: var(--text-secondary) !important;
+}
+
+.dark [class*="border-gray"] {
+    border-color: var(--border-subtle) !important;
+}
+
+/* 7. Sidebar Dark Override */
+.dark aside {
+    background-color: var(--bg-sidebar) !important;
+    border-color: #000 !important;
+}
+
+/* 8. Secondary Buttons */
+.dark button[class*="bg-white"] {
+    background-color: var(--bg-surface) !important;
+    color: var(--text-primary) !important;
+    border: 1px solid var(--border-subtle) !important;
+}
+
+.dark button[class*="bg-white"]:hover {
+    background-color: #11151E !important;
+    border-color: var(--accent-cyber) !important;
+}
+
+/* 9. Danger Buttons */
+.dark button[class*="bg-red"] {
+    background-color: var(--accent-alert) !important;
+    color: #000 !important;
+    border: none !important;
+}
+
+/* 10. Modals */
+.dark [class*="bg-opacity-50"] {
+    background-color: rgba(3, 4, 7, 0.95) !important;
+}
+
+/* 11. Alert Boxes */
+.dark [class*="bg-red-50"] {
+    background-color: rgba(255, 0, 85, 0.1) !important;
+    border-color: var(--accent-alert) !important;
+}
+
+.dark [class*="text-red-"] {
+    color: var(--accent-alert) !important;
+}
+
+/* 12. Blue Text Override */
+.dark [class*="text-blue"] {
+    color: var(--accent-cyber) !important;
+}
+
+/* 13. Scrollbars */
+.dark ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.dark ::-webkit-scrollbar-track {
+    background: var(--bg-body);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+    background: var(--border-subtle);
+    border-radius: 0px;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-acid);
+}
+
+/* 14. Specific bg-[] color overrides */
+.dark [class*="bg-[#FAFBFC]"],
+.dark [class*="bg-[#F4F5F7]"],
+.dark [class*="bg-[#F8FAFC]"],
+.dark [class*="bg-[#E2E8F0]"] {
+    background-color: var(--bg-surface) !important;
+}
+
+.dark [class*="bg-[#1A1C20]"],
+.dark [class*="text-[#1A1C20]"] {
+    color: var(--text-primary) !important;
+}
+
+.dark [class*="text-[#5E6C84]"] {
+    color: var(--text-secondary) !important;
+}
+
+.dark [class*="border-[#E2E8F0]"] {
+    border-color: var(--border-subtle) !important;
+}
+
+/* 15. Dashboard specific - alternating rows */
+.dark tbody tr:nth-child(odd) {
+    background-color: var(--bg-surface) !important;
+}
+
+.dark tbody tr:nth-child(even) {
+    background-color: #0A0D12 !important;
+}
+
+.dark tbody tr:hover {
+    background-color: #11151E !important;
+}
+
+/* 16. Dashboard metric cards */
+.dark [class*="hover:border-[#0055FF]"]:hover {
+    border-color: var(--accent-acid) !important;
+}
+
+/* 17. Fix any remaining bg colors with arbitrary values */
+.dark [style*="background-color"] {
+    background-color: var(--bg-surface) !important;
+}
+
+/* =====================================================================
+   GOD MODE: HIGH FIDELITY DETAILS
+   Easter Egg Enhancements
+   ===================================================================== */
+
+/* 1. Toxische Textauswahl (Highlighting) */
+.dark ::selection {
+    background-color: var(--accent-acid); /* Neon Grün */
+    color: #000000;
+    text-shadow: none;
+}
+
+/* 2. Industrial Scrollbars Enhanced (Webkit) */
+.dark ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+    background-color: #05060A; /* Der Abgrund */
+}
+
+.dark ::-webkit-scrollbar-thumb {
+    background-color: #1E293B; /* Kaltes Grau */
+    border-radius: 0px; /* Brutalismus: Keine runden Ecken */
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--accent-cyber); /* Cyan Hover */
+}
+
+/* 3. Der CRT Glitch Trigger (wird vom JS aufgerufen) */
+@keyframes glitch {
+  0% { transform: translate(0) }
+  20% { transform: translate(-2px, 1px) }
+  40% { transform: translate(-1px, -1px) }
+  60% { transform: translate(2px, 1px) }
+  80% { transform: translate(1px, -1px) }
+  100% { transform: translate(0) }
+}
+
+/* 4. Neon Focus Glow für Inputs (Das 10% Raver Element) */
+.dark input:focus,
+.dark select:focus,
+.dark textarea:focus {
+    border-color: var(--accent-cyber);
+    background-color: #05060A;
+    color: var(--accent-acid); /* Getippter Text wird Neon-Grün */
+    /* Subtiler Glow-Effekt, wie ein alter Röhrenmonitor */
+    box-shadow: 0 0 10px rgba(0, 240, 255, 0.15), inset 0 0 5px rgba(0, 240, 255, 0.1);
+}
+
+/* 5. Daten-Tabellen Hover: Scanner Line */
+.dark tbody tr {
+    transition: background-color 0s; /* Instant Reaktion */
+}
+
+.dark tbody tr:hover {
+    background-color: #0B111A !important;
+    border-left: 2px solid var(--accent-acid); /* Härtester visueller Anker */
+}
+
+/* =====================================================================
+   OPENSYLAB ENGINE ANIMATIONS
+   Reactor Core Heartbeat
+   ===================================================================== */
+
+@keyframes reactor-ping {
+    0% {
+        /* Base State: Fast unsichtbares Glühen */
+        filter: drop-shadow(0 0 2px rgba(37, 99, 235, 0.1)) brightness(1);
+    }
+    5% {
+        /* Peak State (nach 0.5 Sekunden): Kurzes, hartes Aufleuchten (System Blue) */
+        filter: drop-shadow(0 0 12px rgba(37, 99, 235, 0.9)) brightness(1.2);
+    }
+    10% {
+        /* Return State (nach 1.0 Sekunden): Zurück zum Base State */
+        filter: drop-shadow(0 0 2px rgba(37, 99, 235, 0.1)) brightness(1);
+    }
+    100% {
+        /* Sleep State (Sekunde 1 bis 10): Nichts tun */
+        filter: drop-shadow(0 0 2px rgba(37, 99, 235, 0.1)) brightness(1);
+    }
+}
+
+.animate-reactor {
+    animation: reactor-ping 10s infinite cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* =====================================================================
+   CLINICAL TRANSITIONS
+   Medical-Grade UI Responsiveness
+   ===================================================================== */
+
+/* 1a. Modal HUD Snap-In (Create Overlays) */
+@keyframes hud-snap {
+    0% {
+        opacity: 0;
+        transform: scale(0.97) translateY(10px);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+.animate-snap-in {
+    /* 150ms - schneller als das Auge bewusst wahrnimmt, aber weich genug für das Gehirn */
+    animation: hud-snap 0.15s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+/* 1b. Modal Slide from Top (Edit Overlays) */
+@keyframes slide-from-top {
+    0% {
+        opacity: 0;
+        transform: translateY(-30px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.animate-slide-top {
+    /* 220ms - smooth glide from top */
+    animation: slide-from-top 0.22s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* Modal Backdrop Fade */
+@keyframes backdrop-fade {
+    0% { opacity: 0; }
+    100% { opacity: 1; }
+}
+
+.animate-backdrop {
+    animation: backdrop-fade 0.2s ease-out forwards;
+}
+
+/* 2. Data Reveal (Page/Tab Transitions) */
+@keyframes data-reveal {
+    0% {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.page-transition {
+    /* Leicht verzögert, damit der Header zuerst da ist */
+    animation: data-reveal 0.25s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
 }

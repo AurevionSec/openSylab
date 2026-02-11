@@ -8,8 +8,10 @@ import { ResultEditModal } from '../components/Results/ResultEditModal';
 import { getResults, deleteResult } from '../services/results';
 import type { TestResult } from '../types/result';
 import { RESULT_STATUSES, RESULT_FLAGS } from '../utils/constants';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 
 export const Results = () => {
+  useDocumentTitle({ module: 'Test Results' });
   const [results, setResults] = useState<TestResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -254,21 +256,22 @@ export const Results = () => {
                         </td>
                         <td className="px-6 py-2.5 whitespace-nowrap border-b border-[#E2E8F0]">
                           <span className={`px-2 py-1 text-[10px] font-bold uppercase tracking-wider border inline-block ${
-                            result.flag === 'CRITICAL' ? 'border-[#FF3B30] text-[#FF3B30] bg-[#FF3B30]/5' :
-                            result.flag === 'HIGH' ? 'border-[#CCFF00] text-[#1A1C20] bg-[#CCFF00]/10' :
-                            result.flag === 'LOW' ? 'border-[#0055FF] text-[#0055FF] bg-[#0055FF]/5' :
-                            'border-[#10B981] text-[#10B981] bg-[#10B981]/5'
+                            result.flag === 'CRITICAL' ? 'bg-red-50 text-red-700 border-red-200' :
+                            result.flag === 'HIGH' ? 'bg-orange-50 text-orange-700 border-orange-200' :
+                            result.flag === 'LOW' ? 'bg-yellow-50 text-yellow-800 border-yellow-200' :
+                            'bg-green-50 text-green-700 border-green-200'
                           }`}>
                             {RESULT_FLAGS[result.flag]}
                           </span>
                         </td>
                         <td className="px-6 py-2.5 whitespace-nowrap border-b border-[#E2E8F0]">
                           <span className={`px-2 py-1 text-[10px] font-bold uppercase tracking-wider border inline-block ${
-                            result.status === 'PENDING' ? 'border-[#0055FF] text-[#0055FF] bg-[#0055FF]/5' :
-                            result.status === 'VALIDATED' ? 'border-[#10B981] text-[#10B981] bg-[#10B981]/5' :
-                            result.status === 'REVIEWED' ? 'border-[#0055FF] text-[#0055FF] bg-[#0055FF]/5' :
-                            result.status === 'REJECTED' ? 'border-[#FF3B30] text-[#FF3B30] bg-[#FF3B30]/5' :
-                            'border-[#5E6C84] text-[#5E6C84] bg-[#5E6C84]/5'
+                            result.status === 'PENDING' ? 'bg-yellow-50 text-yellow-800 border-yellow-200' :
+                            result.status === 'VALIDATED' ? 'bg-green-50 text-green-700 border-green-200' :
+                            result.status === 'REVIEWED' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                            result.status === 'ENTERED' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                            result.status === 'REJECTED' ? 'bg-red-50 text-red-700 border-red-200' :
+                            'bg-gray-100 text-gray-600 border-gray-300'
                           }`}>
                             {RESULT_STATUSES[result.status]}
                           </span>
@@ -296,7 +299,7 @@ export const Results = () => {
                               </span>
                             </Button>
                             <Button
-                              variant="danger"
+                              variant="ghost"
                               size="sm"
                               onClick={() => handleDeleteClick(result)}
                             >

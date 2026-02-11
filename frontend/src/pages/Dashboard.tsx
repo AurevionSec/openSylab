@@ -6,8 +6,10 @@ import { getOrders } from '../services/orders';
 import { getResults } from '../services/results';
 import type { Sample } from '../types/sample';
 import type { DashboardStats } from '../types/stats';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 
 export const Dashboard = () => {
+  useDocumentTitle({ module: 'Dashboard' });
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [samples, setSamples] = useState<Sample[]>([]);
   const [loading, setLoading] = useState(true);
@@ -21,7 +23,7 @@ export const Dashboard = () => {
         try {
           statsData = await getDashboardStats();
         } catch (statsErr) {
-          console.warn('Stats endpoint not available, using fallback', statsErr);
+          console.warn('Stats endpoint not available, using fallback');
           // Fallback: create empty stats structure
           statsData = {
             samples: { entity_type: 'samples', total: 0, by_status: [] },
@@ -31,11 +33,9 @@ export const Dashboard = () => {
         }
 
         // Fetch all entity data
-        const [samplesData, ordersData, resultsData] = await Promise.all([
-          getSamples({ limit: 1000 }),
-          getOrders({ limit: 1000 }),
-          getResults({ limit: 1000 }),
-        ]);
+        const samplesData = await getSamples({ limit: 1000 });
+        const ordersData = await getOrders({ limit: 1000 });
+        const resultsData = await getResults({ limit: 1000 });
 
         // If stats weren't available, calculate from actual data
         if (statsData && statsData.samples.total === 0 && samplesData.samples.length > 0) {
@@ -77,8 +77,8 @@ export const Dashboard = () => {
         setStats(statsData);
         setSamples(samplesData.samples);
       } catch (err) {
+        console.error('Dashboard error:', err);
         setError('Failed to load dashboard data');
-        console.error(err);
       } finally {
         setLoading(false);
       }
@@ -114,21 +114,30 @@ export const Dashboard = () => {
     );
   }
 
-  // Status badge color mapping (Neo-Clinical style)
+  // Status badge color mapping (Neo-Clinical style with Subtle Fill)
   const getStatusColor = (status: string) => {
     const statusMap: Record<string, string> = {
-      'REGISTERED': 'border-[#0055FF] text-[#0055FF] bg-[#0055FF]/5',
-      'IN_ANALYSIS': 'border-[#CCFF00] text-[#1A1C20] bg-[#CCFF00]/10',
-      'ANALYZED': 'border-[#5E6C84] text-[#5E6C84] bg-[#5E6C84]/5',
-      'VALIDATED': 'border-[#10B981] text-[#10B981] bg-[#10B981]/5',
-      'ARCHIVED': 'border-[#5E6C84] text-[#5E6C84] bg-[#5E6C84]/5',
-      'PENDING': 'border-[#CCFF00] text-[#1A1C20] bg-[#CCFF00]/10',
-      'COMPLETED': 'border-[#10B981] text-[#10B981] bg-[#10B981]/5',
-      'REQUESTED': 'border-[#0055FF] text-[#0055FF] bg-[#0055FF]/5',
-      'IN_PROGRESS': 'border-[#CCFF00] text-[#1A1C20] bg-[#CCFF00]/10',
-      'CANCELLED': 'border-[#FF3B30] text-[#FF3B30] bg-[#FF3B30]/5',
+      'REGISTERED': 'bg-blue-50 text-blue-700 border border-blue-200',
+      'IN_ANALYSIS': 'bg-yellow-50 text-yellow-800 border border-yellow-200',
+      'ANALYZED': 'bg-gray-100 text-gray-700 border border-gray-300',
+      'VALIDATED': 'bg-green-50 text-green-700 border border-green-200',
+      'ARCHIVED': 'bg-gray-100 text-gray-600 border border-gray-300',
+      'PENDING': 'bg-yellow-50 text-yellow-800 border border-yellow-200',
+      'COMPLETED': 'bg-green-50 text-green-700 border border-green-200',
+      'REQUESTED': 'bg-blue-50 text-blue-700 border border-blue-200',
+      'IN_PROGRESS': 'bg-yellow-50 text-yellow-800 border border-yellow-200',
+      'CANCELLED': 'bg-red-50 text-red-700 border border-red-200',
+      'ENTERED': 'bg-blue-50 text-blue-700 border border-blue-200',
+      'REJECTED': 'bg-red-50 text-red-700 border border-red-200',
+      'NORMAL': 'bg-green-50 text-green-700 border border-green-200',
+      'LOW': 'bg-yellow-50 text-yellow-800 border border-yellow-200',
+      'HIGH': 'bg-orange-50 text-orange-700 border border-orange-200',
+      'CRITICAL': 'bg-red-50 text-red-700 border border-red-200',
+      'EMERGENCY': 'bg-red-50 text-red-700 border border-red-200',
+      'URGENT': 'bg-orange-50 text-orange-700 border border-orange-200',
+      'NORMAL_PRIORITY': 'bg-gray-100 text-gray-700 border border-gray-300',
     };
-    return statusMap[status] || 'border-[#5E6C84] text-[#5E6C84] bg-[#5E6C84]/5';
+    return statusMap[status] || 'bg-gray-100 text-gray-600 border border-gray-300';
   };
 
   return (

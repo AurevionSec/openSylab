@@ -6,8 +6,12 @@ import { Button } from '../components/common/Button';
 import { getCurrentUser, changePassword } from '../services/users';
 import type { User, ChangePasswordPayload } from '../types/user';
 import { USER_ROLES, ROLE_COLORS } from '../types/user';
+import { useTheme } from '../context/ThemeContext';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 
 export const Profile = () => {
+  useDocumentTitle({ action: 'My Profile' });
+  const { isDarkMode, toggleDarkMode } = useTheme();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -140,6 +144,41 @@ export const Profile = () => {
                   #{user.id}
                 </p>
               </div>
+            </div>
+          </div>
+        </Card>
+
+        {/* Appearance Settings */}
+        <Card title="Appearance">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-gray-900">Dark Mode</h3>
+                <p className="text-sm text-gray-600 mt-1">
+                  Switch to dark theme for reduced eye strain during extended use. Optimized for low-light environments.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={toggleDarkMode}
+                className={`relative inline-flex h-8 w-14 flex-shrink-0 cursor-pointer items-center rounded-full border-2 transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+                  isDarkMode
+                    ? 'bg-blue-600 border-blue-600 focus:ring-blue-600'
+                    : 'bg-gray-200 border-gray-300 focus:ring-blue-600'
+                }`}
+                role="switch"
+                aria-checked={isDarkMode}
+                aria-label="Toggle dark mode"
+              >
+                <span
+                  className={`inline-block h-6 w-6 transform rounded-full bg-white transition duration-200 ease-in-out ${
+                    isDarkMode
+                      ? 'translate-x-7'
+                      : 'translate-x-1'
+                  }`}
+                />
+              </button>
             </div>
           </div>
         </Card>

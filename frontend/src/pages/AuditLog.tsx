@@ -5,8 +5,10 @@ import { Input } from '../components/common/Input';
 import { getAuditLog } from '../services/audit';
 import type { AuditEntry, AuditLogFilter, AuditAction, AuditEntity } from '../types/audit';
 import { AUDIT_ACTIONS, AUDIT_ENTITIES, ACTION_COLORS } from '../types/audit';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 
 export const AuditLog = () => {
+  useDocumentTitle({ module: 'Audit Log' });
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');

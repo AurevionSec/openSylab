@@ -5,10 +5,12 @@ import type { TestResult, ResultFilter, ResultListResponse } from '../types/resu
 const mapStatus = (backendStatus: string): TestResult['status'] => {
   const statusMap: Record<string, TestResult['status']> = {
     'Ausstehend': 'PENDING',
+    'Eingegeben': 'REVIEWED',  // Backend uses "Eingegeben" for entered results
     'Geprüft': 'REVIEWED',
     'Validiert': 'VALIDATED',
     'Abgelehnt': 'REJECTED',
     'Korrigiert': 'AMENDED',
+    'Wiederholung': 'AMENDED',  // Backend uses "Wiederholung" for repeat tests
     'PENDING': 'PENDING',
     'REVIEWED': 'REVIEWED',
     'VALIDATED': 'VALIDATED',
@@ -24,6 +26,7 @@ const mapFlag = (backendFlag: string): TestResult['flag'] => {
     'Normal': 'NORMAL',
     'Niedrig': 'LOW',
     'Hoch': 'HIGH',
+    'Erhöht': 'HIGH',  // Backend uses "Erhöht" for elevated
     'Kritisch': 'CRITICAL',
     'NORMAL': 'NORMAL',
     'LOW': 'LOW',
@@ -39,18 +42,20 @@ const transformResult = (backendResult: any): TestResult => {
     id: backendResult.id,
     result_id: backendResult.result_id,
     order_id: backendResult.order_id,
-    parameter: backendResult.parameter || '',
+    parameter: backendResult.test_parameter || backendResult.parameter || '',  // Backend uses "test_parameter"
     value: backendResult.value || '',
     unit: backendResult.unit || '',
-    reference_min: backendResult.min_value?.toString() || '',
-    reference_max: backendResult.max_value?.toString() || '',
+    reference_min: backendResult.reference_low?.toString() || backendResult.min_value?.toString() || '',  // Backend uses "reference_low"
+    reference_max: backendResult.reference_high?.toString() || backendResult.max_value?.toString() || '',  // Backend uses "reference_high"
     flag: mapFlag(backendResult.flag),
     status: mapStatus(backendResult.status),
-    reviewed_by: backendResult.reviewed_by || '',
-    reviewed_date: backendResult.reviewed_date
+    reviewed_by: backendResult.measured_by || backendResult.reviewed_by || '',  // Backend uses "measured_by"
+    reviewed_date: backendResult.measured_date
+      ? new Date(backendResult.measured_date * 1000).toISOString()
+      : backendResult.reviewed_date
       ? new Date(backendResult.reviewed_date * 1000).toISOString()
       : '',
-    notes: backendResult.notes || '',
+    notes: backendResult.comment || backendResult.notes || '',  // Backend uses "comment"
   };
 };
 

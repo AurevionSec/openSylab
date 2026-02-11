@@ -29,17 +29,17 @@ std::string TestResult::getStatusString() const {
 std::string TestResult::statusToString(Status status) {
   switch (status) {
   case Status::PENDING:
-    return "Ausstehend";
+    return "PENDING";
   case Status::ENTERED:
-    return "Eingegeben";
+    return "ENTERED";
   case Status::VALIDATED:
-    return "Validiert";
+    return "VALIDATED";
   case Status::REJECTED:
-    return "Abgelehnt";
+    return "REJECTED";
   case Status::REPEATED:
-    return "Wiederholung";
+    return "REPEATED";
   default:
-    return "Unbekannt";
+    return "UNKNOWN";
   }
 }
 
@@ -66,17 +66,17 @@ std::string TestResult::getFlagString() const { return flagToString(flag_); }
 std::string TestResult::flagToString(Flag flag) {
   switch (flag) {
   case Flag::NORMAL:
-    return "Normal";
+    return "NORMAL";
   case Flag::LOW:
-    return "Niedrig";
+    return "LOW";
   case Flag::HIGH:
-    return "Hoch";
+    return "HIGH";
   case Flag::CRITICAL:
-    return "Kritisch";
+    return "CRITICAL";
   case Flag::UNDEFINED:
-    return "Undefiniert";
+    return "UNDEFINED";
   default:
-    return "Unbekannt";
+    return "UNKNOWN";
   }
 }
 
@@ -87,6 +87,7 @@ TestResult::Flag TestResult::stringToFlag(const std::string &flagStr) {
       {"Niedrig", Flag::LOW},
       {"LOW", Flag::LOW},
       {"Hoch", Flag::HIGH},
+      {"Erhöht", Flag::HIGH},  // Alternative deutsche Bezeichnung
       {"HIGH", Flag::HIGH},
       {"Kritisch", Flag::CRITICAL},
       {"CRITICAL", Flag::CRITICAL},

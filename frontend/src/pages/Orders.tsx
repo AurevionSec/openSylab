@@ -8,8 +8,10 @@ import { OrderEditModal } from '../components/Orders/OrderEditModal';
 import { getOrders, deleteOrder } from '../services/orders';
 import type { Order } from '../types/order';
 import { ORDER_STATUSES, ORDER_PRIORITIES } from '../utils/constants';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 
 export const Orders = () => {
+  useDocumentTitle({ module: 'Orders' });
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -274,21 +276,21 @@ export const Orders = () => {
                         </td>
                         <td className="px-6 py-2.5 whitespace-nowrap border-b border-[#E2E8F0]">
                           <span className={`px-2 py-1 text-[10px] font-bold uppercase tracking-wider border inline-block ${
-                            order.status === 'REQUESTED' ? 'border-[#0055FF] text-[#0055FF] bg-[#0055FF]/5' :
-                            order.status === 'IN_PROGRESS' ? 'border-[#CCFF00] text-[#1A1C20] bg-[#CCFF00]/10' :
-                            order.status === 'COMPLETED' ? 'border-[#10B981] text-[#10B981] bg-[#10B981]/5' :
-                            order.status === 'VALIDATED' ? 'border-[#10B981] text-[#10B981] bg-[#10B981]/5' :
-                            order.status === 'CANCELLED' ? 'border-[#FF3B30] text-[#FF3B30] bg-[#FF3B30]/5' :
-                            'border-[#5E6C84] text-[#5E6C84] bg-[#5E6C84]/5'
+                            order.status === 'REQUESTED' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                            order.status === 'IN_PROGRESS' ? 'bg-yellow-50 text-yellow-800 border-yellow-200' :
+                            order.status === 'COMPLETED' ? 'bg-green-50 text-green-700 border-green-200' :
+                            order.status === 'VALIDATED' ? 'bg-green-50 text-green-700 border-green-200' :
+                            order.status === 'CANCELLED' ? 'bg-red-50 text-red-700 border-red-200' :
+                            'bg-gray-100 text-gray-600 border-gray-300'
                           }`}>
                             {order.status.replace('_', ' ')}
                           </span>
                         </td>
                         <td className="px-6 py-2.5 whitespace-nowrap border-b border-[#E2E8F0]">
                           <span className={`px-2 py-1 text-[10px] font-bold uppercase tracking-wider border inline-block ${
-                            order.priority === 'EMERGENCY' ? 'border-[#FF3B30] text-[#FF3B30] bg-[#FF3B30]/5' :
-                            order.priority === 'URGENT' ? 'border-[#CCFF00] text-[#1A1C20] bg-[#CCFF00]/10' :
-                            'border-[#5E6C84] text-[#5E6C84] bg-[#5E6C84]/5'
+                            order.priority === 'EMERGENCY' ? 'bg-red-50 text-red-700 border-red-200' :
+                            order.priority === 'URGENT' ? 'bg-orange-50 text-orange-700 border-orange-200' :
+                            'bg-gray-100 text-gray-700 border-gray-300'
                           }`}>
                             {order.priority}
                           </span>
@@ -322,7 +324,7 @@ export const Orders = () => {
                               </span>
                             </Button>
                             <Button
-                              variant="danger"
+                              variant="ghost"
                               size="sm"
                               onClick={() => handleDeleteClick(order)}
                             >

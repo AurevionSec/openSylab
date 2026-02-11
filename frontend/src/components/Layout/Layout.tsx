@@ -12,7 +12,7 @@ export const Layout = ({ children }: LayoutProps) => {
       <Sidebar />
       <div className="ml-64 flex flex-col min-h-screen">
         <Header />
-        <main className="flex-1 p-6 lg:p-8">
+        <main className="flex-1 p-6 lg:p-8 page-transition">
           {children}
         </main>
       </div>

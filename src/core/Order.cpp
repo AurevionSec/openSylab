@@ -25,17 +25,17 @@ std::string Order::getStatusString() const { return statusToString(status_); }
 std::string Order::statusToString(Status status) {
   switch (status) {
   case Status::REQUESTED:
-    return "Angefordert";
+    return "REQUESTED";
   case Status::IN_PROGRESS:
-    return "In Bearbeitung";
+    return "IN_PROGRESS";
   case Status::COMPLETED:
-    return "Abgeschlossen";
+    return "COMPLETED";
   case Status::VALIDATED:
-    return "Validiert";
+    return "VALIDATED";
   case Status::CANCELLED:
-    return "Storniert";
+    return "CANCELLED";
   default:
-    return "Unbekannt";
+    return "UNKNOWN";
   }
 }
 
@@ -69,13 +69,13 @@ std::string Order::getPriorityString() const {
 std::string Order::priorityToString(Priority priority) {
   switch (priority) {
   case Priority::NORMAL:
-    return "Normal";
+    return "NORMAL";
   case Priority::URGENT:
-    return "Dringend";
+    return "URGENT";
   case Priority::EMERGENCY:
-    return "Notfall";
+    return "EMERGENCY";
   default:
-    return "Unbekannt";
+    return "UNKNOWN";
   }
 }
 

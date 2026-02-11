@@ -6,8 +6,10 @@ import { Input } from '../components/common/Input';
 import { getUsers, createUser, updateUser, deleteUser } from '../services/users';
 import type { User, CreateUserPayload, UpdateUserPayload, UserRole } from '../types/user';
 import { USER_ROLES, ROLE_COLORS } from '../types/user';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 
 export const Users = () => {
+  useDocumentTitle({ module: 'User Management' });
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');

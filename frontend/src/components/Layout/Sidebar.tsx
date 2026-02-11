@@ -50,7 +50,7 @@ export const Sidebar = () => {
   const systemItems = [
     {
       name: 'Audit Log',
-      path: '/audit',
+      path: '/audit-log',
       icon: (
         <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -91,8 +91,21 @@ export const Sidebar = () => {
     <aside className="fixed inset-y-0 left-0 w-64 bg-[#1A1C20] border-r border-gray-800 flex flex-col z-50 transition-all duration-300">
       {/* Header */}
       <div className="h-16 flex items-center px-6 border-b border-gray-800 bg-[#15171a]">
-        <div className="font-['Inter'] font-bold text-xl tracking-tight text-white">
-          OpenSylab<span className="text-[#2563EB] text-xs align-top ml-1">v0.6</span>
+        {/* Helix Engine Emblem */}
+        <div className="flex-shrink-0 mr-3 mt-1">
+          <img
+            src="/assets/brand-helix-core.png"
+            alt="OpenSylab Helix Engine"
+            className="h-9 w-auto object-contain animate-reactor"
+          />
+        </div>
+
+        <div className="font-['Inter'] font-bold text-xl tracking-tight text-white flex items-center">
+          OpenSylab
+          {/* Version Badge */}
+          <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-[#2563EB]/20 text-[#3B82F6] border border-[#2563EB]/30 uppercase tracking-widest">
+            v0.6
+          </span>
         </div>
       </div>
 

@@ -26,23 +26,23 @@ std::string AuditEntry::getActionString() const {
 std::string AuditEntry::actionToString(ActionType action) {
   switch (action) {
   case ActionType::CREATE:
-    return "Erstellt";
+    return "CREATE";
   case ActionType::UPDATE:
-    return "Aktualisiert";
+    return "UPDATE";
   case ActionType::DELETE:
-    return "Gelöscht";
+    return "DELETE";
   case ActionType::LOGIN:
-    return "Angemeldet";
+    return "LOGIN";
   case ActionType::LOGOUT:
-    return "Abgemeldet";
+    return "LOGOUT";
   case ActionType::VALIDATE:
-    return "Validiert";
+    return "VALIDATE";
   case ActionType::EXPORT:
-    return "Exportiert";
+    return "EXPORT";
   case ActionType::ACCESS:
-    return "Zugriff";
+    return "ACCESS";
   default:
-    return "Unbekannt";
+    return "UNKNOWN";
   }
 }
 
@@ -74,19 +74,19 @@ std::string AuditEntry::getEntityString() const {
 std::string AuditEntry::entityToString(EntityType entity) {
   switch (entity) {
   case EntityType::SAMPLE:
-    return "Probe";
+    return "SAMPLE";
   case EntityType::ORDER:
-    return "Auftrag";
+    return "ORDER";
   case EntityType::RESULT:
-    return "Ergebnis";
+    return "RESULT";
   case EntityType::USER:
-    return "Benutzer";
+    return "USER";
   case EntityType::ROLE:
-    return "Rolle";
+    return "ROLE";
   case EntityType::SYSTEM:
-    return "System";
+    return "SYSTEM";
   default:
-    return "Unbekannt";
+    return "UNKNOWN";
   }
 }
 

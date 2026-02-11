@@ -1,0 +1,40 @@
+<svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Outer Triangle Frame (Bronze/Gold) -->
+  <path d="M20 2 L38 36 L2 36 Z" fill="#B8956A" stroke="#6B5A3D" stroke-width="1.5"/>
+
+  <!-- Inner Triangle Cutout (Dark) -->
+  <path d="M20 8 L32 32 L8 32 Z" fill="#0A0D12"/>
+
+  <!-- DNA Helix Structure -->
+  <!-- Left Strand -->
+  <path d="M15 14 Q13 20 15 26 Q17 32 15 32" stroke="#00D9FF" stroke-width="2.5" fill="none" opacity="0.9"/>
+
+  <!-- Right Strand -->
+  <path d="M25 14 Q27 20 25 26 Q23 32 25 32" stroke="#00D9FF" stroke-width="2.5" fill="none" opacity="0.9"/>
+
+  <!-- Connecting Rungs (Horizontal bars) -->
+  <!-- Top rung -->
+  <line x1="15.5" y1="14" x2="24.5" y2="14" stroke="#2563EB" stroke-width="1.5" opacity="0.7"/>
+
+  <!-- Second rung -->
+  <line x1="14" y1="17.5" x2="26" y2="17.5" stroke="#3B82F6" stroke-width="1.5" opacity="0.6"/>
+
+  <!-- Third rung -->
+  <line x1="14" y1="21" x2="26" y2="21" stroke="#2563EB" stroke-width="1.5" opacity="0.7"/>
+
+  <!-- Fourth rung -->
+  <line x1="15" y1="24.5" x2="25" y2="24.5" stroke="#3B82F6" stroke-width="1.5" opacity="0.6"/>
+
+  <!-- Fifth rung -->
+  <line x1="16" y1="28" x2="24" y2="28" stroke="#2563EB" stroke-width="1.5" opacity="0.7"/>
+
+  <!-- Glow effect circles at connection points -->
+  <circle cx="15.5" cy="14" r="1.5" fill="#00F0FF" opacity="0.8"/>
+  <circle cx="24.5" cy="14" r="1.5" fill="#00F0FF" opacity="0.8"/>
+
+  <circle cx="14" cy="21" r="1.5" fill="#00F0FF" opacity="0.8"/>
+  <circle cx="26" cy="21" r="1.5" fill="#00F0FF" opacity="0.8"/>
+
+  <circle cx="16" cy="28" r="1.5" fill="#00F0FF" opacity="0.8"/>
+  <circle cx="24" cy="28" r="1.5" fill="#00F0FF" opacity="0.8"/>
+</svg>

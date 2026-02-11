@@ -228,12 +228,16 @@ test_endpoint \
     "200" \
     "$TOKEN"
 
+# Get the created order's database ID for result tests
+ORDER_DB_ID=$(curl -s -H "Authorization: Bearer $TOKEN" "$API_URL/orders?sample_id=S001" | grep -o '"id":[0-9]*' | head -1 | cut -d':' -f2)
+echo "Using order database ID: $ORDER_DB_ID"
+
 # Test 15: Oversized result comment (> 5000 chars)
 test_endpoint \
     "Reject result comment > 5000 chars" \
     "POST" \
     "/results" \
-    "{\"result_id\":\"R001\",\"order_id\":1,\"test_parameter\":\"Glucose\",\"value\":\"100\",\"unit\":\"mg/dL\",\"comment\":\"$LONG_DESC\"}" \
+    "{\"result_id\":\"R001\",\"order_id\":$ORDER_DB_ID,\"test_parameter\":\"Glucose\",\"value\":\"100\",\"unit\":\"mg/dL\",\"comment\":\"$LONG_DESC\"}" \
     "400" \
     "$TOKEN"
 
@@ -249,7 +253,7 @@ test_endpoint \
     "Reject reference_high <= reference_low" \
     "POST" \
     "/results" \
-    '{"result_id":"R002","order_id":1,"test_parameter":"Glucose","value":"100","unit":"mg/dL","reference_low":100,"reference_high":50}' \
+    "{\"result_id\":\"R002\",\"order_id\":$ORDER_DB_ID,\"test_parameter\":\"Glucose\",\"value\":\"100\",\"unit\":\"mg/dL\",\"reference_low\":100,\"reference_high\":50}" \
     "400" \
     "$TOKEN"
 
@@ -258,7 +262,7 @@ test_endpoint \
     "Reject reference_high = reference_low" \
     "POST" \
     "/results" \
-    '{"result_id":"R003","order_id":1,"test_parameter":"Glucose","value":"100","unit":"mg/dL","reference_low":100,"reference_high":100}' \
+    "{\"result_id\":\"R003\",\"order_id\":$ORDER_DB_ID,\"test_parameter\":\"Glucose\",\"value\":\"100\",\"unit\":\"mg/dL\",\"reference_low\":100,\"reference_high\":100}" \
     "400" \
     "$TOKEN"
 
@@ -267,7 +271,7 @@ test_endpoint \
     "Accept valid reference range" \
     "POST" \
     "/results" \
-    '{"result_id":"R004","order_id":1,"test_parameter":"Glucose","value":"100","unit":"mg/dL","reference_low":70,"reference_high":120}' \
+    "{\"result_id\":\"R004\",\"order_id\":$ORDER_DB_ID,\"test_parameter\":\"Glucose\",\"value\":\"100\",\"unit\":\"mg/dL\",\"reference_low\":70,\"reference_high\":120}" \
     "200" \
     "$TOKEN"
 

@@ -9,5 +9,55 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+
+    <!-- ====================================================================
+         OPERATION: GHOST IN THE MACHINE
+         Easter Egg: Key Sequence Listener for God Mode Toggle
+         Secret Code: s-u-d-o
+         ==================================================================== -->
+    <script>
+    (function() {
+        // Der geheime Code: s-u-d-o
+        const secretCode = ['s', 'u', 'd', 'o'];
+        let inputBuffer = [];
+
+        document.addEventListener('keydown', function(e) {
+            // Ignoriere Eingaben, wenn der User gerade in ein Formular tippt
+            if (e.target.tagName.toLowerCase() === 'input' || e.target.tagName.toLowerCase() === 'textarea') {
+                return;
+            }
+
+            // Key in den Buffer schieben
+            inputBuffer.push(e.key.toLowerCase());
+
+            // Buffer auf die Länge des Codes begrenzen
+            inputBuffer.splice(-secretCode.length - 1, inputBuffer.length - secretCode.length);
+
+            // Check if code matches
+            if (inputBuffer.join('') === secretCode.join('')) {
+                inputBuffer = []; // Reset
+                toggleGodMode();
+            }
+        });
+
+        function toggleGodMode() {
+            const htmlElement = document.documentElement;
+            htmlElement.classList.toggle('dark');
+
+            // Sync mit localStorage für Persistenz
+            const isDarkMode = htmlElement.classList.contains('dark');
+            localStorage.setItem('opensylab-dark-mode', isDarkMode.toString());
+
+            if(isDarkMode) {
+                console.log("%c SYSTEM OVERRIDE: GOD MODE ENGAGED ", "background: #CCFF00; color: #000; font-weight: bold; font-family: monospace; font-size: 14px;");
+                // Kurzer Glitch-Effekt auf dem Body
+                document.body.style.animation = "glitch 0.3s cubic-bezier(.25, .46, .45, .94) both";
+                setTimeout(() => { document.body.style.animation = "none"; }, 300);
+            } else {
+                console.log("%c SYSTEM NORMALIZED ", "background: #E5E7EB; color: #000; font-weight: bold; font-family: monospace; font-size: 14px;");
+            }
+        }
+    })();
+    </script>
   </body>
 </html>
