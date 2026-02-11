@@ -31,7 +31,7 @@ Wir bauen Infrastruktur, keine Spielzeuge. Version 0.6.0 liefert ein vollständi
 - **Single Page Application:** Reaktives Interface via React 18 & TailwindCSS 4.
 - **Multi-Entity Stats:** Server-seitig aggregierte Echtzeit-Daten und Status-Breakdowns im Dashboard.
 - **Data Filtering:** Dual-Filtering für Aufträge (Status + Priority) und Ergebnisse (Status + Flag).
-- **God Mode Dark Theme:** Terminal Industrial Ästhetik mit Neon-Akzenten für 24/7 Lab Operations.
+- **Dark Theme:** Terminal Industrial Ästhetik mit Neon-Akzenten für 24/7 Lab Operations.
 
 ### 3. Governance & Compliance (ISO 15189)
 - **Audit Trail:** Unveränderliche Protokollierung aller Systemänderungen (Wer, Was, Wann) mit dediziertem Admin-Viewer.
