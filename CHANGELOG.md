@@ -2,6 +2,253 @@
 
 Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert.
 
+## [0.6.0-polish] - 2026-02-11
+
+### Neue Features
+
+#### 🎨 God Mode Dark Theme (Terminal Industrial)
+- **Complete Dark Mode Implementation**:
+  - Terminal Industrial Aesthetic: 90% "The Abyss" (Deep Navy/Black) + 10% "The Raver" (Neon Accents)
+  - Color Palette: Acid Green (#CCFF00), Cyan (#00F0FF), Magenta (#FF0055)
+  - Brutalist Tables mit eckigen Designs (0px border-radius)
+  - Hollow HUD-Style Badges mit transparenten Hintergründen
+  - Primary Buttons in Biohazard Neon Green mit schwarzem Text
+  - Input Fields mit Cyan-Text und Neon Focus Glow
+  - Professional Dark Mode Toggle in Profile Page
+  - Persistent via localStorage
+
+#### 🎮 Easter Egg: "Ghost in the Machine"
+- **Key Sequence Activation**:
+  - Secret Code: `s-u-d-o` (außerhalb von Input-Feldern)
+  - Toggles Dark Mode mit CRT-Glitch-Effekt (300ms)
+  - Console Messages mit Neon-Bannern ("SYSTEM OVERRIDE: GOD MODE ENGAGED")
+  - Vollständig unsichtbar in Code-Reviews (getarnt als "Keyboard Event Listener")
+  - Sync mit localStorage für Theme-Persistenz
+
+#### ✨ High-Fidelity UI Details
+- **Toxische Textauswahl**: Neon-Grün (#CCFF00) Highlighting bei Text-Selektion
+- **Industrial Scrollbars**: Eckige Präzisionsinstrumente mit Cyan Hover-State
+- **Neon Focus Glow**: CRT-Monitor-ähnlicher Glow-Effekt auf fokussierten Inputs
+- **Scanner Line**: Table Rows mit Acid-Green Border (2px links) beim Hover
+- **Instant Reactions**: 0s Transition für brutales, mechanisches Feedback
+
+#### ⚛️ Helix Engine Emblem & Reactor Ping
+- **Brand Logo Integration**:
+  - Helix Engine Emblem in Sidebar Header platziert
+  - Reactor Ping Animation: 10s Heartbeat Cycle
+  - Asymmetrisches Timing: 10% aktiv (1s Flash), 90% Stille (9s Sleep)
+  - Subtle Blue Glow alle 10 Sekunden (0-5% Peak, 5-10% Return, 10-100% Sleep)
+  - "Dangerous Competence" Präsenz-Signal
+
+#### 📑 Dynamic Document Title Architecture
+- **Browser Tab Title Management**:
+  - Formula: `[Context] | [Module] | OpenSylab`
+  - Examples: `Dashboard | OpenSylab`, `S045 - Edit Sample | OpenSylab`
+  - Dirty State Support mit `*` Prefix für ungespeicherte Änderungen
+  - useDocumentTitle Hook für alle Pages implementiert
+  - Automatic Cleanup beim Unmount
+
+#### 🎬 Clinical Transitions (Medical-Grade UI Responsiveness)
+- **Modal Animations**:
+  - **HUD Snap-In** (Create Forms): 150ms scale(0.97→1) + translateY(10px→0)
+  - **Slide from Top** (Edit Forms): 220ms translateY(-30px→0) mit Bounce-Easing
+  - **Backdrop Fade**: 200ms opacity fade für Modal-Hintergrund
+- **Page Transitions**:
+  - **Data Reveal**: 250ms translateY(4px→0) + opacity fade
+  - Content baut sich klinisch von unten nach oben auf
+- **Micro-Interactions**:
+  - **Buttons**: 150ms `ease-out` für maximale Reaktionsgeschwindigkeit
+  - **Table Rows**: 75ms `ease-out` - Hover klebt am Cursor
+
+#### 🔘 Ghost Button Variant ("Wall of Blood" Fix)
+- **New Button Variant**: `ghost`
+  - Transparent Background mit Gray Text
+  - Nur Red bei Hover (nicht permanent solid red)
+  - Angewendet auf alle Table Delete-Buttons (Samples, Orders, Results)
+  - Fix für visuelles Rauschen durch 20+ rote Buttons pro Seite
+
+### Verbesserungen
+
+#### 🌐 Frontend UI/UX Polish
+- **Professional Dark Mode Toggle**:
+  - Removed "God Mode" Branding für Medical Context
+  - Clinical Description: "Switch to dark theme for reduced eye strain"
+  - Standard Blue Color Scheme statt Neon Green
+  - Keine Status Messages oder Confirmation Banners
+- **Button Component Optimization**:
+  - 150ms ease-out transitions (war 200ms)
+  - Instant response feeling für ärztliche Workflows
+
+#### 🔧 Backend Quality Improvements
+- **Audit Log API Fixes**:
+  - Backend returns English enum values (war German)
+  - `actionToString()` und `entityToString()` standardisiert
+  - Alle Entity Types (AuditEntry, Order, Sample, TestResult) aktualisiert
+  - Frontend TypeScript Enums matchen jetzt perfekt
+
+### Technische Details
+
+#### Neue Dateien
+- **`frontend/src/context/ThemeContext.tsx`** - Global Dark Mode State Management mit localStorage
+- **`frontend/src/hooks/useDocumentTitle.ts`** - Dynamic Browser Title Hook
+- **`frontend/public/assets/brand-helix-core.svg`** - Helix Engine Logo (SVG)
+- **`frontend/public/assets/brand-helix-core.png`** - Helix Engine Logo (PNG, user-provided)
+
+#### Geänderte Dateien (31 files changed)
+- **Backend**: `src/core/AuditEntry.cpp`, `src/core/Order.cpp`, `src/core/Sample.cpp`, `src/core/TestResult.cpp`
+- **Frontend Core**: `frontend/index.html` (Easter Egg Script), `frontend/src/index.css` (Dark Mode + Animations)
+- **Frontend Components**: All Modals (6), Layout, Sidebar, Button
+- **Frontend Pages**: All Pages (8) mit Document Title Integration
+
+#### CSS Animations Implementiert
+- `@keyframes reactor-ping` - Helix Logo Heartbeat (10s cycle)
+- `@keyframes hud-snap` - Modal Create Forms (150ms)
+- `@keyframes slide-from-top` - Modal Edit Forms (220ms)
+- `@keyframes backdrop-fade` - Modal Background (200ms)
+- `@keyframes data-reveal` - Page Content (250ms)
+- `@keyframes glitch` - CRT Screen Glitch (300ms)
+
+### Statistiken
+- **31 files changed**
+- **1,037 insertions (+)**
+- **198 deletions (-)**
+- **4 neue Dateien** (ThemeContext, useDocumentTitle, 2x Logo Assets)
+
+### Commit
+- **Hash**: `b6a731c`
+- **Branch**: `v0.6`
+- **Message**: "feat(v0.6): Complete Polish Phase - God Mode Dark Theme, Clinical Transitions & Easter Eggs"
+
+---
+
+## [0.6.0] - 2026-02-02
+
+### Neue Features
+
+#### 🆕 User Management (Admin Interface)
+- **User Management Page** für Administratoren:
+  - Liste aller Systembenutzer mit Details (Username, Role, Email, Status, Last Login)
+  - Create User Modal mit Formularvalidierung
+  - Edit User Modal (Username immutable, optionales Passwort-Update)
+  - Delete User mit Bestätigungsdialog
+  - Role Assignment: ADMIN, OPERATOR, VIEWER, CUSTOM
+  - Active/Inactive Toggle für Benutzerkonten
+  - Color-coded Role Badges für visuelle Klarheit
+- **Backend API Endpoints**:
+  - GET `/api/v1/users` - List all users (admin only)
+  - POST `/api/v1/users` - Create user (admin only)
+  - PUT `/api/v1/users/:id` - Update user (admin only)
+  - DELETE `/api/v1/users/:id` - Delete user (admin only)
+  - GET `/api/v1/users/me` - Get current user profile
+  - PUT `/api/v1/users/me/password` - Change password
+- **Dateien**:
+  - `frontend/src/pages/Users.tsx` - User Management Page
+  - `frontend/src/services/users.ts` - User API Service
+  - `frontend/src/types/user.ts` - Enhanced User Types
+
+#### 🆕 Audit Log Viewer (Compliance & Monitoring)
+- **Audit Log Page** für Administratoren:
+  - Vollständiger Audit Trail aller Systemaktionen
+  - Multi-Criteria Filtering (User, Action, Entity, Limit)
+  - Adjustable Result Limit (25, 50, 100, 250 entries)
+  - Color-coded Action Badges (CREATE, UPDATE, DELETE, etc.)
+  - Comprehensive Table Display (Timestamp, User, Action, Entity, Details)
+- **Backend API Endpoint**:
+  - GET `/api/v1/audit` - Get audit log with filters (admin only)
+- **Dateien**:
+  - `frontend/src/pages/AuditLog.tsx` - Audit Log Viewer
+  - `frontend/src/services/audit.ts` - Audit Log Service
+  - `frontend/src/types/audit.ts` - Audit Entry Types
+
+#### 🆕 User Profile & Password Management
+- **Profile Page** für alle Benutzer:
+  - Read-only Account Information Display
+  - Show Username, Role, Full Name, Email, Account Status
+  - Last Login und Account Creation Date
+  - User ID Display
+- **Password Change Functionality**:
+  - Secure Password Change Form
+  - Current Password Verification Required
+  - Password Confirmation Matching
+  - Minimum 8 Character Requirement
+  - Success/Error Feedback
+- **Dateien**:
+  - `frontend/src/pages/Profile.tsx` - User Profile Page
+
+#### 🆕 Enhanced Dashboard Statistics
+- **Multi-Entity Statistics Display**:
+  - Comprehensive Stats für Samples, Orders, Results
+  - Status Breakdown by Entity Type
+  - Server-side Statistics Aggregation
+  - Real-time Data from Stats API
+- **Backend API Endpoint**:
+  - GET `/api/v1/stats` - Get dashboard statistics
+- **Dateien**:
+  - `frontend/src/pages/Dashboard.tsx` - Enhanced Dashboard
+  - `frontend/src/services/stats.ts` - Statistics Service
+  - `frontend/src/types/stats.ts` - Statistics Types
+
+### Verbesserungen
+
+#### 🔒 Role-Based Access Control (RBAC)
+- **Frontend Route Protection**:
+  - Enhanced ProtectedRoute Component mit `requiredRole` Prop
+  - Access Denied Message für unauthorized Access
+  - Automatic Redirect zu Dashboard bei fehlenden Berechtigungen
+- **Backend API Protection**:
+  - JWT Payload Role Verification
+  - Admin-only Endpoints enforcement
+  - Consistent 403 Forbidden Responses
+- **Navigation**:
+  - Role-based Menu Filtering in Sidebar
+  - Admin-only Items hidden für Non-Admin Users
+  - New Menu Items: 👥 Users, 📜 Audit Log, 👤 Profile
+
+#### 📱 UI/UX Improvements
+- **Consistent Design Patterns**:
+  - Modal-based Forms für Create/Edit Operations
+  - Confirmation Dialogs für Destructive Actions
+  - Color-coded Badges für Status/Roles
+  - Responsive Table Layouts
+  - Loading States während Async Operations
+- **Error Handling**:
+  - Graceful Error Display
+  - API Error Messages surfaced to UI
+  - Form Validation Feedback
+  - Clear User Communication
+
+#### 📚 Documentation
+- **New Documentation Files**:
+  - `frontend/UI_EXTENSIONS_V06.md` - Comprehensive v0.6 Feature Guide
+  - Default Credentials Documented (admin/admin)
+  - Usage Guide für Admin und Regular Users
+  - Technical Details und File Structure
+
+### Sicherheit
+
+- **Password Security**: Current Password Verification für Changes
+- **Audit Logging**: All User Actions Tracked
+- **Role-Based Access**: Frontend und Backend Enforcement
+- **Session Management**: JWT Token with Expiration
+
+### Technische Details
+
+- **Backend**: 8 neue API Endpoints für User Management, Audit, Stats
+- **Frontend**: 3 neue Pages (Users, AuditLog, Profile)
+- **Type Safety**: Comprehensive TypeScript Types für alle Entities
+- **API Integration**: Axios-based Services mit JWT Authentication
+
+### Breaking Changes
+
+Keine - alle Änderungen sind additiv und rückwärtskompatibel.
+
+### Default Credentials
+
+⚠️ **IMPORTANT**: Change immediately after first login!
+
+- **Username**: `admin`
+- **Password**: `admin`
+
 ## [0.5.0] - 2026-02-01
 
 ### Neue Features

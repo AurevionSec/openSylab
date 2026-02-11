@@ -2,13 +2,16 @@ import { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout/Layout';
 import { Card } from '../components/common/Card';
 import { Button } from '../components/common/Button';
+import { DeleteConfirmDialog } from '../components/common/DeleteConfirmDialog';
 import { OrderCreateModal } from '../components/Orders/OrderCreateModal';
 import { OrderEditModal } from '../components/Orders/OrderEditModal';
-import { getOrders } from '../services/orders';
+import { getOrders, deleteOrder } from '../services/orders';
 import type { Order } from '../types/order';
-import { ORDER_STATUSES, ORDER_STATUS_COLORS, ORDER_PRIORITIES, ORDER_PRIORITY_COLORS } from '../utils/constants';
+import { ORDER_STATUSES, ORDER_PRIORITIES } from '../utils/constants';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 
 export const Orders = () => {
+  useDocumentTitle({ module: 'Orders' });
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -19,6 +22,8 @@ export const Orders = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [orderToDelete, setOrderToDelete] = useState<Order | null>(null);
   const itemsPerPage = 20;
 
   useEffect(() => {
@@ -103,6 +108,40 @@ export const Orders = () => {
     fetchOrders();
   };
 
+  const handleDeleteClick = (order: Order) => {
+    setOrderToDelete(order);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!orderToDelete) return;
+
+    console.log('[Orders] Deleting order:', orderToDelete.id);
+    await deleteOrder(orderToDelete.id.toString());
+
+    console.log('[Orders] Order deleted successfully');
+    // Refresh the orders list
+    const fetchOrders = async () => {
+      setLoading(true);
+      try {
+        const data = await getOrders({
+          status: selectedStatus || undefined,
+          priority: selectedPriority || undefined,
+          limit: itemsPerPage,
+          offset: (currentPage - 1) * itemsPerPage,
+        });
+        setOrders(data.orders);
+        setTotalOrders(data.total);
+      } catch (err) {
+        setError('Failed to load orders');
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    await fetchOrders();
+  };
+
   const totalPages = Math.ceil(totalOrders / itemsPerPage);
 
   return (
@@ -141,7 +180,7 @@ export const Orders = () => {
                     setSelectedStatus(e.target.value);
                     setCurrentPage(1);
                   }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="">All Statuses</option>
                   {Object.entries(ORDER_STATUSES).map(([key, label]) => (
@@ -162,7 +201,7 @@ export const Orders = () => {
                     setSelectedPriority(e.target.value);
                     setCurrentPage(1);
                   }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="">All Priorities</option>
                   {Object.entries(ORDER_PRIORITIES).map(([key, label]) => (
@@ -175,7 +214,7 @@ export const Orders = () => {
             </div>
 
             {error && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+              <div className="bg-red-50 border border-red-200 rounded p-4 mb-6">
                 <p className="text-red-800">{error}</p>
               </div>
             )}
@@ -194,118 +233,117 @@ export const Orders = () => {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
+                <table className="min-w-full">
+                  <thead className="bg-[#F4F5F7]">
                     <tr>
-                      <th
-                        scope="col"
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                      >
+                      <th className="px-6 py-3 text-left text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">
                         Order ID
                       </th>
-                      <th
-                        scope="col"
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                      >
+                      <th className="px-6 py-3 text-left text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">
                         Sample ID
                       </th>
-                      <th
-                        scope="col"
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                      >
+                      <th className="px-6 py-3 text-left text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">
                         Test Type
                       </th>
-                      <th
-                        scope="col"
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                      >
+                      <th className="px-6 py-3 text-left text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">
                         Status
                       </th>
-                      <th
-                        scope="col"
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                      >
+                      <th className="px-6 py-3 text-left text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">
                         Priority
                       </th>
-                      <th
-                        scope="col"
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                      >
+                      <th className="px-6 py-3 text-left text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">
                         Requested By
                       </th>
-                      <th
-                        scope="col"
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                      >
+                      <th className="px-6 py-3 text-left text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">
                         Requested Date
                       </th>
-                      <th
-                        scope="col"
-                        className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
-                      >
+                      <th className="px-6 py-3 text-right text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">
                         Actions
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {orders.map((order) => (
-                      <tr key={order.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900">
-                            {order.order_id}
-                          </div>
+                  <tbody className="bg-white">
+                    {orders.map((order, idx) => (
+                      <tr key={order.id} className={`hover:bg-[#F4F5F7] transition-colors duration-100 ${idx % 2 === 1 ? 'bg-[#FAFBFC]' : ''}`}>
+                        <td className="px-6 py-2.5 whitespace-nowrap text-sm font-mono font-bold text-[#1A1C20] border-b border-[#E2E8F0]">
+                          {order.order_id}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">{order.sample_id}</div>
+                        <td className="px-6 py-2.5 whitespace-nowrap text-sm font-mono text-[#5E6C84] border-b border-[#E2E8F0]">
+                          {order.sample_id}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">{order.test_type}</div>
+                        <td className="px-6 py-2.5 whitespace-nowrap text-sm font-medium text-[#1A1C20] border-b border-[#E2E8F0]">
+                          {order.test_type}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span
-                            className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                              ORDER_STATUS_COLORS[order.status]
-                            }`}
-                          >
-                            {ORDER_STATUSES[order.status]}
+                        <td className="px-6 py-2.5 whitespace-nowrap border-b border-[#E2E8F0]">
+                          <span className={`px-2 py-1 text-[10px] font-bold uppercase tracking-wider border inline-block ${
+                            order.status === 'REQUESTED' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                            order.status === 'IN_PROGRESS' ? 'bg-yellow-50 text-yellow-800 border-yellow-200' :
+                            order.status === 'COMPLETED' ? 'bg-green-50 text-green-700 border-green-200' :
+                            order.status === 'VALIDATED' ? 'bg-green-50 text-green-700 border-green-200' :
+                            order.status === 'CANCELLED' ? 'bg-red-50 text-red-700 border-red-200' :
+                            'bg-gray-100 text-gray-600 border-gray-300'
+                          }`}>
+                            {order.status.replace('_', ' ')}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span
-                            className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                              ORDER_PRIORITY_COLORS[order.priority]
-                            }`}
-                          >
-                            {ORDER_PRIORITIES[order.priority]}
+                        <td className="px-6 py-2.5 whitespace-nowrap border-b border-[#E2E8F0]">
+                          <span className={`px-2 py-1 text-[10px] font-bold uppercase tracking-wider border inline-block ${
+                            order.priority === 'EMERGENCY' ? 'bg-red-50 text-red-700 border-red-200' :
+                            order.priority === 'URGENT' ? 'bg-orange-50 text-orange-700 border-orange-200' :
+                            'bg-gray-100 text-gray-700 border-gray-300'
+                          }`}>
+                            {order.priority}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <td className="px-6 py-2.5 whitespace-nowrap text-sm text-[#5E6C84] border-b border-[#E2E8F0]">
                           {order.requested_by}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {new Date(order.requested_date).toLocaleDateString()}
+                        <td className="px-6 py-2.5 whitespace-nowrap text-sm font-mono text-[#5E6C84] border-b border-[#E2E8F0]">
+                          {new Date(order.requested_date).toLocaleDateString('de-DE')}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => handleEditClick(order.order_id)}
-                          >
-                            <span className="flex items-center gap-1">
-                              <svg
-                                className="w-4 h-4"
-                                fill="none"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth="2"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                              >
-                                <path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
-                              </svg>
-                              Edit
-                            </span>
-                          </Button>
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => handleEditClick(order.order_id)}
+                            >
+                              <span className="flex items-center gap-1">
+                                <svg
+                                  className="w-4 h-4"
+                                  fill="none"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth="2"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                </svg>
+                                Edit
+                              </span>
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteClick(order)}
+                            >
+                              <span className="flex items-center gap-1">
+                                <svg
+                                  className="w-4 h-4"
+                                  fill="none"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth="2"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                </svg>
+                                Delete
+                              </span>
+                            </Button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -396,6 +434,18 @@ export const Orders = () => {
           setSelectedOrderId(null);
         }}
         onSuccess={handleEditSuccess}
+      />
+
+      <DeleteConfirmDialog
+        isOpen={isDeleteDialogOpen}
+        onClose={() => {
+          setIsDeleteDialogOpen(false);
+          setOrderToDelete(null);
+        }}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Order"
+        message="Are you sure you want to delete this order? This will permanently remove all associated data."
+        itemName={orderToDelete?.order_id}
       />
     </Layout>
   );

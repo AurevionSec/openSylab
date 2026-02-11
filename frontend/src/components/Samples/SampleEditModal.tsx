@@ -8,7 +8,7 @@ import { SAMPLE_STATUSES } from '../../utils/constants';
 
 interface SampleEditModalProps {
   isOpen: boolean;
-  sampleId: number | null;
+  sampleId: string | null;
   onClose: () => void;
   onSuccess?: (sample: Sample) => void;
 }
@@ -94,8 +94,8 @@ export const SampleEditModal = ({ isOpen, sampleId, onClose, onSuccess }: Sample
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 animate-backdrop">
+      <div className="bg-white rounded shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-slide-top">
         <div className="p-6">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-bold text-gray-900">Edit Sample</h2>
@@ -128,7 +128,7 @@ export const SampleEditModal = ({ isOpen, sampleId, onClose, onSuccess }: Sample
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               {error && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <div className="bg-red-50 border border-red-200 rounded p-4">
                   <p className="text-red-800 text-sm">{error}</p>
                 </div>
               )}
@@ -170,7 +170,7 @@ export const SampleEditModal = ({ isOpen, sampleId, onClose, onSuccess }: Sample
                 <select
                   value={formData.status}
                   onChange={(e) => handleChange('status', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#0055FF] focus:border-transparent"
                   required
                 >
                   {Object.entries(SAMPLE_STATUSES).map(([key, label]) => (
@@ -190,7 +190,7 @@ export const SampleEditModal = ({ isOpen, sampleId, onClose, onSuccess }: Sample
                   onChange={(e) => handleChange('description', e.target.value)}
                   placeholder="Enter sample description (optional)"
                   rows={4}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#0055FF] focus:border-transparent resize-none"
                 />
               </div>
 

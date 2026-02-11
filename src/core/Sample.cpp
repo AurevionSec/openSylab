@@ -21,17 +21,17 @@ std::string Sample::getStatusString() const { return statusToString(status_); }
 std::string Sample::statusToString(Status status) {
   switch (status) {
   case Status::REGISTERED:
-    return "Erfasst";
+    return "REGISTERED";
   case Status::IN_ANALYSIS:
-    return "In Analyse";
+    return "IN_ANALYSIS";
   case Status::ANALYZED:
-    return "Analysiert";
+    return "ANALYZED";
   case Status::VALIDATED:
-    return "Validiert";
+    return "VALIDATED";
   case Status::ARCHIVED:
-    return "Archiviert";
+    return "ARCHIVED";
   default:
-    return "Unbekannt";
+    return "UNKNOWN";
   }
 }
 

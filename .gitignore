@@ -64,6 +64,9 @@ openSylab
 *.db
 *.sqlite
 *.sqlite3
+*.db-journal
+*.db-shm
+*.db-wal
 
 # Log files
 *.log
@@ -76,3 +79,29 @@ openSylab
 # Configuration files with sensitive data
 config/local_*.conf
 config/*_local.conf
+
+# Tools binaries (keep source .cpp files)
+tools/create_admin
+tools/hash_password
+tools/test_*
+!tools/*.cpp
+
+# Test and temporary files
+PROJECT_INDEX.json
+scripts/
+--help
+test_stats_*.db-journal
+/tmp/
+
+# TLS/SSL certificates and keys
+certs/
+*.pem
+*.crt
+*.key
+*.csr
+
+# Node modules (frontend)
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/build/

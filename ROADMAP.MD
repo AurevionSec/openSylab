@@ -25,7 +25,7 @@ OpenSylab folgt dem Prinzip **"Stabilität vor Features"**. Jede Version wird er
 
 ---
 
-## Version 0.2.0 (Aktuell) ✓ ABGESCHLOSSEN
+## Version 0.2.0 ✓ ABGESCHLOSSEN
 
 **Status:** Erweiterte CLI mit LIMS-Kernfunktionen
 **Release-Datum:** 2026-01-02
@@ -80,103 +80,365 @@ src/
 
 ---
 
-## Version 0.5 - REST-API & Web-Interface (Alpha)
+## Version 0.5.0 ✓ ABGESCHLOSSEN
 
-**Status:** Konzeptphase
-**Geschätzter Zeitrahmen:** Q3 2026
+**Status:** REST-API & React Web-Interface (Alpha)
+**Release-Datum:** 2026-02-01
 
-### Ziele
-
-Einführung einer REST-API und eines Web-Frontends als Alternative zur CLI. Dies ist der Übergang von einer Desktop-Anwendung zu einem netzwerkfähigen System.
-
-### Geplante Features
+### Implementierte Features
 
 #### API-Schicht
 
-- **REST-API** (C++ Backend):
-  - Framework: drogon oder CppRestSDK
-  - Endpoints für alle CRUD-Operationen
-  - JSON-basierte Kommunikation
-  - HTTPS/TLS-Verschlüsselung
-  - JWT-Authentifizierung
-  - OpenAPI/Swagger-Dokumentation
+- ✅ **REST-API** (C++ Backend):
+  - Custom HTTP-Server mit JSON-Support
+  - Endpoints für alle CRUD-Operationen (GET, POST, PUT)
+  - Core Endpoints: /api/v1/samples, /api/v1/orders, /api/v1/results
+  - HTTPS/TLS-Verschlüsselung mit OpenSSL 3.x
+  - JWT-Authentifizierung mit jwt-cpp v0.7.0
+  - CORS-Unterstützung für Frontend
+  - Konsistente Fehlerbehandlung
 
 #### Web-Frontend (Alpha)
 
-- **Technologie**: React oder Angular
-- **Funktionen**:
+- ✅ **React 18 + TypeScript**:
+  - Vite 5 Build-Tool mit HMR
+  - TailwindCSS 3 für responsive UI
+  - React Router 6 für SPA-Navigation
+  - Axios HTTP-Client mit JWT-Interceptors
+
+- ✅ **Funktionen**:
   - Dashboard mit Übersicht
-  - Probenverwaltung (analog zur CLI)
-  - Suchfunktionen
-  - CSV-Import über Upload
-  - Einfache Statistiken
+  - Probenverwaltung (Samples): Liste, Filtering, Detail-Ansicht
+  - Auftragsverwaltung (Orders): Liste, Dual-Filtering (Status + Priority)
+  - Ergebnisverwaltung (Results): Liste, Dual-Filtering (Status + Flag)
+  - Protected Routes mit JWT-Auth
+  - Real-time Formularvalidierung
   - Responsive Design (Desktop + Tablet)
 
-#### Erweiterte Features
+#### Authentifizierung & Sicherheit
 
-- **Verbesserte Benutzer-/Rollenverwaltung**:
-  - Feingranulare Berechtigungen (RBAC)
-  - Mehrere Benutzerrollen (Admin, Laborant, Qualitätsbeauftragter)
-  - Audit-Trail für Zugriffe
+- ✅ **JWT-basierte Authentifizierung**:
+  - Token-basierte Auth (JWT mit HS256)
+  - Login-Endpoint mit Username/Password
+  - 60-Minuten Token-Gültigkeit
+  - Automatische Token-Validierung
+  - Rückwärtskompatibilität mit API-Key
 
-- **Erweiterte Statistiken**:
-  - Grafische Darstellung von Kennzahlen
-  - Zeitreihen-Analysen
-  - Export von Reports
+- ✅ **TLS/HTTPS**:
+  - OpenSSL-Integration
+  - TLS 1.2+ mit modernen Cipher Suites
+  - Optionaler HTTPS-Modus
+  - Zertifikatsverwaltung
 
 ### Architektur
 
 ```text
 ┌─────────────┐
-│ Web-Browser │
+│ Web-Browser │ (React + TypeScript)
 └──────┬──────┘
-       │ HTTPS/REST
+       │ HTTPS/REST + JWT
 ┌──────▼──────┐
-│  API Server │ (C++)
-│  (drogon)   │
+│  API Server │ (C++ Custom HTTP Server)
+│  + JWT Auth │
 └──────┬──────┘
        │
 ┌──────▼──────┐     ┌─────────┐
-│  PostgreSQL │◄────┤   CLI   │
+│   SQLite    │◄────┤   CLI   │
 └─────────────┘     └─────────┘
 ```
 
 ### Tests
 
-- API-Tests (REST-Endpoints)
-- Frontend-Unit-Tests (Jest/Jasmine)
-- End-to-End-Tests (Selenium/Cypress)
+- ✅ 62 Backend Unit-Tests
+- API-Tests für alle Endpoints (manuell)
+- Frontend-Integration (lokal getestet)
 
 ---
 
-## Version 0.6 - Dockerisierung
+## Version 0.6.0 ✓ ABGESCHLOSSEN (Aktuell)
 
-**Status:** Geplant
-**Geschätzter Zeitrahmen:** Q4 2026
+**Status:** User Management & Enhanced UI
+**Release-Datum:** 2026-02-03
 
-### Ziele
+### Implementierte Features
 
-Bereitstellung einer containerisierten OpenSylab-Version für einfache Installation,
-standardisierte Deployments und reproduzierbare Umgebungen.
+#### User Management System
 
-### Geplante Features
+- ✅ **Admin-only Benutzerverwaltung**:
+  - CRUD Interface für User Management
+  - Role-Based Access Control (RBAC)
+  - Rollen: ADMIN, OPERATOR, VIEWER, CUSTOM
+  - Benutzer aktivieren/deaktivieren
+  - Vollständige Benutzerdaten (Name, E-Mail, Rolle)
 
-- **Docker-Images** für OpenSylab (CLI + API)
-- **docker-compose** für lokale Stacks (DB + App)
-- **Konfigurations-Templates** (env/volume mounts)
-- **Dokumentation** für Build/Run/Upgrade
+- ✅ **User Profile Management**:
+  - Benutzerprofil-Seite für alle User
+  - Passwortänderung mit Validierung
+  - Anzeige von User-Informationen
+  - Last Login Tracking
+
+#### Audit Log & Compliance
+
+- ✅ **Audit Log Viewer**:
+  - Admin-only Audit Trail Anzeige
+  - Filterung nach User, Action, Entity, Zeitraum
+  - Compliance-Tracking für ISO 15189
+  - Unveränderliche Audit-Einträge
+  - Detaillierte Aktionsprotokolle (CREATE, UPDATE, DELETE, LOGIN, LOGOUT)
+
+#### Enhanced Dashboard
+
+- ✅ **Multi-Entity Statistiken**:
+  - Samples Status-Breakdown mit Zählungen
+  - Orders Status-Breakdown mit Zählungen
+  - Results Status-Breakdown mit Zählungen
+  - Real-time Daten vom Backend
+  - Server-seitige Aggregation
+
+#### API-Erweiterungen
+
+- ✅ **8 neue API-Endpoints**:
+  - GET/POST /api/v1/users - User Management (Admin only)
+  - PUT /api/v1/users/:id - Update User (Admin only)
+  - DELETE /api/v1/users/:id - Delete User (Admin only)
+  - GET /api/v1/users/me - Get Current User Profile
+  - PUT /api/v1/users/me/password - Change Password
+  - GET /api/v1/audit - Audit Log (Admin only)
+  - GET /api/v1/stats - Dashboard Statistics
+
+- ✅ **Role-Based Access Control auf API-Ebene**:
+  - JWT-Token mit Role-Information
+  - Endpoint-basierte Zugriffssteuerung
+  - 403 Forbidden für unberechtigte Zugriffe
+
+#### Frontend-Erweiterungen
+
+- ✅ **3 neue UI-Pages**:
+  - Users Page: Admin-only User Management mit CRUD
+  - Audit Log Page: Admin-only Compliance-Viewer
+  - Profile Page: User Profile mit Passwortänderung
+
+- ✅ **UI/UX Improvements**:
+  - Role-basierte Navigation (Sidebar-Filterung)
+  - Modal-basierte Create/Edit Forms
+  - Color-coded Status Badges
+  - Enhanced Protected Routes mit requiredRole
+  - TypeScript Type Safety für alle Entities
+
+### Architektur-Verbesserungen
+
+```text
+┌─────────────────────────┐
+│ React Frontend (TS)     │
+│ - Dashboard (Enhanced)  │
+│ - Samples/Orders/Results│
+│ - Users (Admin)         │
+│ - Audit Log (Admin)     │
+│ - Profile               │
+└──────────┬──────────────┘
+           │ HTTPS/REST + JWT (with Roles)
+┌──────────▼──────────────┐
+│  API Server (C++)       │
+│  - 30+ Endpoints        │
+│  - RBAC Middleware      │
+│  - Audit Logging        │
+└──────────┬──────────────┘
+           │
+┌──────────▼──────────────┐
+│   SQLite Database       │
+│   - Users Table         │
+│   - Audit_Entries Table │
+│   - Stats Aggregation   │
+└─────────────────────────┘
+```
+
+### Statistiken
+
+- **22 neue Dateien** im Frontend
+- **6,436 Insertions** (Code-Zeilen)
+- **38 Deletions**
+- **8 neue API-Endpoints**
+- **3 neue UI-Pages**
+- Version Bump: 0.2.0 → 0.6.0
+
+### Bekannte Einschränkungen (v0.6.0)
+
+⚠️ **NICHT für Produktion bereit** - Folgende Punkte müssen in v0.7.0 adressiert werden:
+
+- **Password Hashing**: Aktuell DJB2 (nur Development!) - muss auf bcrypt/argon2 umgestellt werden
+- **JWT Secret**: Hardcoded - muss externalisiert werden (Environment Variable)
+- **Default Credentials**: admin/admin MÜSSEN geändert werden
+- **HTTPS**: Optional - sollte für Produktion erzwungen werden
 
 ### Tests
 
-- Container-Build-Tests
-- Smoke-Tests (Start/Healthcheck)
+- ✅ 62 Backend Unit-Tests (bestehend)
+- API-Tests für neue Endpoints (manuell getestet)
+- Frontend-Integration (lokal getestet)
+- Login/Auth Flow vollständig getestet
+
+---
+
+## Version 0.7.0 - Production Security & Docker
+
+**Status:** In Planung
+**Geschätzter Zeitrahmen:** Q2 2026 (4-6 Wochen)
+
+### Ziele
+
+Produktionsreife Sicherheit, Docker-Containerisierung und Vervollständigung der CRUD-Operationen im Frontend. Diese Version fokussiert sich auf die Beseitigung aller bekannten Sicherheitslücken aus v0.6.0.
+
+### Geplante Features (Priorität P0/P1)
+
+#### Sicherheits-Verbesserungen (P0 - KRITISCH)
+
+- **🔒 Produktionsreifes Password Hashing**:
+  - Ersetzen von DJB2 durch bcrypt oder argon2
+  - Password Strength Validation
+  - Migration bestehender Passwort-Hashes
+  - Password Strength Indicator in UI
+
+- **🔒 Secrets Management**:
+  - JWT-Secret aus Environment Variable
+  - Konfigurationsdatei (opensylab.conf)
+  - Dokumentation für Secret Rotation
+  - --config CLI-Flag für Konfigurationsdatei
+
+- **🔒 HTTPS Enforcement**:
+  - Erzwungenes HTTPS in Production Mode
+  - HTTP → HTTPS Redirect
+  - Let's Encrypt Integration Guide
+  - Zertifikats-Setup Dokumentation
+
+#### Frontend CRUD Completion (P1)
+
+- **Samples Management**:
+  - Create Sample Modal/Form
+  - Edit Sample Modal/Form
+  - Delete Confirmation Dialog
+  - Barcode Scanning Integration
+
+- **Orders Management**:
+  - Create Order Form
+  - Edit Order Form
+  - Link Orders to Samples
+  - Status Workflow Transitions
+
+- **Results Management**:
+  - Result Entry Form
+  - Validation Workflow
+  - Plausibility Checking UI
+  - Reference Range Validation
+
+#### API-Erweiterungen (P1)
+
+- **DELETE Endpoints**:
+  - DELETE /api/v1/samples/:id (Soft-Delete)
+  - DELETE /api/v1/orders/:id (Soft-Delete)
+  - DELETE /api/v1/results/:id (Soft-Delete)
+  - Audit Log für alle Deletes
+
+#### Docker-Containerisierung (P1)
+
+- **Production Docker Setup**:
+  - Multi-stage Dockerfile für Backend
+  - Dockerfile für Frontend (nginx)
+  - Docker Compose für Production
+  - Environment Variable Configuration
+  - Volume Mounts für Datenpersistenz
+  - Health Check Endpoints
+
+#### Dokumentation (P1)
+
+- **API-Dokumentation**:
+  - OpenAPI 3.0 Specification
+  - Dokumentation aller 30+ Endpoints
+  - Request/Response Schemas
+  - Swagger UI at /api/docs
+
+- **Production Deployment Guide**:
+  - Server Requirements (CPU, RAM, Disk)
+  - Installation Steps (Ubuntu/Debian)
+  - HTTPS Certificate Setup
+  - Database Backup Procedures
+  - Monitoring & Logging Setup
+  - Security Hardening Checklist
+
+#### Testing (P1)
+
+- **Integration Tests**:
+  - User Management CRUD Tests
+  - Audit Log Filtering Tests
+  - Statistics Endpoints Tests
+  - RBAC Tests
+  - Password Change Flow Tests
+
+- **Frontend Tests**:
+  - Jest + React Testing Library Setup
+  - Authentication Context Tests
+  - Protected Routes Tests
+  - Component Tests (Users, Audit Log, Profile)
+
+### Geschätzter Aufwand
+
+- Sicherheit (P0): 5-7 Tage
+- Frontend CRUD (P1): 10-12 Tage
+- Docker (P1): 3-4 Tage
+- Dokumentation (P1): 5-6 Tage
+- Testing (P1): 5-6 Tage
+
+**Gesamt:** 4-6 Wochen (bei Vollzeit-Entwicklung)
+
+### Definition of Done
+
+- ✓ Alle P0-Security-Tasks abgeschlossen
+- ✓ bcrypt/argon2 implementiert und getestet
+- ✓ JWT-Secret externalisiert
+- ✓ HTTPS erzwungen in Production Mode
+- ✓ Frontend CRUD vollständig für Samples, Orders, Results
+- ✓ Docker Compose Setup funktioniert
+- ✓ OpenAPI Dokumentation erstellt
+- ✓ Production Deployment Guide geschrieben
+- ✓ Integration Tests bestehen
+- ✓ Frontend Tests bestehen
+
+---
+
+## Version 0.8.0 - PostgreSQL & Advanced Features
+
+**Status:** Geplant
+**Geschätzter Zeitrahmen:** Q3 2026
+
+### Geplante Features (P2)
+
+- **PostgreSQL Support**:
+  - libpqxx Integration
+  - Database Adapter Pattern
+  - Connection Pooling
+  - Migration System
+
+- **Advanced Frontend Features**:
+  - Data Visualization (Charts.js/Recharts)
+  - CSV Import UI
+  - Advanced Filtering
+  - Export Functionality
+
+- **Security Enhancements**:
+  - Two-Factor Authentication (TOTP)
+  - LDAP/Active Directory Integration
+  - Rate Limiting
+
+- **Reporting**:
+  - PDF Report Generation
+  - Excel/CSV Export
+  - Custom Report Templates
 
 ---
 
 ## Version 1.0 - Produktionsreifes LIMS
 
 **Status:** Vision
-**Geschätzter Zeitrahmen:** Q2 2027
+**Geschätzter Zeitrahmen:** Q4 2026 - Q1 2027
 
 ### Ziele
 
@@ -326,10 +588,10 @@ Erste produktionsreife Version mit vollständigem Feature-Set für kleine bis mi
 
 Die Roadmap ist flexibel und wird basierend auf Community-Feedback angepasst. Aktuelle Prioritäten:
 
-1. **Höchste Priorität**: Stabilität und Zuverlässigkeit der Kern-Features
-2. **Hohe Priorität**: PostgreSQL-Support und Basis-API (v0.2-0.5)
-3. **Mittlere Priorität**: Web-Interface und erweiterte Features (v0.5-1.0)
-4. **Niedrige Priorität**: KI und Multi-Site (v2.0+)
+1. **Höchste Priorität (P0)**: Produktionsreife Sicherheit (v0.7.0)
+2. **Hohe Priorität (P1)**: Frontend CRUD Completion, Docker, API-Dokumentation (v0.7.0)
+3. **Mittlere Priorität (P2)**: PostgreSQL, Advanced Features, Reporting (v0.8.0)
+4. **Niedrige Priorität (P3)**: KI, Multi-Site, Enterprise Features (v2.0+)
 
 ---
 
@@ -339,9 +601,11 @@ Die Roadmap ist flexibel und wird basierend auf Community-Feedback angepasst. Ak
 |---------|--------|-------------|---------------|
 | v0.1.1  | ✅ Abgeschlossen | 100% | 2025-11-25 |
 | v0.2.0  | ✅ Abgeschlossen | 100% | 2026-01-02 |
-| v0.5    | 💡 Konzept | 0% | Q3 2026 |
-| v0.6    | 🛠️ Geplant | 0% | Q4 2026 |
-| v1.0    | 💡 Vision | 0% | Q2 2027 |
+| v0.5.0  | ✅ Abgeschlossen | 100% | 2026-02-01 |
+| v0.6.0  | ✅ Abgeschlossen | 100% | 2026-02-03 |
+| v0.7.0  | 🛠️ In Planung | 0% | Q2 2026 (4-6 Wochen) |
+| v0.8.0  | 💡 Geplant | 0% | Q3 2026 |
+| v1.0    | 💡 Vision | 0% | Q4 2026 - Q1 2027 |
 | v2.0    | 💭 Langfristig | 0% | 2028+ |
 
 ---
@@ -363,5 +627,7 @@ Diese Roadmap ist ein lebendiges Dokument. Wir freuen uns über:
 
 ---
 
-**Letzte Aktualisierung:** 2026-01-31
-**Version des Dokuments:** 1.3
+**Letzte Aktualisierung:** 2026-02-03
+**Version des Dokuments:** 2.0 (v0.6.0 Release Update)
+**Aktueller Release:** v0.6.0
+**Nächster Release:** v0.7.0 (Production Security & Docker)

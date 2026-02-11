@@ -8,6 +8,8 @@
 #include <sqlite3.h>
 #include <sstream>
 #include <vector>
+#include <openssl/hmac.h>
+#include <cstring>
 
 namespace {
 // Stellt sicher, dass vorbereitete Statements immer finalisiert werden.
@@ -32,17 +34,53 @@ std::string maskPathForAudit(const std::string &path) {
   }
 }
 
+// RFC 6238 TOTP (Time-Based One-Time Password) using HMAC-SHA1
+// This is the INDUSTRY STANDARD for 2FA/MFA tokens (used by Google Authenticator, etc.)
 int computeMfaCode(const std::string &secret, std::time_t now) {
-  const long step = static_cast<long>(now / 30);
-  const std::string material = secret + ":" + std::to_string(step);
-
-  unsigned long hash = 5381;
-  for (unsigned char c : material) {
-    hash = ((hash << 5) + hash) ^ c;
+  if (secret.empty()) {
+    return -1;
   }
-  return static_cast<int>(hash % 1000000UL);
+
+  // Step 1: Calculate time counter (T)
+  // T = (current_time - T0) / X, where T0 = 0 (Unix epoch) and X = 30 seconds
+  uint64_t timeStep = static_cast<uint64_t>(now) / 30;
+
+  // Step 2: Convert time counter to 8-byte big-endian array
+  unsigned char timeBytes[8];
+  uint64_t timeStepCopy = timeStep; // Mutable copy for bit shifting
+  for (int i = 7; i >= 0; i--) {
+    timeBytes[i] = static_cast<unsigned char>(timeStepCopy & 0xFF);
+    timeStepCopy >>= 8;
+  }
+
+  // Step 3: Compute HMAC-SHA1(secret, timeBytes)
+  unsigned char hmac[20]; // SHA1 produces 20 bytes
+  unsigned int hmacLen = 20;
+
+  HMAC(EVP_sha1(),
+       secret.c_str(), secret.length(),
+       timeBytes, sizeof(timeBytes),
+       hmac, &hmacLen);
+
+  // Step 4: Dynamic Truncation (RFC 6238 Section 5.3)
+  // Offset = last nibble of HMAC
+  int offset = hmac[19] & 0x0F;
+
+  // Step 5: Extract 4 bytes starting at offset
+  uint32_t truncatedHash =
+    ((hmac[offset] & 0x7F) << 24) |  // Mask most significant bit
+    ((hmac[offset + 1] & 0xFF) << 16) |
+    ((hmac[offset + 2] & 0xFF) << 8) |
+    (hmac[offset + 3] & 0xFF);
+
+  // Step 6: Generate 6-digit code
+  int code = static_cast<int>(truncatedHash % 1000000);
+
+  return code;
 }
 
+// RFC 6238 TOTP verification with ±1 time window tolerance (90 seconds total)
+// This accounts for clock drift and network latency
 bool verifyMfaCode(const std::string &secret, const std::string &code) {
   if (secret.empty() || code.empty()) {
     return false;
@@ -55,6 +93,8 @@ bool verifyMfaCode(const std::string &secret, const std::string &code) {
     return false;
   }
 
+  // Check current time window and ±1 adjacent windows (30 seconds each)
+  // This provides 90-second total acceptance window for better usability
   const std::time_t now = std::time(nullptr);
   for (int offset = -1; offset <= 1; ++offset) {
     const std::time_t candidate = now + static_cast<std::time_t>(offset * 30);

@@ -5,8 +5,10 @@ import { useAuth } from '../context/AuthContext';
 import { Input } from '../components/common/Input';
 import { Button } from '../components/common/Button';
 import { Card } from '../components/common/Card';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 
 export const Login = () => {
+  useDocumentTitle({ action: 'Sign In' });
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');

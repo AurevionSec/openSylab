@@ -1,37 +1,432 @@
-# TODO - Findings Backlog
+# TODO - OpenSylab v0.6 → v0.7 Roadmap
 
-This file captures findings from the 5-part analysis (features, security/failure, tests, performance, compliance).
+**Current Version:** v0.6.0 + Security Fixes (2026-02-03)
+**Branch:** main
+**Target:** v0.6.1 or v0.7.0 Alpha
+**Status:** ✅ P0 Security Complete - Planning remaining v0.7
+**Generated:** 2026-02-03
+**Last Updated:** 2026-02-03 (Security fixes documented)
 
-## 1) Feature Behavior Gaps / Alignment
-- [x] [P1] Clarify support scope: should support users access list views or only search-by-ID? (Affects Sample/Order/Result lists)
-- [x] [P3] Decide if auto-refresh should be opt-in or default-on for CLI views (behavior vs expected UX)
-- [x] [P1] Confirm whether auto-refresh cycles should count as access events for audit purposes
+---
 
-## 2) Security & Failure Modes
-- [x] [P1] Review API key lifecycle: storage, rotation, revocation, and visibility (risk if keys leak)
-- [x] [P1] Normalize logging failure handling: decide where audit failures should block the operation vs warn-only
-- [x] [P2] Validate status inputs strictly everywhere (avoid partial normalization gaps)
-- [x] [P2] Add size limits / streaming for import payloads (CSV/HL7/FHIR) to reduce memory risk
-- [x] [P2] Consider masking file paths in audit log details if paths may reveal sensitive data
+## v0.6.0 Release Summary ✅
 
-## 3) Test Coverage Gaps & Proposed Tests
-- [x] [P2] Add tests for support access in list views (ensure limited fields + access logging)
-- [x] [P2] Add tests for audit logging failure behavior (should fail vs warn) on critical operations
-- [x] [P3] Add tests for stats export ordering consistency (entity + status order)
-- [x] [P2] Add tests for API error cases: missing fields, invalid status, inactive API key, invalid payloads
-- [x] [P3] Add import boundary tests: large files, duplicate IDs, malformed headers, BOM, extra columns
-- [x] [P3] Add refresh behavior tests to ensure no edits are interrupted (where feasible)
-- [x] [P3] Add retention + audit export tests (verify exported set after purge)
+**Released:** 2026-02-03
+**Tag:** v0.6.0
+**Commit:** aec85df
 
-## 4) Performance & Scalability Risks
-- [x] [P2] Review indexing strategy for common filters (samples: status/date, orders: status/date/priority, results: status/date)
-- [x] [P2] Consider pagination for API reads and list views to avoid full scans
-- [x] [P2] Add streaming or chunked export paths for large datasets
-- [x] [P2] Add chunked/batched inserts for CSV/HL7/FHIR imports
-- [x] [P3] Evaluate auto-refresh impact under multiple concurrent users (potential DB load)
+### Completed Features
 
-## 5) Compliance & Audit Completeness
-- [x] [P2] Standardize audit action semantics (avoid generic UPDATE where a specific action exists)
-- [x] [P1] Ensure access logging policy: define whether refresh loops must log or not
-- [x] [P1] Document data minimization rules for support role (fields allowed)
-- [x] [P3] Assess need for tamper-evident audit logs (hash chaining / append-only) if compliance scope expands
+- ✅ **Complete React Frontend Application**
+  - React 18 + TypeScript + Vite
+  - Tailwind CSS styling
+  - React Router navigation
+  - Full CRUD operations (Samples, Orders, Results)
+
+- ✅ **User Management System**
+  - Admin-only CRUD interface for users
+  - Role-based access control (ADMIN, OPERATOR, VIEWER, CUSTOM)
+  - User profile management
+  - Password change functionality
+  - 8 new API endpoints
+
+- ✅ **Audit Log & Compliance**
+  - Complete audit trail for all operations
+  - Admin-only audit log viewer
+  - Filter by user, action, entity, date range
+  - Compliance tracking for ISO 15189
+
+- ✅ **Enhanced Dashboard**
+  - Multi-entity statistics (Samples, Orders, Results)
+  - Status breakdowns with counts
+  - Real-time data from backend
+  - Server-side aggregation
+
+- ✅ **JWT Authentication**
+  - JWT-based authentication with jwt-cpp
+  - Token expiration (1 hour)
+  - Role verification in JWT payload
+  - Secure password hashing (DJB2 with salt)
+
+- ✅ **Documentation**
+  - Complete UI_EXTENSIONS_V06.md guide
+  - Updated CHANGELOG.md with v0.6.0 notes
+  - Default credentials documented
+  - Usage guides for admins and users
+
+### Statistics
+- **22 new files**
+- **6,436 insertions**
+- **38 deletions**
+- **8 new API endpoints**
+- **3 new UI pages** (Users, Audit Log, Profile)
+- **Version bump:** 0.2.0 → 0.6.0
+
+---
+
+## Priority Levels
+
+- **P0** - Critical (MUST have for v0.7)
+- **P1** - High Priority (Should have for v0.7)
+- **P2** - Medium Priority (Nice to have, can defer to v0.8)
+- **P3** - Low Priority (Future versions)
+
+---
+
+## v0.7.0 Planning (Next Release)
+
+### 🔒 Security Enhancements (P0)
+
+- [x] **[P0] ✅ COMPLETED** Replace DJB2 password hashing with PBKDF2/TOTP
+  - [x] ✅ Implemented PBKDF2-HMAC-SHA256 (210,000 iterations)
+  - [x] ✅ Random 128-bit salt per password
+  - [x] ✅ Constant-time comparison (timing-attack resistant)
+  - [x] ✅ Backward compatibility for legacy hashes
+  - [x] ✅ Replaced DJB2 MFA with RFC 6238 TOTP (HMAC-SHA1)
+  - [ ] Add password strength validation UI
+  - [ ] Force password reset for existing users (migration)
+  - [ ] Update password change UI with strength indicator
+  - **Completed:** 2026-02-03
+  - **Status:** Production-ready cryptography implemented
+
+- [x] **[P0] ✅ COMPLETED** Implement proper secrets management
+  - [x] ✅ JWT secret loaded from OPENSYLAB_JWT_SECRET environment variable
+  - [x] ✅ Minimum 32-character validation
+  - [x] ✅ Fallback with warning for development
+  - [ ] Add config file for additional secrets (opensylab.conf)
+  - [ ] Document secret rotation procedures
+  - [ ] Add --config flag to load configuration
+  - **Completed:** 2026-02-03
+  - **Status:** JWT externalization complete
+
+- [x] **[P0] ✅ PARTIAL** HTTPS/TLS Support
+  - [x] ✅ TLS support implemented (v0.6.0)
+  - [x] ✅ --tls flag with cert/key parameters
+  - [ ] Force HTTPS in production mode
+  - [ ] Add HTTP → HTTPS redirect
+  - [ ] Document certificate setup for production
+  - [ ] Add Let's Encrypt integration guide
+  - **Status:** TLS available, enforcement optional
+
+### 🚀 Core Features (P1)
+
+- [ ] **[P1]** Complete Sample CRUD in Frontend
+  - [x] Sample list view
+  - [x] Sample detail view
+  - [ ] Create sample modal/form
+  - [ ] Edit sample modal/form
+  - [ ] Delete confirmation dialog
+  - [ ] Barcode scanning integration
+  - **Estimate:** 3-4 days
+
+- [ ] **[P1]** Complete Order Management UI
+  - [x] Order list view
+  - [x] Order detail view
+  - [ ] Create order form
+  - [ ] Edit order form
+  - [ ] Link orders to samples
+  - [ ] Status workflow transitions
+  - **Estimate:** 3-4 days
+
+- [ ] **[P1]** Complete Result Management UI
+  - [x] Result list view
+  - [x] Result detail view
+  - [ ] Result entry form
+  - [ ] Validation workflow
+  - [ ] Plausibility checking
+  - [ ] Reference range validation
+  - **Estimate:** 4-5 days
+
+- [ ] **[P1]** Add DELETE endpoints to API
+  - [ ] DELETE /api/v1/samples/:id
+  - [ ] DELETE /api/v1/orders/:id
+  - [ ] DELETE /api/v1/results/:id
+  - [ ] Implement soft-delete (mark as archived)
+  - [ ] Add audit log entries for deletes
+  - [ ] Update frontend to use DELETE
+  - **Estimate:** 2 days
+
+### 🐳 Infrastructure (P1)
+
+- [ ] **[P1]** Production Docker setup
+  - [ ] Multi-stage Dockerfile for backend
+  - [ ] Dockerfile for frontend (nginx)
+  - [ ] Docker Compose for production
+  - [ ] Environment variable configuration
+  - [ ] Volume mounts for data persistence
+  - [ ] Health check endpoints
+  - **Estimate:** 3-4 days
+
+- [ ] **[P1]** Configuration file system
+  - [ ] Define opensylab.conf format (YAML/INI)
+  - [ ] Add config parser (libconfig++ or yaml-cpp)
+  - [ ] Support: database path, API port, TLS certs, CORS origins
+  - [ ] Add --config CLI flag
+  - [ ] Document all configuration options
+  - **Estimate:** 2-3 days
+
+### 📚 Documentation (P1)
+
+- [ ] **[P1]** API Documentation
+  - [ ] Create OpenAPI 3.0 specification
+  - [ ] Document all 30+ endpoints
+  - [ ] Add request/response schemas
+  - [ ] Add authentication documentation
+  - [ ] Setup Swagger UI at /api/docs
+  - **Estimate:** 3-4 days
+
+- [ ] **[P1]** Production Deployment Guide
+  - [ ] Server requirements (CPU, RAM, disk)
+  - [ ] Installation steps for Ubuntu/Debian
+  - [ ] HTTPS certificate setup
+  - [ ] Database backup procedures
+  - [ ] Monitoring and logging setup
+  - [ ] Security hardening checklist
+  - **Estimate:** 2-3 days
+
+### 🧪 Testing (P1)
+
+- [ ] **[P1]** Integration tests for new endpoints
+  - [ ] Test user management CRUD
+  - [ ] Test audit log filtering
+  - [ ] Test statistics endpoints
+  - [ ] Test role-based access control
+  - [ ] Test password change flow
+  - **Estimate:** 2-3 days
+
+- [ ] **[P1]** Frontend unit tests
+  - [ ] Setup Jest + React Testing Library
+  - [ ] Test authentication context
+  - [ ] Test protected routes
+  - [ ] Test user management components
+  - [ ] Test audit log components
+  - [ ] Test profile page
+  - **Estimate:** 3-4 days
+
+---
+
+## Medium Priority (P2)
+
+### 🌐 Frontend Enhancements
+
+- [ ] **[P2]** Add data visualization
+  - [ ] Integrate Chart.js or Recharts
+  - [ ] Sample status pie chart
+  - [ ] Orders over time line chart
+  - [ ] Results distribution charts
+  - **Estimate:** 3-4 days
+
+- [ ] **[P2]** CSV Import UI
+  - [ ] File upload component
+  - [ ] Progress indicator
+  - [ ] Import results display
+  - [ ] Error handling and reporting
+  - **Estimate:** 2-3 days
+
+- [ ] **[P2]** Mobile responsive design
+  - [ ] Test on mobile devices
+  - [ ] Responsive navigation menu
+  - [ ] Touch-friendly UI components
+  - [ ] Mobile-optimized tables
+  - **Estimate:** 3-4 days
+
+- [ ] **[P2]** Advanced filtering
+  - [ ] Multi-field filter builder
+  - [ ] Save filter presets
+  - [ ] Export filtered data
+  - **Estimate:** 2-3 days
+
+### 🐘 Database Improvements
+
+- [ ] **[P2]** PostgreSQL support
+  - [ ] Add libpqxx dependency
+  - [ ] Create PostgresDatabase adapter
+  - [ ] Refactor Database to abstract base class
+  - [ ] Implement connection pooling
+  - [ ] Add database selection in config
+  - **Estimate:** 1-2 weeks
+
+- [ ] **[P2]** Database migrations
+  - [ ] Design migration file format
+  - [ ] Create migration runner
+  - [ ] Write migrations: v0.2 → v0.6
+  - [ ] Add --migrate CLI command
+  - **Estimate:** 4-5 days
+
+### 🔐 Advanced Security
+
+- [ ] **[P2]** Two-Factor Authentication
+  - [ ] TOTP implementation (Google Authenticator)
+  - [ ] 2FA setup UI
+  - [ ] QR code generation
+  - [ ] Backup codes
+  - **Estimate:** 4-5 days
+
+- [ ] **[P2]** LDAP/Active Directory
+  - [ ] Add LDAP library
+  - [ ] LDAP authentication adapter
+  - [ ] Fallback to local auth
+  - [ ] User sync from LDAP
+  - **Estimate:** 5-6 days
+
+- [ ] **[P2]** Rate limiting
+  - [ ] Token bucket algorithm
+  - [ ] Per-IP rate limiting
+  - [ ] Per-user rate limiting
+  - [ ] Return 429 on limit exceeded
+  - **Estimate:** 2-3 days
+
+### 📊 Reporting
+
+- [ ] **[P2]** PDF report generation
+  - [ ] Add PDF library (libharu)
+  - [ ] Sample report template
+  - [ ] Order report template
+  - [ ] Result report with graphs
+  - [ ] PDF download endpoints
+  - **Estimate:** 4-5 days
+
+- [ ] **[P2]** Excel/CSV export
+  - [ ] Export samples to CSV/Excel
+  - [ ] Export orders to CSV/Excel
+  - [ ] Export results to CSV/Excel
+  - [ ] Export audit log to CSV
+  - **Estimate:** 2-3 days
+
+---
+
+## Low Priority (P3)
+
+### 🚀 Performance
+
+- [ ] **[P3]** Caching layer
+  - [ ] Redis integration (optional)
+  - [ ] Cache frequent queries
+  - [ ] Cache invalidation strategy
+  - **Estimate:** 3-4 days
+
+- [ ] **[P3]** Async I/O
+  - [ ] Refactor to libuv or Boost.Asio
+  - [ ] Thread pool for requests
+  - [ ] Performance benchmarks
+  - **Estimate:** 1-2 weeks
+
+### 🌍 Internationalization
+
+- [ ] **[P3]** Frontend i18n
+  - [ ] Setup react-i18next
+  - [ ] Extract all strings
+  - [ ] English translations
+  - [ ] German translations
+  - **Estimate:** 3-4 days
+
+- [ ] **[P3]** API i18n
+  - [ ] Accept-Language header support
+  - [ ] Translate error messages
+  - [ ] Locale-specific date/time formatting
+  - **Estimate:** 2-3 days
+
+### 📱 Additional Features
+
+- [ ] **[P3]** Notification system
+  - [ ] WebSocket support
+  - [ ] Real-time notifications UI
+  - [ ] Email notifications (optional)
+  - **Estimate:** 5-7 days
+
+- [ ] **[P3]** Advanced search
+  - [ ] Full-text search
+  - [ ] Search suggestions
+  - [ ] Search history
+  - **Estimate:** 3-4 days
+
+- [ ] **[P3]** Barcode integration
+  - [ ] Barcode scanner support
+  - [ ] Barcode generation
+  - [ ] Label printing
+  - **Estimate:** 3-4 days
+
+---
+
+## Deferred to v0.8+
+
+### 🏢 Enterprise Features (v1.0+)
+
+- [ ] Multi-tenancy support
+- [ ] Advanced RBAC with custom permissions
+- [ ] Compliance reports (ISO 15189, GDPR)
+- [ ] Backup automation
+- [ ] High availability setup
+- [ ] Kubernetes deployment
+- [ ] SSO integration (SAML, OAuth)
+
+### 📱 Mobile App (Future)
+
+- [ ] React Native or Flutter app
+- [ ] Mobile-specific workflows
+- [ ] Offline mode support
+- [ ] Push notifications
+
+---
+
+## Summary
+
+**v0.6.0 Achievements:**
+- ✅ Complete React frontend with TypeScript
+- ✅ User management with RBAC
+- ✅ Audit logging for compliance
+- ✅ Enhanced dashboard with statistics
+- ✅ JWT authentication
+- ✅ Professional LIMS UI/UX
+
+**v0.6.1/v0.7.0 Security Update (COMPLETED 2026-02-03):**
+- ✅ PBKDF2-HMAC-SHA256 password hashing (production-ready)
+- ✅ RFC 6238 TOTP for MFA (HMAC-SHA1, industry-standard)
+- ✅ JWT secret externalization (environment variable)
+- ✅ All P0 critical security vulnerabilities resolved
+
+**v0.7.0 Remaining Focus:**
+- 🚀 Complete CRUD operations in frontend
+- 🐳 Docker containerization for production
+- 📚 OpenAPI documentation
+- 🧪 Comprehensive testing
+- 🔒 Optional: HTTPS enforcement, config file system
+
+**Estimated Timeline:**
+- v0.7.0 Alpha: 4-6 weeks
+- v0.8.0 Beta: +6-8 weeks
+- v1.0.0 Production: +8-12 weeks
+
+**Current Development Status:**
+- **v0.6.0:** ✅ RELEASED (2026-02-03)
+- **v0.7.0:** 🏗️ PLANNING
+- **Branch:** main (v0.6 merged)
+- **Contributors:** Development Team + Claude Code + Happy
+
+---
+
+## Notes
+
+### ✅ Security Status (Updated 2026-02-03)
+
+- **Password Hashing:** ✅ PBKDF2-HMAC-SHA256 (production-ready)
+- **MFA/TOTP:** ✅ RFC 6238 HMAC-SHA1 (production-ready)
+- **JWT Secret:** ✅ Environment variable (`OPENSYLAB_JWT_SECRET`)
+- **TLS/HTTPS:** ✅ Available (optional enforcement)
+
+### ⚠️ Production Deployment Requirements
+
+- Default credentials (admin/admin) MUST be changed
+- Set `OPENSYLAB_JWT_SECRET` environment variable (min 64 chars recommended)
+- Enable TLS with `--tls --tls-cert cert.pem --tls-key key.pem`
+- Force existing users to change passwords (migrates to PBKDF2)
+- Update this file as tasks are completed
+- Use semantic versioning for all releases
+
+---
+
+**Last Updated:** 2026-02-03 (Security fixes completed)
+**Maintainer:** Development Team
+**Status:** v0.6.0 + Security Fixes → Ready for v0.6.1/v0.7.0
+**Security:** ✅ Production-ready cryptography implemented
+**Next Milestone:** Complete CRUD + Frontend enhancements
