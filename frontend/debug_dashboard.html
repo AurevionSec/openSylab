@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Debug</title>
+    <style>
+        body {
+            font-family: monospace;
+            background: #000;
+            color: #0f0;
+            padding: 20px;
+        }
+        .error { color: #f00; }
+        .success { color: #0f0; }
+        .info { color: #00f; }
+        pre { background: #111; padding: 10px; overflow-x: auto; }
+        button {
+            background: #2563EB;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>OpenSylab Dashboard Debug Console</h1>
+    <button onclick="runFullTest()">RUN FULL TEST</button>
+    <button onclick="clearLog()">CLEAR</button>
+    <div id="log"></div>
+
+    <script>
+        const API_URL = 'http://localhost:8080/api/v1';
+        let logDiv = document.getElementById('log');
+
+        function log(msg, type = 'info') {
+            const p = document.createElement('p');
+            p.className = type;
+            p.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            logDiv.appendChild(p);
+            console.log(msg);
+        }
+
+        function logJSON(title, data) {
+            const pre = document.createElement('pre');
+            pre.textContent = `${title}:\n${JSON.stringify(data, null, 2)}`;
+            logDiv.appendChild(pre);
+            console.log(title, data);
+        }
+
+        function clearLog() {
+            logDiv.innerHTML = '';
+        }
+
+        async function runFullTest() {
+            clearLog();
+            log('=== STARTING FULL DIAGNOSTIC TEST ===');
+
+            // Step 1: Check localStorage
+            log('Step 1: Checking localStorage...');
+            const token = localStorage.getItem('opensylab_jwt_token');
+            const user = localStorage.getItem('opensylab_user_info');
+            const expiry = localStorage.getItem('opensylab_token_expiry');
+
+            if (!token) {
+                log('ERROR: No JWT token found in localStorage!', 'error');
+                log('Please login first at /login', 'error');
+                return;
+            }
+
+            log(`Token found: ${token.substring(0, 50)}...`, 'success');
+            log(`User info: ${user}`, 'info');
+            log(`Token expiry: ${expiry} (${new Date(parseInt(expiry)).toLocaleString()})`, 'info');
+
+            const now = Date.now();
+            if (parseInt(expiry) < now) {
+                log('WARNING: Token is expired!', 'error');
+            } else {
+                log(`Token valid for ${Math.floor((parseInt(expiry) - now) / 1000)} more seconds`, 'success');
+            }
+
+            // Step 2: Test /stats endpoint
+            log('\nStep 2: Testing /stats endpoint...');
+            try {
+                const statsRes = await fetch(`${API_URL}/stats`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                log(`Stats response status: ${statsRes.status}`, statsRes.ok ? 'success' : 'error');
+                const statsData = await statsRes.json();
+                logJSON('Stats data', statsData);
+            } catch (err) {
+                log(`Stats error: ${err.message}`, 'error');
+                logJSON('Stats error details', err);
+            }
+
+            // Step 3: Test /samples endpoint
+            log('\nStep 3: Testing /samples endpoint...');
+            try {
+                const samplesRes = await fetch(`${API_URL}/samples?limit=1000`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                log(`Samples response status: ${samplesRes.status}`, samplesRes.ok ? 'success' : 'error');
+                const samplesData = await samplesRes.json();
+                log(`Samples count: ${samplesData.data?.length || 0}`, 'info');
+                if (samplesData.data && samplesData.data.length > 0) {
+                    logJSON('First sample', samplesData.data[0]);
+                }
+            } catch (err) {
+                log(`Samples error: ${err.message}`, 'error');
+                logJSON('Samples error details', err);
+            }
+
+            // Step 4: Test /orders endpoint
+            log('\nStep 4: Testing /orders endpoint...');
+            try {
+                const ordersRes = await fetch(`${API_URL}/orders?limit=1000`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                log(`Orders response status: ${ordersRes.status}`, ordersRes.ok ? 'success' : 'error');
+                const ordersData = await ordersRes.json();
+                log(`Orders count: ${ordersData.data?.length || 0}`, 'info');
+                if (ordersData.data && ordersData.data.length > 0) {
+                    logJSON('First order', ordersData.data[0]);
+                }
+            } catch (err) {
+                log(`Orders error: ${err.message}`, 'error');
+                logJSON('Orders error details', err);
+            }
+
+            // Step 5: Test /results endpoint
+            log('\nStep 5: Testing /results endpoint...');
+            try {
+                const resultsRes = await fetch(`${API_URL}/results?limit=1000`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                log(`Results response status: ${resultsRes.status}`, resultsRes.ok ? 'success' : 'error');
+                const resultsData = await resultsRes.json();
+                log(`Results count: ${resultsData.data?.length || 0}`, 'info');
+                if (resultsData.data && resultsData.data.length > 0) {
+                    logJSON('First result', resultsData.data[0]);
+                }
+            } catch (err) {
+                log(`Results error: ${err.message}`, 'error');
+                logJSON('Results error details', err);
+            }
+
+            log('\n=== TEST COMPLETE ===', 'success');
+        }
+
+        // Auto-run on load
+        window.addEventListener('load', () => {
+            setTimeout(runFullTest, 500);
+        });
+    </script>
+</body>
+</html>
