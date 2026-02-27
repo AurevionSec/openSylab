@@ -160,7 +160,7 @@ VITE_API_URL=https://api.opensylab.yourdomain.com/api/v1
 - **Search capabilities**
 - **Responsive table design**
 - **Detail view** for each sample
-- **Create/Edit forms** (planned for v0.7.0)
+- **Create/Edit forms** (planned for v0.8.0)
 
 ### 📋 Order Management
 
@@ -169,7 +169,7 @@ VITE_API_URL=https://api.opensylab.yourdomain.com/api/v1
   - **Priority filter**: Normal, Urgent, Emergency
 - **Order details**
 - **Link orders to samples**
-- **Status workflow transitions** (planned for v0.7.0)
+- **Status workflow transitions** (planned for v0.8.0)
 
 ### 🔬 Result Management
 
@@ -178,7 +178,7 @@ VITE_API_URL=https://api.opensylab.yourdomain.com/api/v1
   - **Flag filter**: Normal, Low, High, Critical, Undefined
 - **Color-coded flag badges**
 - **Result details** with reference ranges
-- **Result entry form** (planned for v0.7.0)
+- **Result entry form** (planned for v0.8.0)
 
 ### 👥 User Management (v0.6+ - Admin Only)
 
@@ -231,21 +231,21 @@ The frontend communicates with the OpenSylab backend API via Axios.
 - `GET /samples/:id` - Get sample details
 - `POST /samples` - Create new sample
 - `PUT /samples/:id` - Update sample
-- `DELETE /samples/:id` - Delete sample (planned for v0.7.0)
+- `DELETE /samples/:id` - Delete sample (planned for v0.8.0)
 
 #### Orders
 - `GET /orders` - List orders (pagination, filtering)
 - `GET /orders/:id` - Get order details
 - `POST /orders` - Create new order
 - `PUT /orders/:id` - Update order
-- `DELETE /orders/:id` - Delete order (planned for v0.7.0)
+- `DELETE /orders/:id` - Delete order (planned for v0.8.0)
 
 #### Results
 - `GET /results` - List results (pagination, filtering)
 - `GET /results/:id` - Get result details
 - `POST /results` - Create new result
 - `PUT /results/:id` - Update result
-- `DELETE /results/:id` - Delete result (planned for v0.7.0)
+- `DELETE /results/:id` - Delete result (planned for v0.8.0)
 
 #### User Management (v0.6+ - Admin Only)
 - `GET /users` - List all users
@@ -351,7 +351,7 @@ const users = await getUsers();
 - **Edge** (latest)
 - **Minimum**: ES2020 support required
 
-## Testing (v0.7.0+)
+## Testing (v0.8.0+)
 
 ```bash
 # Unit Tests (Jest + React Testing Library)
@@ -386,7 +386,7 @@ npm run test:e2e
 
 ## Planned Features
 
-### v0.7.0 (Next Release)
+### v0.8.0 (Next Release)
 - [ ] Create/Edit forms for Samples, Orders, Results
 - [ ] Delete confirmation dialogs
 - [ ] Barcode scanning integration
@@ -394,7 +394,7 @@ npm run test:e2e
 - [ ] Frontend unit tests (Jest + RTL)
 - [ ] E2E tests (Cypress)
 
-### v0.8.0
+### v0.9.0
 - [ ] Data visualization (Charts.js/Recharts)
 - [ ] CSV import UI
 - [ ] Advanced filtering

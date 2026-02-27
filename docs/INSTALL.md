@@ -341,12 +341,12 @@ export OPENSYLAB_TLS_KEY=/pfad/zu/key.pem
 export VITE_API_URL=http://localhost:8080/api/v1
 ```
 
-### Konfigurationsdatei (v0.7.0+)
+### Konfigurationsdatei (v0.8.0+)
 
-Ab v0.7.0 wird eine Konfigurationsdatei unterstützt:
+Ab v0.8.0 wird eine Konfigurationsdatei unterstützt:
 
 ```ini
-# opensylab.conf (geplant für v0.7.0)
+# opensylab.conf (geplant für v0.8.0)
 [database]
 path = /var/lib/opensylab/opensylab.db
 
@@ -390,7 +390,7 @@ ctest --output-on-failure
 Total:   62
 ```
 
-### Frontend Tests (v0.7.0+)
+### Frontend Tests (v0.8.0+)
 
 ```bash
 cd frontend
@@ -418,7 +418,7 @@ npm run test:coverage
 - [ ] **Updates planen** (Security Patches)
 
 ⚠️ **WICHTIG**: OpenSylab v0.6.0 verwendet DJB2 Password Hashing (NICHT production-ready!).
-Upgrade auf v0.7.0 mit bcrypt/argon2 wird DRINGEND empfohlen!
+Upgrade auf v0.8.0 mit bcrypt/argon2 wird DRINGEND empfohlen!
 
 ### Systemd Service (Linux)
 
@@ -627,4 +627,4 @@ npm run build
 
 **Version:** 0.6.0
 **Letzte Aktualisierung:** 2026-02-03
-**Nächste Version:** 0.7.0 (Production Security & Docker Improvements)
+**Nächste Version:** 0.8.0 (Production Security & Docker Improvements)

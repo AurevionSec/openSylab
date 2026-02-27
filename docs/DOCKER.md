@@ -564,7 +564,7 @@ curl http://localhost/
 
 ### PostgreSQL Integration (Future)
 
-For PostgreSQL support (planned for v0.7+):
+For PostgreSQL support (planned for v0.9+):
 
 ```yaml
 services:

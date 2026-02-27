@@ -1,9 +1,9 @@
-# TODO - OpenSylab v0.6 → v0.7 Roadmap
+# TODO - OpenSylab v0.6 → v0.8 Roadmap
 
 **Current Version:** v0.6.0 + Security Fixes (2026-02-03)
 **Branch:** main
-**Target:** v0.6.1 or v0.7.0 Alpha
-**Status:** ✅ P0 Security Complete - Planning remaining v0.7
+**Target:** v0.6.1 or v0.8.0 Alpha
+**Status:** ✅ P0 Security Complete - Planning remaining v0.8
 **Generated:** 2026-02-03
 **Last Updated:** 2026-02-03 (Security fixes documented)
 
@@ -73,7 +73,125 @@
 
 ---
 
-## v0.7.0 Planning (Next Release)
+## v0.7.0 Planning (Workflow Completeness & UI)
+
+### 🗄️ Backend: API Vollständigkeit (P1)
+
+- [ ] **[P1]** Soft-Delete für Samples implementieren
+  - [ ] Backend: `Sample::status` auf `ARCHIVED` setzen statt Row löschen
+  - [ ] Backend: `DELETE /api/v1/samples/:id` gibt `204 No Content` zurück
+  - [ ] Backend: Audit-Log-Eintrag mit `ActionType::DELETE` + Actor-ID schreiben
+  - [ ] Frontend: `deleteSample()` in `services/samples.ts` prüfen (bereits vorhanden)
+  - [ ] Frontend: `DeleteConfirmDialog` in `Samples.tsx` bereits angebunden – verifizieren
+  - **Estimate:** 1 Tag
+
+- [ ] **[P1]** Soft-Delete für Orders implementieren
+  - [ ] Backend: `Order::status` auf `CANCELLED` setzen statt Row löschen
+  - [ ] Backend: `DELETE /api/v1/orders/:id` gibt `204 No Content` zurück
+  - [ ] Backend: Audit-Log-Eintrag schreiben
+  - [ ] Frontend: `deleteOrder()` in `services/orders.ts` prüfen (bereits vorhanden)
+  - [ ] Frontend: `DeleteConfirmDialog` in `Orders.tsx` bereits angebunden – verifizieren
+  - **Estimate:** 1 Tag
+
+- [ ] **[P1]** Soft-Delete für Results implementieren
+  - [ ] Backend: `TestResult::status` auf `REJECTED` setzen statt Row löschen
+  - [ ] Backend: `DELETE /api/v1/results/:id` gibt `204 No Content` zurück
+  - [ ] Backend: Audit-Log-Eintrag schreiben
+  - [ ] Frontend: `deleteResult()` in `services/results.ts` prüfen/hinzufügen
+  - [ ] Frontend: `DeleteConfirmDialog` in `Results.tsx` anbinden
+  - **Estimate:** 1 Tag
+
+- [ ] **[P1]** `getSamples()` Pagination korrekt implementieren
+  - [ ] Backend: `total`-Feld im Response auf echten DB-Count setzen (nicht `data.length`)
+  - [ ] Backend: `offset`/`limit` Query-Parameter korrekt an SQLite weiterleiten
+  - [ ] Frontend: `SampleListResponse.total` für Pagination in `Samples.tsx` korrekt auswerten
+  - **Estimate:** halber Tag
+
+### 🔗 Frontend: Sample-Auftrag-Verknüpfung (P1)
+
+- [ ] **[P1]** Orders mit bestehendem Sample verknüpfen
+  - [ ] `OrderCreateModal.tsx`: Dropdown für `sample_id` mit `getSamples()` befüllen
+  - [ ] Typeahead-Suche nach Sample-ID im Modal einbauen
+  - [ ] Validierung: Order kann nur angelegt werden wenn Sample existiert
+  - [ ] `OrderEditModal.tsx`: Verlinktes Sample anzeigen (read-only, da nachträgliche Änderung auditpflichtig)
+  - **Estimate:** 1 Tag
+
+- [ ] **[P1]** Results mit Auftrag verknüpfen
+  - [ ] `ResultCreateModal.tsx`: Dropdown für `order_id` mit `getOrders()` befüllen
+  - [ ] Auftragsstatus vor Ergebniseingabe prüfen (nur `IN_PROGRESS` oder `COMPLETED` zulässig)
+  - [ ] Auto-Flag-Berechnung im Frontend: Wenn `value` zwischen `reference_min` und `reference_max` → `NORMAL`, sonst `HIGH`/`LOW`
+  - [ ] Referenzbereich-Felder beim Eingeben der Werte visuell validieren (in-line Feedback)
+  - **Estimate:** 1,5 Tage
+
+### 📊 Dashboard: Charts & Metriken (P2)
+
+- [ ] **[P2]** Recharts in das Projekt einbinden
+  - [ ] `npm install recharts` im `frontend/` Verzeichnis
+  - [ ] TypeScript-Typen für Recharts-Props prüfen (`@types/recharts` falls nötig)
+
+- [ ] **[P2]** Samples-Statusverteilung als Chart im Dashboard
+  - [ ] `Dashboard.tsx`: Neuer Abschnitt unterhalb der Metrikkacheln
+  - [ ] `BarChart` oder `PieChart` aus Recharts mit `stats.samples.by_status` als Datenquelle
+  - [ ] Farben aus der bestehenden `getStatusColor()`-Mapping-Funktion ableiten
+  - [ ] Responsive: `ResponsiveContainer` mit fixer Höhe (z.B. `200px`)
+
+- [ ] **[P2]** Orders-Prioritätsverteilung als Chart
+  - [ ] Separate Zählung nach `priority` (NORMAL / URGENT / EMERGENCY) aus Orders-Daten
+  - [ ] `BarChart` neben dem Samples-Chart im gleichen Bento-Grid-Layout
+
+- [ ] **[P2]** Kritische Ergebnisse (Flag: CRITICAL/HIGH) im Dashboard hervorheben
+  - [ ] Neue Kachel "Critical Results" mit Anzahl `flag === 'CRITICAL'` aus Results-Daten
+  - [ ] Visueller Alert-Stil (roter Rahmen, Neon-Akzent im Dark Mode)
+  - **Estimate gesamt:** 2-3 Tage
+
+### 📥 CSV Import: Frontend (P2)
+
+- [ ] **[P2]** CSV-Import Seite/Modal erstellen
+  - [ ] Neue Route `/import` oder Modal vom Dashboard aus erreichbar
+  - [ ] `<input type="file" accept=".csv">` Komponente
+  - [ ] File-Inhalt per FileReader API auslesen und als `FormData` an Backend senden
+  - [ ] POST `/api/v1/samples/import` oder existierenden CSV-Endpoint nutzen
+
+- [ ] **[P2]** Import-Fortschritt & Ergebnis anzeigen
+  - [ ] Tabelle mit Erfolg/Fehler-Zeilen aus Backend-Response rendern
+  - [ ] Farbkodierung: grüne Zeile = importiert, rote Zeile = Fehler mit Grund
+  - [ ] Gesamtstatistik: "X von Y Zeilen erfolgreich importiert"
+  - [ ] Button "Import wiederholen" nach Fehler
+  - **Estimate:** 2 Tage
+
+### 📡 Barcode-Scanner Integration (P2)
+
+- [ ] **[P2]** Web-Barcode-API anbinden
+  - [ ] Feature-Detection: `BarcodeDetector` API im Browser prüfen (`'BarcodeDetector' in window`)
+  - [ ] Camera-Zugriff via `navigator.mediaDevices.getUserMedia()` anfragen
+  - [ ] Neuer React Hook `useBarcode()` in `frontend/src/hooks/useBarcode.ts` erstellen
+
+- [ ] **[P2]** Barcode-Scanner in Sample-Erfassung einbauen
+  - [ ] `SampleCreateModal.tsx`: Scanner-Button neben dem `sample_id`-Feld
+  - [ ] Scanner-Modal öffnet Kamera-Vorschau, liest Code und befüllt das Textfeld automatisch
+  - [ ] Fallback: manuelle Eingabe weiterhin möglich
+  - **Estimate:** 2 Tage
+
+### 🔍 UX & Code-Qualität (P1)
+
+- [ ] **[P1]** Refresh-Logik in Pages refactoren
+  - [ ] `fetchSamples()`, `fetchOrders()`, `fetchResults()` sind in Samples/Orders/Results je 3× dupliziert
+  - [ ] `useCallback` verwenden oder in einen Custom Hook `useEntityList()` extrahieren
+  - [ ] Verhindert Race-Conditions bei schnellen Filter-Wechseln
+
+- [ ] **[P1]** Fehlerbehandlung auf allen Pages vereinheitlichen
+  - [ ] Wiederverwendbare `<ErrorBanner message={error} />` Komponente erstellen
+  - [ ] Alle Pages verwenden aktuell inline-Styles für Error-Darstellung
+
+- [ ] **[P1]** Status-Workflow-Transitionen in den Edit-Dialogen einschränken
+  - [ ] `SampleEditModal.tsx`: Nur erlaubte Status-Übergänge im Dropdown anzeigen (z.B. kein ARCHIVED → REGISTERED)
+  - [ ] `OrderEditModal.tsx`: Analog für Order-Status
+  - [ ] Statusübergänge als Konstante in `utils/constants.ts` definieren
+  - **Estimate:** 1 Tag
+
+---
+
+## v0.8.0 Planning (Security & Engineering Stabilization)
 
 ### 🔒 Security Enhancements (P0)
 
@@ -108,43 +226,6 @@
   - [ ] Add Let's Encrypt integration guide
   - **Status:** TLS available, enforcement optional
 
-### 🚀 Core Features (P1)
-
-- [ ] **[P1]** Complete Sample CRUD in Frontend
-  - [x] Sample list view
-  - [x] Sample detail view
-  - [ ] Create sample modal/form
-  - [ ] Edit sample modal/form
-  - [ ] Delete confirmation dialog
-  - [ ] Barcode scanning integration
-  - **Estimate:** 3-4 days
-
-- [ ] **[P1]** Complete Order Management UI
-  - [x] Order list view
-  - [x] Order detail view
-  - [ ] Create order form
-  - [ ] Edit order form
-  - [ ] Link orders to samples
-  - [ ] Status workflow transitions
-  - **Estimate:** 3-4 days
-
-- [ ] **[P1]** Complete Result Management UI
-  - [x] Result list view
-  - [x] Result detail view
-  - [ ] Result entry form
-  - [ ] Validation workflow
-  - [ ] Plausibility checking
-  - [ ] Reference range validation
-  - **Estimate:** 4-5 days
-
-- [ ] **[P1]** Add DELETE endpoints to API
-  - [ ] DELETE /api/v1/samples/:id
-  - [ ] DELETE /api/v1/orders/:id
-  - [ ] DELETE /api/v1/results/:id
-  - [ ] Implement soft-delete (mark as archived)
-  - [ ] Add audit log entries for deletes
-  - [ ] Update frontend to use DELETE
-  - **Estimate:** 2 days
 
 ### 🐳 Infrastructure (P1)
 
@@ -207,34 +288,6 @@
 
 ## Medium Priority (P2)
 
-### 🌐 Frontend Enhancements
-
-- [ ] **[P2]** Add data visualization
-  - [ ] Integrate Chart.js or Recharts
-  - [ ] Sample status pie chart
-  - [ ] Orders over time line chart
-  - [ ] Results distribution charts
-  - **Estimate:** 3-4 days
-
-- [ ] **[P2]** CSV Import UI
-  - [ ] File upload component
-  - [ ] Progress indicator
-  - [ ] Import results display
-  - [ ] Error handling and reporting
-  - **Estimate:** 2-3 days
-
-- [ ] **[P2]** Mobile responsive design
-  - [ ] Test on mobile devices
-  - [ ] Responsive navigation menu
-  - [ ] Touch-friendly UI components
-  - [ ] Mobile-optimized tables
-  - **Estimate:** 3-4 days
-
-- [ ] **[P2]** Advanced filtering
-  - [ ] Multi-field filter builder
-  - [ ] Save filter presets
-  - [ ] Export filtered data
-  - **Estimate:** 2-3 days
 
 ### 🐘 Database Improvements
 
@@ -348,7 +401,7 @@
 
 ---
 
-## Deferred to v0.8+
+## Deferred to v0.9+
 
 ### 🏢 Enterprise Features (v1.0+)
 
@@ -387,19 +440,25 @@
 
 **v0.7.0 Remaining Focus:**
 - 🚀 Complete CRUD operations in frontend
+- 📊 Data visualization and CSV import UI
+- 📱 Mobile responsive design & advanced filtering
+
+**v0.8.0 Remaining Focus:**
 - 🐳 Docker containerization for production
 - 📚 OpenAPI documentation
-- 🧪 Comprehensive testing
-- 🔒 Optional: HTTPS enforcement, config file system
+- 🧪 Comprehensive testing & CI/CD pipeline
+- 🔒 Security Hardening
 
 **Estimated Timeline:**
-- v0.7.0 Alpha: 4-6 weeks
-- v0.8.0 Beta: +6-8 weeks
+- v0.7.0 Release: 2-3 weeks
+- v0.8.0 Alpha: +3-4 weeks
+- v0.9.0 Beta: +4-6 weeks
 - v1.0.0 Production: +8-12 weeks
 
 **Current Development Status:**
 - **v0.6.0:** ✅ RELEASED (2026-02-03)
-- **v0.7.0:** 🏗️ PLANNING
+- **v0.7.0:** 🏗️ IN PROGRESS
+- **v0.8.0:** 📋 PLANNING
 - **Branch:** main (v0.6 merged)
 - **Contributors:** Development Team + Claude Code + Happy
 
@@ -427,6 +486,6 @@
 
 **Last Updated:** 2026-02-03 (Security fixes completed)
 **Maintainer:** Development Team
-**Status:** v0.6.0 + Security Fixes → Ready for v0.6.1/v0.7.0
+**Status:** v0.6.0 + Security Fixes → Ready for v0.7.0
 **Security:** ✅ Production-ready cryptography implemented
 **Next Milestone:** Complete CRUD + Frontend enhancements

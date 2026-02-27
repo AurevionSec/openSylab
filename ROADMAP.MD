@@ -5,8 +5,25 @@ Open-Source-LIMS-Lösung hin zu einer professionellen, cloud-fähigen
 Plattform mit klarer Trennung zwischen Self-Host-Edition und zukünftiger
 Cloud-Edition.
 
-Diese Roadmap beschreibt die geplanten Entwicklungsschritte von v0.8 bis
+Diese Roadmap beschreibt die geplanten Entwicklungsschritte von v0.7 bis
 v1.5.
+
+------------------------------------------------------------------------
+
+# v0.7 -- Workflow Completeness & UI
+**Ziel:** Vollständige Abbildung des Labor-Workflows im Frontend
+
+## Frontend
+-   Vollständige CRUD-Operationen für Samples, Orders und Results
+-   Result Entry Form mit Validierung gegen Referenzbereiche
+-   Barcode-Scanner-Integration für schnelles Erfassen
+-   Daten-Visualisierung (Charts) im Dashboard
+-   CSV Import UI im Frontend
+
+## API & Dokumentation
+-   Abschluss aller benötigten DELETE-Endpoints
+-   Swagger UI & OpenAPI 3.0 Spezifikation für Entwickler
+-   Fortführung der Integration von Laborgeräten
 
 ------------------------------------------------------------------------
 

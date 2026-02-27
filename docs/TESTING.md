@@ -7,7 +7,7 @@ OpenSylab v0.6.0 enthält ein einfaches, selbst implementiertes Test-Framework o
 **Version:** 0.6.0
 **Last Updated:** 2026-02-03
 **Backend Tests:** 62 Unit-Tests
-**Frontend Tests:** Geplant für v0.7.0
+**Frontend Tests:** Geplant für v0.8.0
 
 ## Test-Framework
 
@@ -173,12 +173,12 @@ Aktuell getestet:
 - ✅ Fehlerbehandlung
 
 Noch nicht getestet:
-- ⏳ API-Endpoints (geplant für v0.7.0 - Integration Tests)
-- ⏳ JWT-Authentifizierung (geplant für v0.7.0)
-- ⏳ Role-Based Access Control (geplant für v0.7.0)
-- ⏳ Frontend Components (geplant für v0.7.0 - Jest + React Testing Library)
-- ⏳ End-to-End Workflows (geplant für v0.8.0)
-- ⏳ Performance unter Last (geplant für v0.8.0)
+- ⏳ API-Endpoints (geplant für v0.8.0 - Integration Tests)
+- ⏳ JWT-Authentifizierung (geplant für v0.8.0)
+- ⏳ Role-Based Access Control (geplant für v0.8.0)
+- ⏳ Frontend Components (geplant für v0.8.0 - Jest + React Testing Library)
+- ⏳ End-to-End Workflows (geplant für v0.9.0)
+- ⏳ Performance unter Last (geplant für v0.9.0)
 - ⏳ CLI-Interface (schwierig automatisch zu testen)
 
 ## Neue Tests hinzufügen
@@ -268,7 +268,7 @@ Der Exit-Code ist 0 bei Erfolg, 1 bei Fehler.
 
 ## Zukünftige Erweiterungen
 
-### v0.7.0 (Nächste Version):
+### v0.8.0 (Nächste Version):
 - **Integration Tests**: API-Endpoint-Tests mit curl/Postman
 - **Frontend Tests**: Jest + React Testing Library
   - Component Tests
@@ -277,7 +277,7 @@ Der Exit-Code ist 0 bei Erfolg, 1 bei Fehler.
 - **RBAC Tests**: Role-based access control validation
 - **JWT Auth Tests**: Token generation and validation
 
-### v0.8.0+:
+### v0.9.0+:
 - **E2E Tests**: Cypress oder Playwright für End-to-End Workflows
 - **Performance Tests**: Load testing mit K6 oder Artillery
 - **Code Coverage**: gcov/lcov für C++ Backend
@@ -285,7 +285,7 @@ Der Exit-Code ist 0 bei Erfolg, 1 bei Fehler.
 - **Mock Objects**: Bessere Test-Isolierung
 - **API Contract Tests**: OpenAPI Schema Validation
 
-### Frontend Testing (v0.7.0+):
+### Frontend Testing (v0.8.0+):
 
 ```bash
 cd frontend
@@ -299,11 +299,11 @@ npm test -- --watch
 # Coverage Report
 npm run test:coverage
 
-# E2E Tests (v0.8.0+)
+# E2E Tests (v0.9.0+)
 npm run test:e2e
 ```
 
-### API Testing (v0.7.0+):
+### API Testing (v0.8.0+):
 
 ```bash
 # Postman Collection

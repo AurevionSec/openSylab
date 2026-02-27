@@ -76,7 +76,7 @@ Folgende Vektoren müssen für externe Deployments geschlossen werden:
   openssl rand -base64 48
   ```
   Trage es in `docker-compose.yml` unter `OPENSYLAB_JWT_SECRET` ein.
-- ⚠️ **Hashing:** Aktuell läuft DJB2 (nur für Development). Migration auf bcrypt/argon2 erfolgt in v0.7.
+- ⚠️ **Hashing:** Aktuell läuft DJB2 (nur für Development). Migration auf Argon2 erfolgt in v0.8.
 - ⚠️ **TLS/HTTPS:** Für Production-Deployments TLS-Zertifikate einbinden (siehe [`docs/DOCKER.md`](docs/DOCKER.md)).
 
 **Für Production-Deployments:** siehe [`docs/DOCKER.md`](docs/DOCKER.md) für vollständige Sicherheitskonfiguration.
@@ -93,13 +93,15 @@ Folgende Vektoren müssen für externe Deployments geschlossen werden:
 
 ---
 
-## 🗺 ROADMAP (v0.7.0+)
+## 🗺 ROADMAP
 
-Wir iterieren schnell und gnadenlos.
+OpenSylab entwickelt sich von einer Open-Source-LIMS-Lösung hin zu einer professionellen, cloud-fähigen Plattform:
 
-- **Security Lock-down:** HTTPS-Enforcement, bcrypt Hashing.
-- **API-Docs:** OpenAPI 3.0 / Swagger UI.
-- **Scale:** PostgreSQL Support und Multi-Tenant-Fähigkeit.
+- **v0.7 Workflow Completeness:** Frontend-CRUD-Operationen, Barcode-Integration, CSV-Import UI.
+- **v0.8 Security & Quality:** CI/CD, Argon2, Security Hardening.
+- **v0.9 Architektur-Modernisierung:** PostgreSQL, JSON-Logs, API-Versionierung.
+- **v1.0 Stable Open-Source Edition:** Produktionsreife Self-Host-Version, RBAC, MFA.
+- **v1.x Cloud Edition & Enterprise:** Multi-Tenant, Compliance (DSGVO), Cloud-Features.
 
 Details im [`ROADMAP.MD`](ROADMAP.MD).
 
