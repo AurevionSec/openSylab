@@ -1099,6 +1099,109 @@ Database::getSamplesByFilter(const SampleFilter &filter) {
   return samples;
 }
 
+int Database::getSamplesCount(const SampleFilter &filter) {
+  clearError();
+
+  if (!isOpen_) {
+    setError("Datenbank ist nicht geöffnet");
+    return -1;
+  }
+
+  std::vector<std::string> conditions;
+  std::string queryPattern;
+  if (!filter.query.empty()) {
+    std::string escaped;
+    escaped.reserve(filter.query.size());
+    for (char c : filter.query) {
+      if (c == '%' || c == '_' || c == '\\') {
+        escaped.push_back('\\');
+      }
+      escaped.push_back(c);
+    }
+    queryPattern = "%" + escaped + "%";
+    conditions.emplace_back(
+        "(sample_id LIKE ? ESCAPE '\\' OR patient_id LIKE ? ESCAPE '\\' "
+        "OR patient_name LIKE ? ESCAPE '\\')");
+  }
+  if (!filter.status.empty()) {
+    conditions.emplace_back("status = ?");
+  }
+  if (filter.excludeArchived) {
+    conditions.emplace_back("status != ?");
+  }
+  if (filter.fromDate.has_value()) {
+    conditions.emplace_back("registration_date >= ?");
+  }
+  if (filter.toDate.has_value()) {
+    conditions.emplace_back("registration_date <= ?");
+  }
+
+  std::ostringstream sql;
+  sql << "SELECT COUNT(*) FROM samples";
+
+  if (!conditions.empty()) {
+    sql << " WHERE ";
+    for (size_t i = 0; i < conditions.size(); ++i) {
+      if (i > 0) {
+        sql << " AND ";
+      }
+      sql << conditions[i];
+    }
+  }
+
+  sql << ";";
+
+  sqlite3_stmt *rawStmt = nullptr;
+  int rc = sqlite3_prepare_v2(db_, sql.str().c_str(), -1, &rawStmt, nullptr);
+
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Vorbereiten des COUNT: " +
+             std::string(sqlite3_errmsg(db_)));
+    return -1;
+  }
+
+  auto stmt = makeStatement(rawStmt);
+
+  int bindIndex = 1;
+  if (!filter.query.empty()) {
+    sqlite3_bind_text(stmt.get(), bindIndex++, queryPattern.c_str(), -1,
+                      SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt.get(), bindIndex++, queryPattern.c_str(), -1,
+                      SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt.get(), bindIndex++, queryPattern.c_str(), -1,
+                      SQLITE_TRANSIENT);
+  }
+  if (!filter.status.empty()) {
+    sqlite3_bind_text(stmt.get(), bindIndex++, filter.status.c_str(), -1,
+                      SQLITE_TRANSIENT);
+  }
+  if (filter.excludeArchived) {
+    std::string archived =
+        core::Sample::statusToString(core::Sample::Status::ARCHIVED);
+    sqlite3_bind_text(stmt.get(), bindIndex++, archived.c_str(), -1,
+                      SQLITE_TRANSIENT);
+  }
+  if (filter.fromDate.has_value()) {
+    sqlite3_bind_int64(stmt.get(), bindIndex++,
+                       static_cast<sqlite3_int64>(filter.fromDate.value()));
+  }
+  if (filter.toDate.has_value()) {
+    sqlite3_bind_int64(stmt.get(), bindIndex++,
+                       static_cast<sqlite3_int64>(filter.toDate.value()));
+  }
+
+  rc = sqlite3_step(stmt.get());
+
+  if (rc != SQLITE_ROW) {
+    setError("Fehler beim Zählen der Proben: " +
+             std::string(sqlite3_errmsg(db_)));
+    return -1;
+  }
+
+  int count = sqlite3_column_int(stmt.get(), 0);
+  return count;
+}
+
 bool Database::updateSample(const core::Sample &sample,
                             const std::string &actor) {
   clearError();
@@ -1231,7 +1334,7 @@ bool Database::deleteSample(int id, const std::string &actor) {
     return false;
   }
 
-  const char *deleteSQL = "DELETE FROM samples WHERE id = ?;";
+  const char *deleteSQL = "UPDATE samples SET status = ? WHERE id = ?;";
 
   sqlite3_stmt *rawStmt = nullptr;
   rc = sqlite3_prepare_v2(db_, deleteSQL, -1, &rawStmt, nullptr);
@@ -1245,7 +1348,9 @@ bool Database::deleteSample(int id, const std::string &actor) {
 
   auto stmt = makeStatement(rawStmt);
 
-  sqlite3_bind_int(stmt.get(), 1, id);
+  std::string statusStr = core::Sample::statusToString(core::Sample::Status::ARCHIVED);
+  sqlite3_bind_text(stmt.get(), 1, statusStr.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int(stmt.get(), 2, id);
   rc = sqlite3_step(stmt.get());
 
   if (rc != SQLITE_DONE) {
@@ -1267,7 +1372,7 @@ bool Database::deleteSample(int id, const std::string &actor) {
   details << "Proben-ID: " << existing->getSampleId()
           << "; Patient-ID: " << existing->getPatientId()
           << "; Status: " << existing->getStatusString();
-  core::AuditEntry entry(core::AuditEntry::ActionType::DELETE,
+  core::AuditEntry entry(core::AuditEntry::ActionType::UPDATE,
                          core::AuditEntry::EntityType::SAMPLE,
                          existing->getSampleId(), normalizeActor(actor),
                          details.str());
@@ -1870,21 +1975,23 @@ bool Database::deleteOrder(int id, const std::string &actor) {
     return false;
   }
 
-  const char *deleteSQL = "DELETE FROM orders WHERE id = ?;";
+  const char *deleteSQL = "UPDATE orders SET status = ? WHERE id = ?;";
 
   sqlite3_stmt *rawStmt = nullptr;
   rc = sqlite3_prepare_v2(db_, deleteSQL, -1, &rawStmt, nullptr);
 
   if (rc != SQLITE_OK) {
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Vorbereiten des DELETE: " +
+    setError("Fehler beim Vorbereiten des UPDATE: " +
              std::string(sqlite3_errmsg(db_)));
     return false;
   }
 
   auto stmt = makeStatement(rawStmt);
 
-  sqlite3_bind_int(stmt.get(), 1, id);
+  std::string statusStr = core::Order::statusToString(core::Order::Status::CANCELLED);
+  sqlite3_bind_text(stmt.get(), 1, statusStr.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int(stmt.get(), 2, id);
   rc = sqlite3_step(stmt.get());
 
   if (rc != SQLITE_DONE) {
@@ -1905,7 +2012,7 @@ bool Database::deleteOrder(int id, const std::string &actor) {
   details << "Auftrags-ID: " << existing->getOrderId()
           << "; Proben-ID: " << existing->getSampleId()
           << "; Status: " << existing->getStatusString();
-  core::AuditEntry entry(core::AuditEntry::ActionType::DELETE,
+  core::AuditEntry entry(core::AuditEntry::ActionType::UPDATE,
                          core::AuditEntry::EntityType::ORDER,
                          existing->getOrderId(), normalizeActor(actor),
                          details.str());
@@ -2900,21 +3007,23 @@ bool Database::deleteTestResult(int id, const std::string &actor) {
     return false;
   }
 
-  const char *deleteSQL = "DELETE FROM test_results WHERE id = ?;";
+  const char *deleteSQL = "UPDATE test_results SET status = ? WHERE id = ?;";
 
   sqlite3_stmt *rawStmt = nullptr;
   rc = sqlite3_prepare_v2(db_, deleteSQL, -1, &rawStmt, nullptr);
 
   if (rc != SQLITE_OK) {
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Vorbereiten des DELETE: " +
+    setError("Fehler beim Vorbereiten des UPDATE: " +
              std::string(sqlite3_errmsg(db_)));
     return false;
   }
 
   auto stmt = makeStatement(rawStmt);
 
-  sqlite3_bind_int(stmt.get(), 1, id);
+  std::string statusStr = core::TestResult::statusToString(core::TestResult::Status::REJECTED);
+  sqlite3_bind_text(stmt.get(), 1, statusStr.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int(stmt.get(), 2, id);
   rc = sqlite3_step(stmt.get());
 
   if (rc != SQLITE_DONE) {
@@ -2935,7 +3044,7 @@ bool Database::deleteTestResult(int id, const std::string &actor) {
   details << "Ergebnis-ID: " << existing->getResultId()
           << "; Parameter: " << existing->getTestParameter()
           << "; Status: " << existing->getStatusString();
-  core::AuditEntry entry(core::AuditEntry::ActionType::DELETE,
+  core::AuditEntry entry(core::AuditEntry::ActionType::UPDATE,
                          core::AuditEntry::EntityType::RESULT,
                          existing->getResultId(), normalizeActor(actor),
                          details.str());
