@@ -64,6 +64,14 @@ const transformResult = (backendResult: any): TestResult => {
   };
 };
 
+const mapStatusToBackend = (status: string): string => {
+  const statusMap: Record<string, string> = {
+    'REVIEWED': 'ENTERED',
+    'AMENDED': 'REPEATED',
+  };
+  return statusMap[status] ?? status;
+};
+
 export const getResults = async (filters?: ResultFilter): Promise<ResultListResponse> => {
   const translatedFilters = filters ? {
     ...filters,
@@ -87,14 +95,6 @@ export const getResults = async (filters?: ResultFilter): Promise<ResultListResp
 export const getResultById = async (id: string): Promise<TestResult> => {
   const response = await api.get<{ data: any }>(`/results/${id}`);
   return transformResult(response.data.data);
-};
-
-const mapStatusToBackend = (status: string): string => {
-  const statusMap: Record<string, string> = {
-    'REVIEWED': 'ENTERED',
-    'AMENDED': 'REPEATED',
-  };
-  return statusMap[status] ?? status;
 };
 
 export const createResult = async (result: Omit<TestResult, 'id' | 'reviewed_date'>): Promise<TestResult> => {

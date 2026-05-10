@@ -2005,7 +2005,10 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       }
       out << resultToJson(*results[i]);
     }
-    int resultsTotal = database_->getTestResultsCount(resultsOrderIdFilter);
+    // When status filter is applied in-memory, use actual result count for total
+    int resultsTotal = (!statusFilter.empty())
+        ? static_cast<int>(results.size())
+        : database_->getTestResultsCount(resultsOrderIdFilter);
     if (resultsTotal < 0) resultsTotal = static_cast<int>(results.size());
     out << "],\"total\":" << resultsTotal << "}";
 
