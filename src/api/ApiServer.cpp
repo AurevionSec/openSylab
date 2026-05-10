@@ -925,7 +925,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       }
 
       auto created = database_->getSampleByBarcode(sample.getSampleId());
-      if (total < 0) {
+      if (database_->hasError()) {
         return makeDbErrorResponse(database_->getLastError());
       }
       const core::Sample &responseSample = created ? *created : sample;
@@ -1025,7 +1025,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       }
 
       auto created = database_->getOrderByOrderId(order.getOrderId());
-      if (total < 0) {
+      if (database_->hasError()) {
         return makeDbErrorResponse(database_->getLastError());
       }
       const core::Order &responseOrder = created ? *created : order;
@@ -1178,7 +1178,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       }
 
       auto created = database_->getTestResultByResultId(result.getResultId());
-      if (total < 0) {
+      if (database_->hasError()) {
         return makeDbErrorResponse(database_->getLastError());
       }
       const core::TestResult &responseResult = created ? *created : result;
@@ -1195,7 +1195,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                          "Provide sample_id in URL path.");
       }
       auto existing = database_->getSampleByBarcode(sampleId);
-      if (total < 0) {
+      if (database_->hasError()) {
         return makeDbErrorResponse(database_->getLastError());
       }
       if (!existing) {
@@ -1275,7 +1275,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                          "Provide order_id in URL path.");
       }
       auto existing = database_->getOrderByOrderId(orderId);
-      if (total < 0) {
+      if (database_->hasError()) {
         return makeDbErrorResponse(database_->getLastError());
       }
       if (!existing) {
@@ -1383,7 +1383,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                          "Provide result_id in URL path.");
       }
       auto existing = database_->getTestResultByResultId(resultId);
-      if (total < 0) {
+      if (database_->hasError()) {
         return makeDbErrorResponse(database_->getLastError());
       }
       if (!existing) {
@@ -1545,7 +1545,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                          "Provide sample_id in URL path.");
       }
       auto existing = database_->getSampleByBarcode(sampleId);
-      if (total < 0) {
+      if (database_->hasError()) {
         return makeDbErrorResponse(database_->getLastError());
       }
       if (!existing) {
@@ -1573,7 +1573,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                          "Provide order_id in URL path.");
       }
       auto existing = database_->getOrderByOrderId(orderId);
-      if (total < 0) {
+      if (database_->hasError()) {
         return makeDbErrorResponse(database_->getLastError());
       }
       if (!existing) {
@@ -1601,7 +1601,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                          "Provide result_id in URL path.");
       }
       auto existing = database_->getTestResultByResultId(resultId);
-      if (total < 0) {
+      if (database_->hasError()) {
         return makeDbErrorResponse(database_->getLastError());
       }
       if (!existing) {
@@ -1705,7 +1705,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
     }
 
     auto samples = database_->getSamplesByFilter(filter);
-    if (total < 0) {
+    if (database_->hasError()) {
       return makeError(500, "internal_error", database_->getLastError(),
                        "Check server logs for details.");
     }
@@ -1761,7 +1761,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                        "Provide sample_id in URL path.");
     }
     auto sample = database_->getSampleByBarcode(sampleId);
-    if (total < 0) {
+    if (database_->hasError()) {
       return makeError(500, "internal_error", database_->getLastError(),
                        "Check server logs for details.");
     }
@@ -1837,7 +1837,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
     }
 
     auto orders = database_->getOrdersByFilter(filter);
-    if (total < 0) {
+    if (database_->hasError()) {
       return makeError(500, "internal_error", database_->getLastError(),
                        "Check server logs for details.");
     }
@@ -1885,7 +1885,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                        "Provide order_id in URL path.");
     }
     auto order = database_->getOrderByOrderId(orderId);
-    if (total < 0) {
+    if (database_->hasError()) {
       return makeError(500, "internal_error", database_->getLastError(),
                        "Check server logs for details.");
     }
@@ -1949,7 +1949,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       results = database_->getAllTestResults(limit, offset);
     }
 
-    if (total < 0) {
+    if (database_->hasError()) {
       return makeError(500, "internal_error", database_->getLastError(),
                        "Check server logs for details.");
     }
@@ -1991,7 +1991,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                        "Provide result_id in URL path.");
     }
     auto result = database_->getTestResultByResultId(resultId);
-    if (total < 0) {
+    if (database_->hasError()) {
       return makeError(500, "internal_error", database_->getLastError(),
                        "Check server logs for details.");
     }
@@ -2021,7 +2021,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
     }
 
     auto users = database_->getAllUsers();
-    if (total < 0) {
+    if (database_->hasError()) {
       return makeDbErrorResponse(database_->getLastError());
     }
 
@@ -2044,7 +2044,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
     }
 
     auto user = database_->getUser(jwtPayload->userId);
-    if (total < 0) {
+    if (database_->hasError()) {
       return makeDbErrorResponse(database_->getLastError());
     }
     if (!user) {
@@ -2136,7 +2136,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
     }
 
     auto created = database_->getUserByUsername(newUser.getUsername());
-    if (total < 0) {
+    if (database_->hasError()) {
       return makeDbErrorResponse(database_->getLastError());
     }
     const core::User &responseUser = created ? *created : newUser;
@@ -2166,7 +2166,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
     }
 
     auto existing = database_->getUser(userId);
-    if (total < 0) {
+    if (database_->hasError()) {
       return makeDbErrorResponse(database_->getLastError());
     }
     if (!existing) {
@@ -2292,7 +2292,7 @@ after_user_update:
     }
 
     auto user = database_->getUser(jwtPayload->userId);
-    if (total < 0) {
+    if (database_->hasError()) {
       return makeDbErrorResponse(database_->getLastError());
     }
     if (!user) {
@@ -2336,7 +2336,7 @@ after_user_update:
     }
 
     auto existing = database_->getUser(userId);
-    if (total < 0) {
+    if (database_->hasError()) {
       return makeDbErrorResponse(database_->getLastError());
     }
     if (!existing) {
@@ -2413,7 +2413,7 @@ after_user_update:
     }
 
     auto entries = database_->getAuditLogFiltered(filter);
-    if (total < 0) {
+    if (database_->hasError()) {
       return makeDbErrorResponse(database_->getLastError());
     }
 
@@ -2452,7 +2452,7 @@ after_user_update:
     auto orderStats = database_->getOrderStats(filter);
     auto resultStats = database_->getResultStats(filter);
 
-    if (total < 0) {
+    if (database_->hasError()) {
       return makeDbErrorResponse(database_->getLastError());
     }
 
