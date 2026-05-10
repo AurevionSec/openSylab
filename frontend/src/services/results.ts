@@ -35,9 +35,10 @@ const mapFlag = (backendFlag: string): TestResult['flag'] => {
     'HIGH': 'HIGH',
     'CRITICAL': 'CRITICAL',
     'UNDEFINED': 'UNDEFINED',
+    'UNKNOWN': 'UNDEFINED',
     'Unbekannt': 'UNDEFINED',
   };
-  return flagMap[backendFlag] || 'NORMAL';
+  return flagMap[backendFlag] || 'UNDEFINED';
 };
 
 // Transform backend result to frontend result
@@ -64,8 +65,12 @@ const transformResult = (backendResult: any): TestResult => {
 };
 
 export const getResults = async (filters?: ResultFilter): Promise<ResultListResponse> => {
+  const translatedFilters = filters ? {
+    ...filters,
+    status: filters.status ? mapStatusToBackend(filters.status) : undefined,
+  } : undefined;
   const response = await api.get<{ data: any[]; total: number }>('/results', {
-    params: filters,
+    params: translatedFilters,
   });
 
   // Transform backend response to frontend format
