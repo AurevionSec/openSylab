@@ -181,6 +181,11 @@ ApiResponse makeDbErrorResponse(const std::string &message) {
     return makeError(400, "validation_error", "Invalid input",
                      "One or more fields contain invalid values.");
   }
+  if (lower.find("letzten aktiven administrator") != std::string::npos) {
+    return makeError(400, "validation_error",
+                     "Operation would remove the last active administrator",
+                     "At least one active administrator must remain.");
+  }
   return makeError(500, "internal_error", "An internal error occurred",
                    "Please contact the system administrator.");
 }
