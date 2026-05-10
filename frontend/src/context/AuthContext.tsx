@@ -11,7 +11,7 @@ import {
 interface AuthContextType {
   isAuthenticated: boolean;
   user: User | null;
-  login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  login: (username: string, password: string, mfaCode?: string) => Promise<{ success: boolean; error?: string; mfaRequired?: boolean }>;
   logout: () => void;
   loading: boolean;
 }
@@ -37,8 +37,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setLoading(false);
   }, []);
 
-  const login = async (username: string, password: string): Promise<{ success: boolean; error?: string }> => {
-    const result = await loginService(username, password);
+  const login = async (username: string, password: string, mfaCode?: string): Promise<{ success: boolean; error?: string; mfaRequired?: boolean }> => {
+    const result = await loginService(username, password, mfaCode);
 
     if (result.success && result.user) {
       setIsAuthenticated(true);
@@ -46,7 +46,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       return { success: true };
     }
 
-    return { success: false, error: result.error };
+    return { success: false, error: result.error, mfaRequired: result.mfaRequired };
   };
 
   const logout = () => {

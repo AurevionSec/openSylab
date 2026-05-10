@@ -16,13 +16,12 @@ export interface LoginResponse {
 /**
  * Login with username and password (JWT authentication)
  */
-export const login = async (username: string, password: string): Promise<{ success: boolean; user?: User; error?: string; mfaRequired?: boolean }> => {
+export const login = async (username: string, password: string, mfaCode?: string): Promise<{ success: boolean; user?: User; error?: string; mfaRequired?: boolean }> => {
   try {
+    const body: Record<string, string> = { username, password };
+    if (mfaCode) body.mfa_code = mfaCode;
 
-    const response = await api.post<LoginResponse>('/auth/login', {
-      username,
-      password,
-    });
+    const response = await api.post<LoginResponse>('/auth/login', body);
 
 
     const { token, user: rawUser, expiresIn } = response.data;

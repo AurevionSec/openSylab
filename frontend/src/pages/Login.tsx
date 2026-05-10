@@ -11,6 +11,8 @@ export const Login = () => {
   useDocumentTitle({ action: 'Sign In' });
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [mfaCode, setMfaCode] = useState('');
+  const [mfaRequired, setMfaRequired] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
@@ -22,9 +24,12 @@ export const Login = () => {
     setLoading(true);
 
     try {
-      const result = await login(username, password);
+      const result = await login(username, password, mfaRequired ? mfaCode : undefined);
       if (result.success) {
         navigate('/');
+      } else if (result.mfaRequired) {
+        setMfaRequired(true);
+        setError('');
       } else {
         setError(result.error || 'Invalid credentials. Please check your username and password and try again.');
       }
@@ -75,12 +80,35 @@ export const Login = () => {
               </div>
             </div>
 
+            {mfaRequired && (
+              <div>
+                <p className="text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded p-3 mb-3">
+                  An MFA code is required. Enter the 6-digit code from your authenticator app.
+                </p>
+                <Input
+                  type="text"
+                  label="MFA Code"
+                  placeholder="6-digit code"
+                  value={mfaCode}
+                  onChange={(e) => setMfaCode(e.target.value)}
+                  maxLength={6}
+                  autoFocus
+                  autoComplete="one-time-code"
+                  aria-label="MFA Code"
+                />
+              </div>
+            )}
+
+            {error && (
+              <p className="text-red-600 text-sm">{error}</p>
+            )}
+
             <Button
               type="submit"
               className="w-full"
-              disabled={loading || !username || !password}
+              disabled={loading || !username || !password || (mfaRequired && !mfaCode)}
             >
-              {loading ? 'Signing in...' : 'Sign In'}
+              {loading ? 'Signing in...' : mfaRequired ? 'Verify MFA Code' : 'Sign In'}
             </Button>
           </form>
 
