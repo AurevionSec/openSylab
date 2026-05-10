@@ -871,6 +871,12 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
   const std::unordered_map<std::string, std::string> query =
       parseQuery(queryString);
 
+  // RBAC: VIEWER role cannot write lab data (applies to POST, PUT, DELETE)
+  if (!isGet && effectiveRole == "VIEWER") {
+    return makeError(403, "forbidden", "Insufficient permissions",
+                     "VIEWER role cannot create, update, or delete records.");
+  }
+
   if (isPost || isPut) {
     const std::string body = trimLeadingNewlines(request.body);
     if (body.empty()) {
@@ -883,12 +889,6 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
     if (!parseJsonObject(body, payload, parseError)) {
       return makeError(400, "validation_error", "Invalid JSON payload",
                        parseError);
-    }
-
-    // RBAC: VIEWER role cannot write lab data
-    if (!isGet && effectiveRole == "VIEWER") {
-      return makeError(403, "forbidden", "Insufficient permissions",
-                       "VIEWER role cannot create, update, or delete records.");
     }
 
     if (path == "/api/v1/samples" && isPost) {

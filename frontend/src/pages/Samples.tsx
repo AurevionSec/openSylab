@@ -10,10 +10,13 @@ import { getSamples, deleteSample } from '../services/samples';
 import type { Sample } from '../types/sample';
 import { SAMPLE_STATUSES } from '../utils/constants';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { useAuth } from '../context/AuthContext';
 import { useEntityList } from '../hooks/useEntityList';
 
 export const Samples = () => {
   useDocumentTitle({ module: 'Samples' });
+  const { user } = useAuth();
+  const canWrite = user?.role === 'ADMIN' || user?.role === 'OPERATOR';
   const [selectedStatus, setSelectedStatus] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -198,7 +201,7 @@ export const Samples = () => {
                           {new Date(sample.created_at).toLocaleDateString('de-DE')}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <div className="flex items-center justify-end gap-2">
+                          {canWrite && <div className="flex items-center justify-end gap-2">
                             <Button
                               variant="secondary"
                               size="sm"
@@ -239,7 +242,7 @@ export const Samples = () => {
                                 Delete
                               </span>
                             </Button>
-                          </div>
+                          </div>}
                         </td>
                       </tr>
                     ))}

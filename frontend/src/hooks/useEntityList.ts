@@ -29,26 +29,26 @@ export function useEntityList<T>(
   const loadFnRef = useRef(fetchFn);
   loadFnRef.current = fetchFn;
 
-  const triggerRef = useRef(0);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const refetch = useCallback(() => {
-    triggerRef.current += 1;
-    // Increment trigger to force the useEffect to re-run
     setLoading(true);
-    let cancelled = false;
     setError('');
     loadFnRef.current()
       .then(result => {
-        if (!cancelled) { setData(result.data); setTotal(result.total); }
+        if (mountedRef.current) { setData(result.data); setTotal(result.total); }
       })
       .catch((err: unknown) => {
-        if (!cancelled) {
+        if (mountedRef.current) {
           const message = err instanceof Error ? err.message : 'Failed to load data';
           setError(message);
         }
       })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+      .finally(() => { if (mountedRef.current) setLoading(false); });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

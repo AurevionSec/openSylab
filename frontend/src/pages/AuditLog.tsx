@@ -64,9 +64,11 @@ export const AuditLog = () => {
     const resetFilter = { limit: 50 };
     setFilter(resetFilter);
     setError('');
+    setLoading(true);
     getAuditLog(resetFilter)
       .then(data => { if (!cancelledRef.current) setEntries(data); })
-      .catch(() => { if (!cancelledRef.current) setError('Failed to load audit log'); });
+      .catch(() => { if (!cancelledRef.current) setError('Failed to load audit log'); })
+      .finally(() => { if (!cancelledRef.current) setLoading(false); });
   };
 
   if (loading) {

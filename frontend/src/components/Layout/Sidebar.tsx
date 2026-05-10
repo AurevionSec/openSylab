@@ -59,7 +59,8 @@ export const Sidebar = () => {
     ),
   }] : [];
 
-  const systemItems = [
+  const isAdmin = user?.role === 'ADMIN';
+  const systemItems = isAdmin ? [
     {
       name: 'Audit Log',
       path: '/audit-log',
@@ -87,7 +88,7 @@ export const Sidebar = () => {
         </svg>
       ),
     },
-  ];
+  ] : []
 
   const getUserInitials = () => {
     if (!user?.username) return 'U';

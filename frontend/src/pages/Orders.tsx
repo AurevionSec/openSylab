@@ -10,10 +10,13 @@ import { getOrders, deleteOrder } from '../services/orders';
 import type { Order } from '../types/order';
 import { ORDER_STATUSES, ORDER_PRIORITIES } from '../utils/constants';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { useAuth } from '../context/AuthContext';
 import { useEntityList } from '../hooks/useEntityList';
 
 export const Orders = () => {
   useDocumentTitle({ module: 'Orders' });
+  const { user } = useAuth();
+  const canWrite = user?.role === 'ADMIN' || user?.role === 'OPERATOR';
   const [selectedStatus, setSelectedStatus] = useState<string>('');
   const [selectedPriority, setSelectedPriority] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -220,7 +223,7 @@ export const Orders = () => {
                           {new Date(order.requested_date).toLocaleDateString('de-DE')}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <div className="flex items-center justify-end gap-2">
+                          {canWrite && <div className="flex items-center justify-end gap-2">
                             <Button
                               variant="secondary"
                               size="sm"
@@ -261,7 +264,7 @@ export const Orders = () => {
                                 Delete
                               </span>
                             </Button>
-                          </div>
+                          </div>}
                         </td>
                       </tr>
                     ))}
