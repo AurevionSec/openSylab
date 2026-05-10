@@ -4444,6 +4444,28 @@ bool Database::updateUser(const core::User &user, const std::string &actor) {
     return false;
   }
 
+  // Protect against removing the last active admin
+  const bool wasAdmin = (existing->getRole() == core::User::Role::ADMIN);
+  const bool stillAdmin = (user.getRole() == core::User::Role::ADMIN);
+  const bool beingDeactivated = !user.isActive();
+  if (wasAdmin && (!stillAdmin || beingDeactivated)) {
+    const char *countSQL =
+        "SELECT COUNT(*) FROM users WHERE role = ? AND active = 1 AND id != ?;";
+    sqlite3_stmt *rawCount = nullptr;
+    if (sqlite3_prepare_v2(db_, countSQL, -1, &rawCount, nullptr) == SQLITE_OK) {
+      auto countStmt = makeStatement(rawCount);
+      const std::string adminRoleStr = core::User::roleToString(core::User::Role::ADMIN);
+      sqlite3_bind_text(countStmt.get(), 1, adminRoleStr.c_str(), -1, SQLITE_TRANSIENT);
+      sqlite3_bind_int(countStmt.get(), 2, user.getId());
+      if (sqlite3_step(countStmt.get()) == SQLITE_ROW) {
+        if (sqlite3_column_int(countStmt.get(), 0) == 0) {
+          setError("Letzten aktiven Administrator kann nicht entfernt oder deaktiviert werden");
+          return false;
+        }
+      }
+    }
+  }
+
   char *errMsg = nullptr;
   int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
                         &errMsg);
@@ -4565,6 +4587,26 @@ bool Database::deleteUser(int id, const std::string &actor) {
     return false;
   }
 
+  // Prevent deactivating the last active admin
+  if (existing->getRole() == core::User::Role::ADMIN) {
+    const char *countSQL =
+        "SELECT COUNT(*) FROM users WHERE role = ? AND active = 1 AND id != ?;";
+    sqlite3_stmt *rawCount = nullptr;
+    if (sqlite3_prepare_v2(db_, countSQL, -1, &rawCount, nullptr) == SQLITE_OK) {
+      auto countStmt = makeStatement(rawCount);
+      const std::string adminRoleStr = core::User::roleToString(core::User::Role::ADMIN);
+      sqlite3_bind_text(countStmt.get(), 1, adminRoleStr.c_str(), -1, SQLITE_TRANSIENT);
+      sqlite3_bind_int(countStmt.get(), 2, id);
+      if (sqlite3_step(countStmt.get()) == SQLITE_ROW) {
+        int remaining = sqlite3_column_int(countStmt.get(), 0);
+        if (remaining == 0) {
+          setError("Letzten aktiven Administrator kann nicht deaktiviert werden");
+          return false;
+        }
+      }
+    }
+  }
+
   char *errMsg = nullptr;
   int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
                         &errMsg);
@@ -4611,7 +4653,7 @@ bool Database::deleteUser(int id, const std::string &actor) {
           << "; Rolle: " << existing->getRoleString()
           << "; Status: " << formatActive(existing->isActive()) << " -> "
           << formatActive(false);
-  core::AuditEntry entry(core::AuditEntry::ActionType::UPDATE,
+  core::AuditEntry entry(core::AuditEntry::ActionType::DELETE,
                          core::AuditEntry::EntityType::USER,
                          existing->getUsername(), normalizeActor(actor),
                          details.str());

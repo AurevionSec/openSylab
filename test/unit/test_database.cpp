@@ -1724,6 +1724,10 @@ bool test_database_DeleteUserDeactivates() {
   ASSERT_TRUE(db.open());
   ASSERT_TRUE(db.initializeSchema());
 
+  // Need a second admin so the first can be deactivated (last-admin guard)
+  User admin2("admin_keeper", User::hashPassword("secret2"), User::Role::ADMIN);
+  ASSERT_TRUE(db.createUser(admin2));
+
   User user("deactivate_user", User::hashPassword("secret"),
             User::Role::ADMIN);
   ASSERT_TRUE(db.createUser(user));
@@ -1741,7 +1745,7 @@ bool test_database_DeleteUserDeactivates() {
   auto entries =
       db.getAuditLogByEntity(AuditEntry::EntityType::USER, "deactivate_user");
   const AuditEntry *entry =
-      findAuditEntry(entries, AuditEntry::ActionType::UPDATE,
+      findAuditEntry(entries, AuditEntry::ActionType::DELETE,
                      AuditEntry::EntityType::USER, "deactivate_user", "admin");
   ASSERT_NOT_NULL(entry);
 
