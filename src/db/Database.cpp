@@ -2703,7 +2703,7 @@ bool Database::updateTestResult(const core::TestResult &result,
 
 bool Database::updateTestResultCore(const core::TestResult &result) {
   const std::string computedFlag =
-      core::TestResult::flagToString(result.evaluateFlag());
+      core::TestResult::flagToString(result.getFlag());
   const char *updateSQL = R"(
         UPDATE test_results SET
             result_id = ?,
@@ -2832,7 +2832,7 @@ bool Database::updateTestResultWithAudit(const core::TestResult &result,
   }
 
   const std::string computedFlag =
-      core::TestResult::flagToString(result.evaluateFlag());
+      core::TestResult::flagToString(result.getFlag());
 
   std::ostringstream details;
   bool hasChanges = false;

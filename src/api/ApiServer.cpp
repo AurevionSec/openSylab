@@ -2693,8 +2693,9 @@ void ApiServer::handleClientTls(int clientFd) {
       << "\r\n";
   out << "Content-Type: " << response.contentType << "\r\n";
   out << "Content-Length: " << response.body.size() << "\r\n";
-  const char* corsOrigin = std::getenv("OPENSYLAB_CORS_ORIGIN");
-        out << "Access-Control-Allow-Origin: " << (corsOrigin && *corsOrigin ? corsOrigin : "http://localhost:5173") << "\r\n";
+  const char* _rawCors = std::getenv("OPENSYLAB_CORS_ORIGIN");
+        const std::string _corsOrigin = (_rawCors && *_rawCors) ? trim(std::string(_rawCors)) : "http://localhost:5173";
+        out << "Access-Control-Allow-Origin: " << _corsOrigin << "\r\n";
   out << "Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\n";
   out << "Access-Control-Allow-Headers: Content-Type, X-API-Key, Authorization\r\n";
   out << "Access-Control-Max-Age: 3600\r\n";
@@ -2773,8 +2774,9 @@ void ApiServer::handleClientPlain(int clientFd) {
       << "\r\n";
   out << "Content-Type: " << response.contentType << "\r\n";
   out << "Content-Length: " << response.body.size() << "\r\n";
-  const char* corsOrigin = std::getenv("OPENSYLAB_CORS_ORIGIN");
-        out << "Access-Control-Allow-Origin: " << (corsOrigin && *corsOrigin ? corsOrigin : "http://localhost:5173") << "\r\n";
+  const char* _rawCors = std::getenv("OPENSYLAB_CORS_ORIGIN");
+        const std::string _corsOrigin = (_rawCors && *_rawCors) ? trim(std::string(_rawCors)) : "http://localhost:5173";
+        out << "Access-Control-Allow-Origin: " << _corsOrigin << "\r\n";
   out << "Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\n";
   out << "Access-Control-Allow-Headers: Content-Type, X-API-Key, Authorization\r\n";
   out << "Access-Control-Max-Age: 3600\r\n";
