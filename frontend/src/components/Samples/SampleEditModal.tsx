@@ -72,9 +72,10 @@ export const SampleEditModal = ({ isOpen, sampleId, onClose, onSuccess }: Sample
     } catch (err: unknown) {
       let errorMessage = 'Failed to update sample. Please try again.';
 
-      if (err.response?.data?.error?.message) {
-        errorMessage = err.response.data.error.message;
-      } else if (err.message) {
+      if (err && typeof err === 'object' && 'response' in err) {
+        const r = err as {response?: {data?: {error?: {message?: string}}}};
+        if (r.response?.data?.error?.message) errorMessage = r.response.data.error.message;
+      } else if (err instanceof Error) {
         errorMessage = err.message;
       }
 

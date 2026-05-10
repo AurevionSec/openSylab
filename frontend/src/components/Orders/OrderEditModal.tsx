@@ -76,9 +76,10 @@ export const OrderEditModal = ({ isOpen, orderId, onClose, onSuccess }: OrderEdi
     } catch (err: unknown) {
       let errorMessage = 'Failed to update order. Please try again.';
 
-      if (err.response?.data?.error?.message) {
-        errorMessage = err.response.data.error.message;
-      } else if (err.message) {
+      if (err && typeof err === 'object' && 'response' in err) {
+        const r = err as {response?: {data?: {error?: {message?: string}}}};
+        if (r.response?.data?.error?.message) errorMessage = r.response.data.error.message;
+      } else if (err instanceof Error) {
         errorMessage = err.message;
       }
 

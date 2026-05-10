@@ -45,7 +45,7 @@ export const Samples = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleCreateSuccess = (newSample: Sample) => {
+  const handleCreateSuccess = (_newSample: Sample) => {
     refetch();
   };
 
@@ -54,7 +54,7 @@ export const Samples = () => {
     setIsEditModalOpen(true);
   };
 
-  const handleEditSuccess = (updatedSample: Sample) => {
+  const handleEditSuccess = (_updatedSample: Sample) => {
     refetch();
   };
 

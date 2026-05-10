@@ -49,9 +49,10 @@ export const DeleteConfirmDialog = ({
       console.error('[DeleteConfirmDialog] Error during delete:', err);
       let errorMessage = 'Failed to delete item. Please try again.';
 
-      if (err.response?.data?.error?.message) {
-        errorMessage = err.response.data.error.message;
-      } else if (err.message) {
+      if (err && typeof err === 'object' && 'response' in err) {
+        const r = err as {response?: {data?: {error?: {message?: string}}}};
+        if (r.response?.data?.error?.message) errorMessage = r.response.data.error.message;
+      } else if (err instanceof Error) {
         errorMessage = err.message;
       }
 

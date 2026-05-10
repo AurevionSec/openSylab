@@ -27,7 +27,7 @@ export const Users = () => {
       const data = await getUsers();
       setUsers(data);
     } catch (err: unknown) {
-      setError(err.response?.data?.error?.message || 'Failed to load users');
+      setError((err && typeof err === 'object' && 'response' in err ? (err as {response?: {data?: {error?: {message?: string}}}}).response?.data?.error?.message : undefined) || 'Failed to load users');
       console.error(err);
     } finally {
       setLoading(false);
@@ -40,7 +40,7 @@ export const Users = () => {
       await fetchUsers();
       setIsCreateModalOpen(false);
     } catch (err: unknown) {
-      throw new Error(err.response?.data?.error?.message || 'Failed to create user');
+      throw new Error((err && typeof err === 'object' && 'response' in err ? (err as {response?: {data?: {error?: {message?: string}}}}).response?.data?.error?.message : undefined) || 'Failed to create user');
     }
   };
 
@@ -50,7 +50,7 @@ export const Users = () => {
       await fetchUsers();
       setEditingUser(null);
     } catch (err: unknown) {
-      throw new Error(err.response?.data?.error?.message || 'Failed to update user');
+      throw new Error((err && typeof err === 'object' && 'response' in err ? (err as {response?: {data?: {error?: {message?: string}}}}).response?.data?.error?.message : undefined) || 'Failed to update user');
     }
   };
 
@@ -61,7 +61,7 @@ export const Users = () => {
       await deleteUser(userId);
       await fetchUsers();
     } catch (err: unknown) {
-      setError(err.response?.data?.error?.message || 'Failed to delete user');
+      setError((err && typeof err === 'object' && 'response' in err ? (err as {response?: {data?: {error?: {message?: string}}}}).response?.data?.error?.message : undefined) || 'Failed to delete user');
     }
   };
 
@@ -228,7 +228,7 @@ const UserModal = ({ user, onClose, onSubmit }: UserModalProps) => {
 
       await onSubmit(payload);
     } catch (err: unknown) {
-      setError(err.message);
+      setError((err instanceof Error ? err.message : String(err)));
     } finally {
       setLoading(false);
     }

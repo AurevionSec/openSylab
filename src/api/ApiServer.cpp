@@ -1956,8 +1956,9 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       }
       offset = offsetValue;
     }
-    // Parse optional status filter
+    // Parse optional status and flag filters
     std::string statusFilter;
+    std::string flagFilter;
     auto statusResultIt = query.find("status");
     if (statusResultIt != query.end() && !statusResultIt->second.empty()) {
       // Translate frontend status tokens to backend equivalents
@@ -1965,6 +1966,11 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       if (s == "REVIEWED")  statusFilter = "ENTERED";
       else if (s == "AMENDED") statusFilter = "REPEATED";
       else statusFilter = s;
+    }
+
+    auto flagResultIt = query.find("flag");
+    if (flagResultIt != query.end() && !flagResultIt->second.empty()) {
+      flagFilter = flagResultIt->second;
     }
 
     std::optional<int> resultsOrderIdFilter;
@@ -1991,6 +1997,16 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       }
       results = std::move(filtered);
     }
+    // Apply flag filter in-memory if provided
+    if (!flagFilter.empty()) {
+      std::vector<std::unique_ptr<core::TestResult>> filtered;
+      for (auto &r : results) {
+        if (r->getFlagString() == flagFilter) {
+          filtered.push_back(std::move(r));
+        }
+      }
+      results = std::move(filtered);
+    }
 
     if (database_->hasError()) {
       return makeError(500, "internal_error", database_->getLastError(),
@@ -2005,8 +2021,8 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       }
       out << resultToJson(*results[i]);
     }
-    // When status filter is applied in-memory, use actual result count for total
-    int resultsTotal = (!statusFilter.empty())
+    // When in-memory filters are applied, use actual result count for total
+    int resultsTotal = (!statusFilter.empty() || !flagFilter.empty())
         ? static_cast<int>(results.size())
         : database_->getTestResultsCount(resultsOrderIdFilter);
     if (resultsTotal < 0) resultsTotal = static_cast<int>(results.size());

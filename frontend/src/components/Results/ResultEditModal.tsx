@@ -66,9 +66,10 @@ export const ResultEditModal = ({ isOpen, onClose, result, onSuccess }: ResultEd
       console.error('[ResultEdit] Error updating result:', err);
       let errorMessage = 'Failed to update result. Please try again.';
 
-      if (err.response?.data?.error?.message) {
-        errorMessage = err.response.data.error.message;
-      } else if (err.message) {
+      if (err && typeof err === 'object' && 'response' in err) {
+        const r = err as {response?: {data?: {error?: {message?: string}}}};
+        if (r.response?.data?.error?.message) errorMessage = r.response.data.error.message;
+      } else if (err instanceof Error) {
         errorMessage = err.message;
       }
 

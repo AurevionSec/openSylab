@@ -27,7 +27,7 @@ export const Profile = () => {
       const data = await getCurrentUser();
       setUser(data);
     } catch (err: unknown) {
-      setError(err.response?.data?.error?.message || 'Failed to load profile');
+      setError((err && typeof err === 'object' && 'response' in err ? (err as {response?: {data?: {error?: {message?: string}}}}).response?.data?.error?.message : undefined) || 'Failed to load profile');
       console.error(err);
     } finally {
       setLoading(false);
@@ -248,7 +248,7 @@ const ChangePasswordForm = ({ onSuccess, onCancel }: ChangePasswordFormProps) =>
         onSuccess();
       }, 2000);
     } catch (err: unknown) {
-      setError(err.response?.data?.error?.message || 'Failed to change password');
+      setError((err && typeof err === 'object' && 'response' in err ? (err as {response?: {data?: {error?: {message?: string}}}}).response?.data?.error?.message : undefined) || 'Failed to change password');
     } finally {
       setLoading(false);
     }

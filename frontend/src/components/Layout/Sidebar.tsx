@@ -143,11 +143,7 @@ export const Sidebar = () => {
               {item.icon}
             </span>
             {item.name}
-            {item.badge && (
-              <span className="ml-auto bg-gray-900 text-gray-300 py-0.5 px-2 rounded-full text-xs font-mono">
-                {item.badge}
-              </span>
-            )}
+            
           </Link>
         ))}
 

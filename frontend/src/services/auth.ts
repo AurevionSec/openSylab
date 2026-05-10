@@ -47,18 +47,14 @@ export const login = async (username: string, password: string): Promise<{ succe
 
     return { success: true, user };
   } catch (error: unknown) {
-    console.error('[AUTH] Login error:', error);
-
     let errorMessage = 'An error occurred. Please try again.';
 
-    if (error.response) {
-      console.error('[AUTH] Response status:', error.response.status);
-      console.error('[AUTH] Response data:', error.response.data);
-
-      if (error.response.status === 401) {
+    if (error && typeof error === 'object' && 'response' in error) {
+      const r = error as { response?: { status?: number; data?: { error?: { message?: string } } } };
+      if (r.response?.status === 401) {
         errorMessage = 'Invalid username or password.';
-      } else if (error.response.data?.error?.message) {
-        errorMessage = error.response.data.error.message;
+      } else if (r.response?.data?.error?.message) {
+        errorMessage = r.response.data.error.message;
       }
     }
 

@@ -271,7 +271,7 @@ export const Dashboard = () => {
                   <YAxis tick={{ fontSize: 9, fill: '#5E6C84' }} allowDecimals={false} />
                   <Tooltip
                     contentStyle={{ fontSize: 11, border: '1px solid #E2E8F0' }}
-                    formatter={(v: number) => [v, 'Count']}
+                    formatter={(v) => [v, 'Count']}
                   />
                   <Bar dataKey="count" radius={[2, 2, 0, 0]}>
                     {sampleStatusChart.map((entry, i) => (
@@ -295,7 +295,7 @@ export const Dashboard = () => {
                   <YAxis tick={{ fontSize: 9, fill: '#5E6C84' }} allowDecimals={false} />
                   <Tooltip
                     contentStyle={{ fontSize: 11, border: '1px solid #E2E8F0' }}
-                    formatter={(v: number) => [v, 'Count']}
+                    formatter={(v) => [v, 'Count']}
                   />
                   <Bar dataKey="count" radius={[2, 2, 0, 0]}>
                     {orderStatusChart.map((entry, i) => (
@@ -319,7 +319,7 @@ export const Dashboard = () => {
                   <YAxis tick={{ fontSize: 9, fill: '#5E6C84' }} allowDecimals={false} />
                   <Tooltip
                     contentStyle={{ fontSize: 11, border: '1px solid #E2E8F0' }}
-                    formatter={(v: number) => [v, 'Count']}
+                    formatter={(v) => [v, 'Count']}
                   />
                   <Bar dataKey="count" radius={[2, 2, 0, 0]}>
                     {orderPriorityChart.map((entry, i) => (

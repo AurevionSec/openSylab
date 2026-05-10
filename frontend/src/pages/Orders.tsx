@@ -42,7 +42,7 @@ export const Orders = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleCreateSuccess = (newOrder: Order) => {
+  const handleCreateSuccess = (_newOrder: Order) => {
     refetch();
   };
 
@@ -51,7 +51,7 @@ export const Orders = () => {
     setIsEditModalOpen(true);
   };
 
-  const handleEditSuccess = (updatedOrder: Order) => {
+  const handleEditSuccess = (_updatedOrder: Order) => {
     refetch();
   };
 
@@ -309,19 +309,31 @@ export const Orders = () => {
                       >
                         Previous
                       </button>
-                      {[...Array(totalPages)].map((_, i) => (
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      let pageNum;
+                      if (totalPages <= 5) {
+                        pageNum = i + 1;
+                      } else if (currentPage <= 3) {
+                        pageNum = i + 1;
+                      } else if (currentPage >= totalPages - 2) {
+                        pageNum = totalPages - 4 + i;
+                      } else {
+                        pageNum = currentPage - 2 + i;
+                      }
+                      return (
                         <button
-                          key={i + 1}
-                          onClick={() => handlePageChange(i + 1)}
+                          key={pageNum}
+                          onClick={() => handlePageChange(pageNum)}
                           className={`relative inline-flex items-center px-4 py-2 text-sm font-semibold ${
-                            currentPage === i + 1
+                            currentPage === pageNum
                               ? 'z-10 bg-blue-600 text-white focus:z-20'
                               : 'text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20'
                           }`}
                         >
-                          {i + 1}
+                          {pageNum}
                         </button>
-                      ))}
+                      );
+                    })}
                       <button
                         onClick={() => handlePageChange(currentPage + 1)}
                         disabled={currentPage === totalPages}
