@@ -84,7 +84,7 @@ export const createResult = async (result: Omit<TestResult, 'id' | 'reviewed_dat
   const response = await api.post<{ data: any }>('/results', {
     result_id: result.result_id,
     order_id: result.order_id,
-    parameter: result.parameter,
+    test_parameter: result.parameter,
     value: result.value,
     unit: result.unit,
     min_value: result.reference_min,

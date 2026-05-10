@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 interface EntityListState<T> {
   data: T[];
@@ -26,24 +26,35 @@ export function useEntityList<T>(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  const cancelledRef = useRef(false);
+
   const load = useCallback(async () => {
+    cancelledRef.current = false;
     setLoading(true);
     setError('');
     try {
       const result = await fetchFn();
-      setData(result.data);
-      setTotal(result.total);
+      if (!cancelledRef.current) {
+        setData(result.data);
+        setTotal(result.total);
+      }
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to load data';
-      setError(message);
+      if (!cancelledRef.current) {
+        const message = err instanceof Error ? err.message : 'Failed to load data';
+        setError(message);
+      }
     } finally {
-      setLoading(false);
+      if (!cancelledRef.current) setLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
 
   useEffect(() => {
+    cancelledRef.current = false;
     load();
+    return () => {
+      cancelledRef.current = true;
+    };
   }, [load]);
 
   return { data, total, loading, error, refetch: load };

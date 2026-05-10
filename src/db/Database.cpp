@@ -2679,8 +2679,15 @@ bool Database::updateTestResult(const core::TestResult &result,
 
   const std::string detailText =
       hasChanges ? details.str() : "Keine Änderungen";
-  logResultAction(core::AuditEntry::ActionType::UPDATE, result.getResultId(),
-                  normalizeActor(actor), detailText);
+
+  core::AuditEntry auditEntry(core::AuditEntry::ActionType::UPDATE,
+                              core::AuditEntry::EntityType::RESULT,
+                              result.getResultId(), normalizeActor(actor),
+                              detailText);
+  if (!logAudit(auditEntry)) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
 
   rc = sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &errMsg);
   if (rc != SQLITE_OK) {

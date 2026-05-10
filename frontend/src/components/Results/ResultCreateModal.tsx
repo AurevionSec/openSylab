@@ -67,9 +67,7 @@ export const ResultCreateModal = ({ isOpen, onClose, onSuccess }: ResultCreateMo
     setError('');
     setLoading(true);
     try {
-      console.log('[ResultCreate] Submitting result:', formData);
       const newResult = await createResult(formData);
-      console.log('[ResultCreate] Result created successfully:', newResult);
       setFormData({
         result_id: '',
         order_id: '',
@@ -168,7 +166,7 @@ export const ResultCreateModal = ({ isOpen, onClose, onSuccess }: ResultCreateMo
                     >
                       <option value="">— Select Order —</option>
                       {availableOrders.map((o) => (
-                        <option key={o.id} value={o.order_id}>
+                        <option key={o.id} value={String(o.id)}>
                           {o.order_id} ({o.test_type})
                         </option>
                       ))}
