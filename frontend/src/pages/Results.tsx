@@ -43,7 +43,6 @@ export const Results = () => {
   };
 
   const handleCreateSuccess = (newResult: TestResult) => {
-    console.log('[Results] Result created successfully:', newResult);
     refetch();
   };
 
@@ -53,7 +52,6 @@ export const Results = () => {
   };
 
   const handleEditSuccess = (updatedResult: TestResult) => {
-    console.log('[Results] Result updated successfully:', updatedResult);
     refetch();
   };
 
@@ -64,9 +62,7 @@ export const Results = () => {
 
   const handleDeleteConfirm = async () => {
     if (!resultToDelete) return;
-    console.log('[Results] Deleting result:', resultToDelete.id);
     await deleteResult(resultToDelete.result_id);
-    console.log('[Results] Result deleted successfully');
     refetch();
   };
 
@@ -186,6 +182,7 @@ export const Results = () => {
                             result.flag === 'CRITICAL' ? 'bg-red-50 text-red-700 border-red-200' :
                             result.flag === 'HIGH' ? 'bg-orange-50 text-orange-700 border-orange-200' :
                             result.flag === 'LOW' ? 'bg-yellow-50 text-yellow-800 border-yellow-200' :
+                            result.flag === 'UNDEFINED' ? 'bg-gray-100 text-gray-600 border-gray-300' :
                             'bg-green-50 text-green-700 border-green-200'
                           }`}>
                             {RESULT_FLAGS[result.flag]}

@@ -71,6 +71,7 @@ export const RESULT_FLAG_COLORS = {
   LOW: 'bg-blue-100 text-blue-800',
   HIGH: 'bg-orange-100 text-orange-800',
   CRITICAL: 'bg-red-100 text-red-800',
+  UNDEFINED: 'bg-gray-100 text-gray-600',
 } as const;
 
 // API Configuration

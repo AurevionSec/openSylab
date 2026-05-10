@@ -32,7 +32,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       // Load user info from storage
       const storedUser = getStoredUser();
       setUser(storedUser);
-      console.log('[AuthContext] User authenticated:', storedUser);
     }
 
     setLoading(false);
@@ -44,11 +43,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (result.success && result.user) {
       setIsAuthenticated(true);
       setUser(result.user);
-      console.log('[AuthContext] Login successful, user:', result.user);
       return { success: true };
     }
 
-    console.log('[AuthContext] Login failed:', result.error);
     return { success: false, error: result.error };
   };
 
@@ -56,7 +53,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     logoutService();
     setIsAuthenticated(false);
     setUser(null);
-    console.log('[AuthContext] User logged out');
   };
 
   return (

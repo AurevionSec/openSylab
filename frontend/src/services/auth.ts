@@ -25,7 +25,15 @@ export const login = async (username: string, password: string): Promise<{ succe
     });
 
 
-    const { token, user, expiresIn } = response.data;
+    const { token, user: rawUser, expiresIn } = response.data;
+    // Normalize role to uppercase short form for consistent RBAC comparison
+    const roleMap: Record<string, string> = {
+      'Administrator': 'ADMIN', 'admin': 'ADMIN',
+      'Operator': 'OPERATOR', 'operator': 'OPERATOR',
+      'Betrachter': 'VIEWER', 'viewer': 'VIEWER',
+      'Custom': 'CUSTOM', 'custom': 'CUSTOM',
+    };
+    const user = { ...rawUser, role: roleMap[rawUser.role] ?? rawUser.role.toUpperCase() };
 
     // Store JWT token and user info
     localStorage.setItem(JWT_TOKEN_STORAGE_KEY, token);
