@@ -2414,6 +2414,51 @@ bool test_database_UpdateUser_TwoAdmins_DemotionAllowed() {
   return true;
 }
 
+bool test_database_UpdateUser_DeactivateLastAdmin_Protected() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  // Only one admin — deactivating them should fail
+  auto admin = db.getUserByUsername("admin");
+  ASSERT_NOT_NULL(admin);
+  admin->setActive(false);
+  ASSERT_FALSE(db.updateUser(*admin, "admin"));
+  ASSERT_FALSE(db.getLastError().empty());
+
+  // Verify admin is still active
+  auto still = db.getUserByUsername("admin");
+  ASSERT_NOT_NULL(still);
+  ASSERT_TRUE(still->isActive());
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_database_DeleteUser_LastAdminProtected() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  // Only one admin — deleting them should fail
+  auto admin = db.getUserByUsername("admin");
+  ASSERT_NOT_NULL(admin);
+  ASSERT_FALSE(db.deleteUser(admin->getId(), "admin"));
+  ASSERT_FALSE(db.getLastError().empty());
+
+  // Verify admin is still active
+  auto still = db.getUserByUsername("admin");
+  ASSERT_NOT_NULL(still);
+  ASSERT_TRUE(still->isActive());
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
 void registerDatabaseTests() {
   registerTest("Database::OpenAndClose", test_database_OpenAndClose);
   registerTest("Database::InitializeSchema", test_database_InitializeSchema);
@@ -2537,4 +2582,8 @@ void registerDatabaseTests() {
                test_database_UpdateUser_LastAdminProtected);
   registerTest("Database::UpdateUser_TwoAdmins_DemotionAllowed",
                test_database_UpdateUser_TwoAdmins_DemotionAllowed);
+  registerTest("Database::UpdateUser_DeactivateLastAdmin_Protected",
+               test_database_UpdateUser_DeactivateLastAdmin_Protected);
+  registerTest("Database::DeleteUser_LastAdminProtected",
+               test_database_DeleteUser_LastAdminProtected);
 }
