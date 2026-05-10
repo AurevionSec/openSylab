@@ -79,3 +79,19 @@ export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:80
 export const API_KEY_STORAGE_KEY = 'opensylab_api_key'; // Legacy, kept for backward compatibility
 export const JWT_TOKEN_STORAGE_KEY = 'opensylab_jwt_token';
 export const USER_INFO_STORAGE_KEY = 'opensylab_user_info';
+
+export const SAMPLE_TRANSITIONS: Record<string, string[]> = {
+  REGISTERED: ['IN_ANALYSIS', 'ARCHIVED'],
+  IN_ANALYSIS: ['ANALYZED', 'ARCHIVED'],
+  ANALYZED: ['VALIDATED', 'ARCHIVED'],
+  VALIDATED: ['ARCHIVED'],
+  ARCHIVED: [],
+};
+
+export const ORDER_TRANSITIONS: Record<string, string[]> = {
+  REQUESTED: ['IN_PROGRESS', 'CANCELLED'],
+  IN_PROGRESS: ['COMPLETED', 'CANCELLED'],
+  COMPLETED: ['VALIDATED'],
+  VALIDATED: [],
+  CANCELLED: [],
+};

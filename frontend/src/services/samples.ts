@@ -34,7 +34,7 @@ const transformSample = (backendSample: any): Sample => {
 };
 
 export const getSamples = async (filters?: SampleFilter): Promise<SampleListResponse> => {
-  const response = await api.get<{ data: any[] }>('/samples', {
+  const response = await api.get<{ data: any[]; total: number }>('/samples', {
     params: filters,
   });
 
@@ -43,7 +43,7 @@ export const getSamples = async (filters?: SampleFilter): Promise<SampleListResp
 
   return {
     samples,
-    total: samples.length,
+    total: response.data.total ?? samples.length,
     limit: filters?.limit || samples.length,
     offset: filters?.offset || 0,
   };

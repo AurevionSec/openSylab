@@ -4,7 +4,7 @@ import { Input } from '../common/Input';
 import { Button } from '../common/Button';
 import { getSampleById, updateSample } from '../../services/samples';
 import type { Sample } from '../../types/sample';
-import { SAMPLE_STATUSES } from '../../utils/constants';
+import { SAMPLE_STATUSES, SAMPLE_TRANSITIONS } from '../../utils/constants';
 
 interface SampleEditModalProps {
   isOpen: boolean;
@@ -173,9 +173,11 @@ export const SampleEditModal = ({ isOpen, sampleId, onClose, onSuccess }: Sample
                   className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#0055FF] focus:border-transparent"
                   required
                 >
-                  {Object.entries(SAMPLE_STATUSES).map(([key, label]) => (
+                  {([formData.status, ...(SAMPLE_TRANSITIONS[formData.status] ?? [])] as string[])
+                    .filter((key, i, arr) => arr.indexOf(key) === i)
+                    .map((key) => (
                     <option key={key} value={key}>
-                      {label}
+                      {SAMPLE_STATUSES[key as keyof typeof SAMPLE_STATUSES] ?? key}
                     </option>
                   ))}
                 </select>
