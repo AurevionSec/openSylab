@@ -16,6 +16,8 @@ const mapStatus = (backendStatus: string): TestResult['status'] => {
     'VALIDATED': 'VALIDATED',
     'REJECTED': 'REJECTED',
     'AMENDED': 'AMENDED',
+    'ENTERED': 'REVIEWED',
+    'REPEATED': 'AMENDED',
   };
   return statusMap[backendStatus] || 'PENDING';
 };
