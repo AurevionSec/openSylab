@@ -100,6 +100,12 @@ bool test_database_CreateSample() {
   sample.setPatientName("Test Patient");
   ASSERT_TRUE(db.createSample(sample));
 
+  auto retrieved = db.getSampleByBarcode("TEST001");
+  ASSERT_NOT_NULL(retrieved);
+  ASSERT_EQ(retrieved->getSampleId(), std::string("TEST001"));
+  ASSERT_EQ(retrieved->getPatientId(), std::string("P001"));
+  ASSERT_EQ(retrieved->getPatientName(), std::string("Test Patient"));
+
   db.close();
   std::remove(dbPath.c_str());
   return true;

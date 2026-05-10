@@ -55,8 +55,9 @@ export const Import = () => {
 
     const reader = new FileReader();
     reader.onload = (evt) => {
-      const text = evt.target?.result as string;
-      const allLines = text.split(/\r?\n/).filter(l => l.trim() !== '');
+      // Strip UTF-8 BOM if present (common with Excel-exported CSVs)
+      const rawText = (evt.target?.result as string).replace(/^\uFEFF/, '');
+      const allLines = rawText.split(/\r?\n/).filter(l => l.trim() !== '');
       // Skip header row if it starts with known column names
       const firstLower = allLines[0]?.toLowerCase() ?? '';
       const lines = (firstLower.startsWith('sample_id') || firstLower.startsWith('id,'))

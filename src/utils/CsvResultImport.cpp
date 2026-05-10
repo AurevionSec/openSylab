@@ -73,14 +73,25 @@ CsvResultImport::importResults(const std::string &filePath) {
       currentRecord = line;
     }
 
-    // Prüfen ob wir noch in einem zitierten Feld sind
-    int quoteCount = 0;
-    for (char c : currentRecord) {
-      if (c == '"') {
-        quoteCount++;
+    // Track whether accumulated record ends inside an open quoted field.
+    // State machine handles escaped double-quotes ("") correctly.
+    {
+      bool inQ = false;
+      for (size_t ci = 0; ci < currentRecord.size(); ++ci) {
+        if (inQ) {
+          if (currentRecord[ci] == '"') {
+            if (ci + 1 < currentRecord.size() && currentRecord[ci + 1] == '"') {
+              ++ci; // skip escaped double-quote
+            } else {
+              inQ = false; // closing quote
+            }
+          }
+        } else if (currentRecord[ci] == '"') {
+          inQ = true; // opening quote
+        }
       }
+      inQuotedField = inQ;
     }
-    inQuotedField = (quoteCount % 2 != 0);
 
     if (inQuotedField) {
       continue; // Mehr Zeilen sammeln

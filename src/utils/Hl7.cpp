@@ -417,12 +417,14 @@ bool Hl7Parser::mapOruR01(MappedData &out) {
   }
   const std::string patientName = fieldValue(*pid, 5);
 
-  const std::string obrPlacer = fieldValue(*obr, 2);
-  const std::string obrFiller = fieldValue(*obr, 3);
+  const std::string obrPlacer = fieldValue(*obr, 2); // Placer Order Number
+  const std::string obrFiller = fieldValue(*obr, 3); // Filler Order Number (treated as specimen barcode)
   const std::string orderId = firstNonEmpty(obrPlacer, obrFiller);
   if (orderId.empty()) {
     addError(obr->line, "OBR", 2, "Missing order identifier (OBR-2/OBR-3)");
   }
+  // OBR-3 (Filler Order Number) is used as the specimen/sample ID per lab convention.
+  // For systems where SPM-2 carries the specimen barcode, extend this parser to read SPM segments.
   const std::string sampleId = firstNonEmpty(obrFiller, obrPlacer);
   if (sampleId.empty()) {
     addError(obr->line, "OBR", 3, "Missing sample identifier (OBR-3/OBR-2)");
