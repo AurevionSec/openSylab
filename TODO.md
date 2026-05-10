@@ -75,119 +75,208 @@
 
 ## v0.7.0 Planning (Workflow Completeness & UI)
 
-### 🗄️ Backend: API Vollständigkeit (P1)
+---
 
-- [ ] **[P1]** Soft-Delete für Samples implementieren
-  - [ ] Backend: `Sample::status` auf `ARCHIVED` setzen statt Row löschen
-  - [ ] Backend: `DELETE /api/v1/samples/:id` gibt `204 No Content` zurück
-  - [ ] Backend: Audit-Log-Eintrag mit `ActionType::DELETE` + Actor-ID schreiben
-  - [ ] Frontend: `deleteSample()` in `services/samples.ts` prüfen (bereits vorhanden)
-  - [ ] Frontend: `DeleteConfirmDialog` in `Samples.tsx` bereits angebunden – verifizieren
-  - **Estimate:** 1 Tag
+### 1. Soft-Delete: Samples [P1]
 
-- [ ] **[P1]** Soft-Delete für Orders implementieren
-  - [ ] Backend: `Order::status` auf `CANCELLED` setzen statt Row löschen
-  - [ ] Backend: `DELETE /api/v1/orders/:id` gibt `204 No Content` zurück
-  - [ ] Backend: Audit-Log-Eintrag schreiben
-  - [ ] Frontend: `deleteOrder()` in `services/orders.ts` prüfen (bereits vorhanden)
-  - [ ] Frontend: `DeleteConfirmDialog` in `Orders.tsx` bereits angebunden – verifizieren
-  - **Estimate:** 1 Tag
+**Backend**
+- [ ] `Database::deleteSample(id)`: SQL von `DELETE` auf `UPDATE samples SET status='ARCHIVED' WHERE id=?` umstellen
+- [ ] Rückgabe `false` wenn Sample nicht gefunden (→ 404 im Handler)
+- [ ] Rückgabe `false` wenn Sample bereits `ARCHIVED` (→ 409 im Handler)
+- [ ] `ApiServer`: DELETE `/api/v1/samples/:id` gibt `204 No Content` bei Erfolg
+- [ ] `ApiServer`: DELETE `/api/v1/samples/:id` gibt `404` wenn nicht gefunden
+- [ ] `ApiServer`: DELETE `/api/v1/samples/:id` gibt `409` wenn bereits archiviert
+- [ ] `ApiServer`: Actor-ID aus JWT-Payload extrahieren und an DB übergeben
+- [ ] `Database`: `AuditEntry` mit `ActionType::DELETE`, `EntityType::SAMPLE`, `actor_id`, `entity_id` schreiben
 
-- [ ] **[P1]** Soft-Delete für Results implementieren
-  - [ ] Backend: `TestResult::status` auf `REJECTED` setzen statt Row löschen
-  - [ ] Backend: `DELETE /api/v1/results/:id` gibt `204 No Content` zurück
-  - [ ] Backend: Audit-Log-Eintrag schreiben
-  - [ ] Frontend: `deleteResult()` in `services/results.ts` prüfen/hinzufügen
-  - [ ] Frontend: `DeleteConfirmDialog` in `Results.tsx` anbinden
-  - **Estimate:** 1 Tag
+**Frontend**
+- [ ] `services/samples.ts`: `deleteSample(id)` auf `DELETE /api/v1/samples/:id` prüfen
+- [ ] `Samples.tsx`: `DeleteConfirmDialog` Anbindung verifizieren — ruft `deleteSample()` auf?
+- [ ] `Samples.tsx`: Nach erfolgreichem Delete `fetchSamples()` aufrufen (Liste aktualisieren)
+- [ ] `Samples.tsx`: Archivierte Samples in der Liste ausgegraut oder ausgeblendet darstellen
 
-- [ ] **[P1]** `getSamples()` Pagination korrekt implementieren
-  - [ ] Backend: `total`-Feld im Response auf echten DB-Count setzen (nicht `data.length`)
-  - [ ] Backend: `offset`/`limit` Query-Parameter korrekt an SQLite weiterleiten
-  - [ ] Frontend: `SampleListResponse.total` für Pagination in `Samples.tsx` korrekt auswerten
-  - **Estimate:** halber Tag
+---
 
-### 🔗 Frontend: Sample-Auftrag-Verknüpfung (P1)
+### 2. Soft-Delete: Orders [P1]
 
-- [ ] **[P1]** Orders mit bestehendem Sample verknüpfen
-  - [ ] `OrderCreateModal.tsx`: Dropdown für `sample_id` mit `getSamples()` befüllen
-  - [ ] Typeahead-Suche nach Sample-ID im Modal einbauen
-  - [ ] Validierung: Order kann nur angelegt werden wenn Sample existiert
-  - [ ] `OrderEditModal.tsx`: Verlinktes Sample anzeigen (read-only, da nachträgliche Änderung auditpflichtig)
-  - **Estimate:** 1 Tag
+**Backend**
+- [ ] `Database::deleteOrder(id)`: `UPDATE orders SET status='CANCELLED' WHERE id=?`
+- [ ] Rückgabe `false` wenn nicht gefunden oder bereits `CANCELLED`
+- [ ] `ApiServer`: DELETE `/api/v1/orders/:id` — 204 / 404 / 409
+- [ ] `ApiServer`: Actor-ID aus JWT extrahieren
+- [ ] `Database`: `AuditEntry` mit `ActionType::DELETE`, `EntityType::ORDER` schreiben
 
-- [ ] **[P1]** Results mit Auftrag verknüpfen
-  - [ ] `ResultCreateModal.tsx`: Dropdown für `order_id` mit `getOrders()` befüllen
-  - [ ] Auftragsstatus vor Ergebniseingabe prüfen (nur `IN_PROGRESS` oder `COMPLETED` zulässig)
-  - [ ] Auto-Flag-Berechnung im Frontend: Wenn `value` zwischen `reference_min` und `reference_max` → `NORMAL`, sonst `HIGH`/`LOW`
-  - [ ] Referenzbereich-Felder beim Eingeben der Werte visuell validieren (in-line Feedback)
-  - **Estimate:** 1,5 Tage
+**Frontend**
+- [ ] `services/orders.ts`: `deleteOrder(id)` prüfen
+- [ ] `Orders.tsx`: `DeleteConfirmDialog` verifizieren
+- [ ] `Orders.tsx`: Nach Delete Liste aktualisieren
 
-### 📊 Dashboard: Charts & Metriken (P2)
+---
 
-- [ ] **[P2]** Recharts in das Projekt einbinden
-  - [ ] `npm install recharts` im `frontend/` Verzeichnis
-  - [ ] TypeScript-Typen für Recharts-Props prüfen (`@types/recharts` falls nötig)
+### 3. Soft-Delete: Results [P1]
 
-- [ ] **[P2]** Samples-Statusverteilung als Chart im Dashboard
-  - [ ] `Dashboard.tsx`: Neuer Abschnitt unterhalb der Metrikkacheln
-  - [ ] `BarChart` oder `PieChart` aus Recharts mit `stats.samples.by_status` als Datenquelle
-  - [ ] Farben aus der bestehenden `getStatusColor()`-Mapping-Funktion ableiten
-  - [ ] Responsive: `ResponsiveContainer` mit fixer Höhe (z.B. `200px`)
+**Backend**
+- [ ] `Database::deleteTestResult(id)`: `UPDATE test_results SET status='REJECTED' WHERE id=?`
+- [ ] Rückgabe `false` wenn nicht gefunden oder bereits `REJECTED`
+- [ ] `ApiServer`: DELETE `/api/v1/results/:id` — 204 / 404 / 409
+- [ ] `ApiServer`: Actor-ID aus JWT extrahieren
+- [ ] `Database`: `AuditEntry` mit `ActionType::DELETE`, `EntityType::RESULT` schreiben
 
-- [ ] **[P2]** Orders-Prioritätsverteilung als Chart
-  - [ ] Separate Zählung nach `priority` (NORMAL / URGENT / EMERGENCY) aus Orders-Daten
-  - [ ] `BarChart` neben dem Samples-Chart im gleichen Bento-Grid-Layout
+**Frontend**
+- [ ] `services/results.ts`: `deleteResult(id)` prüfen — falls fehlend, ergänzen
+- [ ] `Results.tsx`: `DeleteConfirmDialog` anbinden (analog Samples/Orders)
+- [ ] `Results.tsx`: Nach Delete Liste aktualisieren
 
-- [ ] **[P2]** Kritische Ergebnisse (Flag: CRITICAL/HIGH) im Dashboard hervorheben
-  - [ ] Neue Kachel "Critical Results" mit Anzahl `flag === 'CRITICAL'` aus Results-Daten
-  - [ ] Visueller Alert-Stil (roter Rahmen, Neon-Akzent im Dark Mode)
-  - **Estimate gesamt:** 2-3 Tage
+---
 
-### 📥 CSV Import: Frontend (P2)
+### 4. Pagination Fix: Samples [P1]
 
-- [ ] **[P2]** CSV-Import Seite/Modal erstellen
-  - [ ] Neue Route `/import` oder Modal vom Dashboard aus erreichbar
-  - [ ] `<input type="file" accept=".csv">` Komponente
-  - [ ] File-Inhalt per FileReader API auslesen und als `FormData` an Backend senden
-  - [ ] POST `/api/v1/samples/import` oder existierenden CSV-Endpoint nutzen
+**Backend**
+- [ ] `Database::getSamplesCount(filter)`: neue Methode mit `SELECT COUNT(*) FROM samples WHERE ...`
+- [ ] `Database::getSamples(offset, limit, filter)`: `LIMIT ? OFFSET ?` an SQL anhängen
+- [ ] `ApiServer`: Query-Parameter `offset` und `limit` aus Request parsen (Defaults: offset=0, limit=20)
+- [ ] `ApiServer`: `total` im JSON-Response aus `getSamplesCount()` setzen, nicht `data.size()`
 
-- [ ] **[P2]** Import-Fortschritt & Ergebnis anzeigen
-  - [ ] Tabelle mit Erfolg/Fehler-Zeilen aus Backend-Response rendern
-  - [ ] Farbkodierung: grüne Zeile = importiert, rote Zeile = Fehler mit Grund
-  - [ ] Gesamtstatistik: "X von Y Zeilen erfolgreich importiert"
-  - [ ] Button "Import wiederholen" nach Fehler
-  - **Estimate:** 2 Tage
+**Frontend**
+- [ ] `Samples.tsx`: `SampleListResponse.total` für Seitenberechnung verwenden
+- [ ] `Samples.tsx`: `Math.ceil(total / pageSize)` für Gesamtseitenzahl
+- [ ] `Samples.tsx`: "Weiter"-Button deaktivieren wenn `offset + pageSize >= total`
+- [ ] `Samples.tsx`: Seitenzahl-Anzeige (`Seite X von Y`) ergänzen
 
-### 📡 Barcode-Scanner Integration (P2)
+---
 
-- [ ] **[P2]** Web-Barcode-API anbinden
-  - [ ] Feature-Detection: `BarcodeDetector` API im Browser prüfen (`'BarcodeDetector' in window`)
-  - [ ] Camera-Zugriff via `navigator.mediaDevices.getUserMedia()` anfragen
-  - [ ] Neuer React Hook `useBarcode()` in `frontend/src/hooks/useBarcode.ts` erstellen
+### 5. Sample-Order-Verknüpfung im Frontend [P1]
 
-- [ ] **[P2]** Barcode-Scanner in Sample-Erfassung einbauen
-  - [ ] `SampleCreateModal.tsx`: Scanner-Button neben dem `sample_id`-Feld
-  - [ ] Scanner-Modal öffnet Kamera-Vorschau, liest Code und befüllt das Textfeld automatisch
-  - [ ] Fallback: manuelle Eingabe weiterhin möglich
-  - **Estimate:** 2 Tage
+**Backend**
+- [ ] `ApiServer`: `POST /api/v1/orders` validiert dass `sample_id` in `samples`-Tabelle existiert → `422 Unprocessable Entity` falls nicht
 
-### 🔍 UX & Code-Qualität (P1)
+**Frontend**
+- [ ] `OrderCreateModal.tsx`: `useEffect` beim Öffnen — alle Samples laden via `getSamples()`
+- [ ] `OrderCreateModal.tsx`: Dropdown für `sample_id` mit Sample-IDs + Patientennamen befüllen
+- [ ] `OrderCreateModal.tsx`: Typeahead-Filter — Freitext filtert Dropdown-Einträge live
+- [ ] `OrderCreateModal.tsx`: Speichern-Button blockiert wenn kein Sample ausgewählt
+- [ ] `OrderCreateModal.tsx`: Fehlermeldung wenn keine Samples vorhanden ("Zuerst eine Probe anlegen")
+- [ ] `OrderEditModal.tsx`: Verlinktes Sample als read-only Label anzeigen (nicht änderbar)
 
-- [ ] **[P1]** Refresh-Logik in Pages refactoren
-  - [ ] `fetchSamples()`, `fetchOrders()`, `fetchResults()` sind in Samples/Orders/Results je 3× dupliziert
-  - [ ] `useCallback` verwenden oder in einen Custom Hook `useEntityList()` extrahieren
-  - [ ] Verhindert Race-Conditions bei schnellen Filter-Wechseln
+---
 
-- [ ] **[P1]** Fehlerbehandlung auf allen Pages vereinheitlichen
-  - [ ] Wiederverwendbare `<ErrorBanner message={error} />` Komponente erstellen
-  - [ ] Alle Pages verwenden aktuell inline-Styles für Error-Darstellung
+### 6. Result-Order-Verknüpfung + Auto-Flag [P1]
 
-- [ ] **[P1]** Status-Workflow-Transitionen in den Edit-Dialogen einschränken
-  - [ ] `SampleEditModal.tsx`: Nur erlaubte Status-Übergänge im Dropdown anzeigen (z.B. kein ARCHIVED → REGISTERED)
-  - [ ] `OrderEditModal.tsx`: Analog für Order-Status
-  - [ ] Statusübergänge als Konstante in `utils/constants.ts` definieren
-  - **Estimate:** 1 Tag
+**Backend**
+- [ ] `ApiServer`: `POST /api/v1/results` validiert dass `order_id` existiert → `422` falls nicht
+- [ ] `ApiServer`: `POST /api/v1/results` prüft Order-Status — nur `IN_PROGRESS` oder `COMPLETED` zulässig → `409` sonst
+
+**Frontend**
+- [ ] `ResultCreateModal.tsx`: `useEffect` beim Öffnen — Orders laden via `getOrders()`
+- [ ] `ResultCreateModal.tsx`: Dropdown für `order_id` — nur Orders mit Status `IN_PROGRESS` oder `COMPLETED`
+- [ ] `ResultCreateModal.tsx`: Auto-Flag-Logik implementieren:
+  - `value < reference_min` → Flag `LOW`
+  - `value > reference_max` → Flag `HIGH`
+  - sonst → Flag `NORMAL`
+- [ ] `ResultCreateModal.tsx`: Flag-Preview unterhalb des Wertefelds anzeigen (farbig, vor dem Speichern)
+- [ ] `ResultCreateModal.tsx`: Inline-Validierung Referenzbereich — Werte-Input bekommt roten/grünen Border je nach Flag
+- [ ] `ResultCreateModal.tsx`: Speichern-Button blockiert wenn kein Order ausgewählt
+
+---
+
+### 7. Status-Workflow-Transitionen [P1]
+
+- [ ] `frontend/src/utils/constants.ts` anlegen (falls nicht vorhanden)
+- [ ] `SAMPLE_TRANSITIONS` Map definieren:
+  - `REGISTERED` → `[IN_TRANSIT, ARCHIVED]`
+  - `IN_TRANSIT` → `[RECEIVED, ARCHIVED]`
+  - `RECEIVED` → `[IN_ANALYSIS, ARCHIVED]`
+  - `IN_ANALYSIS` → `[COMPLETED, ARCHIVED]`
+  - `COMPLETED` → `[ARCHIVED]`
+  - `ARCHIVED` → `[]` (keine weiteren Übergänge)
+- [ ] `ORDER_TRANSITIONS` Map definieren:
+  - `REQUESTED` → `[IN_PROGRESS, CANCELLED]`
+  - `IN_PROGRESS` → `[COMPLETED, CANCELLED]`
+  - `COMPLETED` → `[VALIDATED, CANCELLED]`
+  - `VALIDATED` → `[]`
+  - `CANCELLED` → `[]`
+- [ ] `SampleEditModal.tsx`: Status-Dropdown filtert nach `SAMPLE_TRANSITIONS[currentStatus]`
+- [ ] `OrderEditModal.tsx`: analog mit `ORDER_TRANSITIONS`
+- [ ] Ungültige Übergänge sind nicht wählbar (disabled option oder ausgeblendet)
+
+---
+
+### 8. UX: Fetch-Logik deduplizieren [P1]
+
+- [ ] `frontend/src/hooks/useEntityList.ts` erstellen
+- [ ] Hook-Signatur: `useEntityList<T>(fetchFn, deps)` → `{ data, loading, error, refetch }`
+- [ ] `useCallback` intern verwenden um Race-Conditions zu verhindern
+- [ ] `Samples.tsx`: auf `useEntityList` umstellen — `fetchSamples` Duplikate entfernen
+- [ ] `Orders.tsx`: auf `useEntityList` umstellen
+- [ ] `Results.tsx`: auf `useEntityList` umstellen
+- [ ] Manueller Test: Filter schnell wechseln — kein veralteter State sichtbar
+
+---
+
+### 9. UX: Unified Error Handling [P1]
+
+- [ ] `frontend/src/components/common/ErrorBanner.tsx` erstellen
+- [ ] Props: `message: string | null`, `onDismiss?: () => void`
+- [ ] Styling: roter Hintergrund, Dismiss-Button, Dark-Mode-kompatibel
+- [ ] `Samples.tsx`: inline Error-State durch `<ErrorBanner>` ersetzen
+- [ ] `Orders.tsx`: analog
+- [ ] `Results.tsx`: analog
+- [ ] `Users.tsx`: analog
+- [ ] `AuditLog.tsx`: analog
+- [ ] `Dashboard.tsx`: analog
+
+---
+
+### 10. Dashboard: Charts & Critical-Flag-Kachel [P2]
+
+**Setup**
+- [ ] `cd frontend && npm install recharts`
+- [ ] TypeScript-Kompatibilität prüfen — `@types/recharts` falls nötig
+
+**Backend**
+- [ ] `ApiServer` / `Database`: `GET /api/v1/stats` um `orders.by_priority` ergänzen (COUNT nach `priority`-Feld)
+- [ ] `GET /api/v1/stats`: `results.by_flag` ergänzen (COUNT nach `flag`-Feld)
+
+**Frontend**
+- [ ] `types/stats.ts`: `by_priority` und `by_flag` in Stats-Typen ergänzen
+- [ ] `Dashboard.tsx`: neuer Abschnitt "Visualisierung" unterhalb der Metrikkacheln
+- [ ] `BarChart` (Recharts) für Sample-Statusverteilung — Datenquelle: `stats.samples.by_status`
+- [ ] `BarChart` für Order-Prioritätsverteilung — Datenquelle: `stats.orders.by_priority`
+- [ ] Beide Charts in `ResponsiveContainer` mit `height={200}` wrappen
+- [ ] Farben aus `getStatusColor()` / `getPriorityColor()` ableiten
+- [ ] Neue Kachel "Kritische Befunde" — Anzahl Results mit `flag === 'CRITICAL'`
+- [ ] Kachel-Stil: roter Rahmen + Neon-Akzent im Dark Mode, neutral wenn count === 0
+
+---
+
+### 11. CSV Import UI [P2]
+
+- [ ] `frontend/src/pages/Import.tsx` erstellen
+- [ ] Route `/import` in `App.tsx` registrieren
+- [ ] Sidebar-Eintrag "Import" hinzufügen (nur ADMIN / OPERATOR sichtbar)
+- [ ] `<input type="file" accept=".csv">` mit Drag-and-Drop-Zone
+- [ ] `FileReader` API: Datei-Inhalt auslesen
+- [ ] `FormData` aufbauen und via `POST /api/v1/samples/import` senden
+- [ ] Loading-Spinner während Upload
+- [ ] Ergebnis-Tabelle rendern: grüne Zeile = importiert, rote Zeile = Fehler + Grund
+- [ ] Gesamtstatistik-Banner: "X von Y Zeilen erfolgreich importiert"
+- [ ] "Erneut versuchen" Button nach Fehler (setzt State zurück)
+- [ ] Fehlerfall: Backend antwortet mit Fehler-Array pro Zeile — Zeilennummer + Meldung anzeigen
+
+---
+
+### 12. Barcode-Scanner Integration [P2]
+
+- [ ] `frontend/src/hooks/useBarcode.ts` erstellen
+- [ ] Feature-Detection: `'BarcodeDetector' in window` — früh prüfen, Ergebnis cachen
+- [ ] `navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })` für Kamera
+- [ ] `BarcodeDetector.detect(videoFrame)` in `requestAnimationFrame`-Loop aufrufen
+- [ ] Hook gibt `{ scan, isSupported, error }` zurück — `scan()` startet die Kamera
+- [ ] `SampleCreateModal.tsx`: Scanner-Icon-Button neben `sample_id`-Input
+- [ ] Scanner-Modal: `<video>`-Element für Kamera-Vorschau + Overlay mit Scan-Rahmen
+- [ ] Bei erkanntem Code: Modal schließen, `sample_id`-Feld mit Code befüllen
+- [ ] Fallback-Hinweis wenn `isSupported === false`: "Scanner nicht verfügbar — bitte manuell eingeben"
+- [ ] Kamera-Stream bei Modal-Close stoppen (`stream.getTracks().forEach(t => t.stop())`)
 
 ---
 
