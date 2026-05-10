@@ -62,7 +62,7 @@ export const ResultEditModal = ({ isOpen, onClose, result, onSuccess }: ResultEd
       }
 
       onClose();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[ResultEdit] Error updating result:', err);
       let errorMessage = 'Failed to update result. Please try again.';
 

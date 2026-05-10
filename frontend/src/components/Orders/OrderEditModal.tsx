@@ -45,7 +45,7 @@ export const OrderEditModal = ({ isOpen, orderId, onClose, onSuccess }: OrderEdi
             requested_by: order.requested_by,
             notes: order.notes,
           });
-        } catch (err: any) {
+        } catch (err: unknown) {
                 setError('Failed to load order data. Please try again.');
         } finally {
           setLoadingData(false);
@@ -73,7 +73,7 @@ export const OrderEditModal = ({ isOpen, orderId, onClose, onSuccess }: OrderEdi
 
       // Close modal
       onClose();
-    } catch (err: any) {
+    } catch (err: unknown) {
       let errorMessage = 'Failed to update order. Please try again.';
 
       if (err.response?.data?.error?.message) {

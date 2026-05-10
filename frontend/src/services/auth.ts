@@ -46,7 +46,7 @@ export const login = async (username: string, password: string): Promise<{ succe
 
 
     return { success: true, user };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[AUTH] Login error:', error);
 
     let errorMessage = 'An error occurred. Please try again.';

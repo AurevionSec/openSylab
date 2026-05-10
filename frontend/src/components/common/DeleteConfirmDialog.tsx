@@ -45,7 +45,7 @@ export const DeleteConfirmDialog = ({
     try {
       await onConfirm();
       onClose();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[DeleteConfirmDialog] Error during delete:', err);
       let errorMessage = 'Failed to delete item. Please try again.';
 

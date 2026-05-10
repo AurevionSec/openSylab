@@ -27,7 +27,10 @@ export const AuditLog = () => {
       const data = await getAuditLog(filter);
       setEntries(data);
     } catch (err: unknown) {
-      setError(err.response?.data?.error?.message || 'Failed to load audit log');
+      const msg = (err && typeof err === 'object' && 'response' in err)
+        ? (err as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message
+        : err instanceof Error ? err.message : undefined;
+      setError(msg || 'Failed to load audit log');
       console.error(err);
     } finally {
       setLoading(false);

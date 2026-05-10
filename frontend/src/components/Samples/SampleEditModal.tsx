@@ -41,7 +41,7 @@ export const SampleEditModal = ({ isOpen, sampleId, onClose, onSuccess }: Sample
             description: sample.description,
             status: sample.status,
           });
-        } catch (err: any) {
+        } catch (err: unknown) {
                 setError('Failed to load sample data. Please try again.');
         } finally {
           setLoadingData(false);
@@ -69,7 +69,7 @@ export const SampleEditModal = ({ isOpen, sampleId, onClose, onSuccess }: Sample
 
       // Close modal
       onClose();
-    } catch (err: any) {
+    } catch (err: unknown) {
       let errorMessage = 'Failed to update sample. Please try again.';
 
       if (err.response?.data?.error?.message) {

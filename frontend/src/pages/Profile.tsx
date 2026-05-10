@@ -26,7 +26,7 @@ export const Profile = () => {
       setLoading(true);
       const data = await getCurrentUser();
       setUser(data);
-    } catch (err: any) {
+    } catch (err: unknown) {
       setError(err.response?.data?.error?.message || 'Failed to load profile');
       console.error(err);
     } finally {
@@ -247,7 +247,7 @@ const ChangePasswordForm = ({ onSuccess, onCancel }: ChangePasswordFormProps) =>
       setTimeout(() => {
         onSuccess();
       }, 2000);
-    } catch (err: any) {
+    } catch (err: unknown) {
       setError(err.response?.data?.error?.message || 'Failed to change password');
     } finally {
       setLoading(false);
