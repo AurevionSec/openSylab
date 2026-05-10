@@ -16,7 +16,7 @@ export const getAuditLog = async (filter?: AuditLogFilter): Promise<AuditEntry[]
   const queryString = params.toString();
   const url = queryString ? `/audit?${queryString}` : '/audit';
 
-  const response = await api.get(url);
+  const response = await api.get<{ data: AuditEntry[] }>(url);
 
-  return response.data.data;
+  return response.data.data ?? [];
 };

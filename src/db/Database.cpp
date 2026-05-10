@@ -810,7 +810,6 @@ Database::createSamplesBatch(const std::vector<core::Sample> &samples,
       BatchInsertError error;
       error.index = i;
       error.message = "Audit log failed: " + getLastError();
-      result.failures.clear();
       result.failures.push_back(error);
       return result;
     }
@@ -1372,7 +1371,7 @@ bool Database::deleteSample(int id, const std::string &actor) {
   details << "Proben-ID: " << existing->getSampleId()
           << "; Patient-ID: " << existing->getPatientId()
           << "; Status: " << existing->getStatusString();
-  core::AuditEntry entry(core::AuditEntry::ActionType::UPDATE,
+  core::AuditEntry entry(core::AuditEntry::ActionType::DELETE,
                          core::AuditEntry::EntityType::SAMPLE,
                          existing->getSampleId(), normalizeActor(actor),
                          details.str());
@@ -2050,7 +2049,7 @@ bool Database::deleteOrder(int id, const std::string &actor) {
   details << "Auftrags-ID: " << existing->getOrderId()
           << "; Proben-ID: " << existing->getSampleId()
           << "; Status: " << existing->getStatusString();
-  core::AuditEntry entry(core::AuditEntry::ActionType::UPDATE,
+  core::AuditEntry entry(core::AuditEntry::ActionType::DELETE,
                          core::AuditEntry::EntityType::ORDER,
                          existing->getOrderId(), normalizeActor(actor),
                          details.str());
@@ -2335,7 +2334,6 @@ Database::createTestResultsBatch(const std::vector<core::TestResult> &results,
     if (!logAudit(entry)) {
       sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
       result.inserted = 0;
-      result.failures.clear();
       BatchInsertError error;
       error.index = i;
       error.message = "Audit log failed: " + getLastError();
@@ -3119,7 +3117,7 @@ bool Database::deleteTestResult(int id, const std::string &actor) {
   details << "Ergebnis-ID: " << existing->getResultId()
           << "; Parameter: " << existing->getTestParameter()
           << "; Status: " << existing->getStatusString();
-  core::AuditEntry entry(core::AuditEntry::ActionType::UPDATE,
+  core::AuditEntry entry(core::AuditEntry::ActionType::DELETE,
                          core::AuditEntry::EntityType::RESULT,
                          existing->getResultId(), normalizeActor(actor),
                          details.str());
@@ -5992,9 +5990,7 @@ Database::authenticateUser(const std::string &username,
                            const std::string &password,
                            const std::optional<std::string> &mfaCode) {
   clearError();
-  pendingAuth_.active = false;
-  pendingAuth_.username.clear();
-  pendingAuth_.mfaSecret.clear();
+
 
   auto result = authenticatePrimary(username, password);
   if (!result.user) {
@@ -6038,10 +6034,7 @@ Database::authenticateUser(const std::string &username,
     }
 
     if (!mfaCode.has_value()) {
-      pendingAuth_.active = true;
-      pendingAuth_.username = actor;
-      pendingAuth_.method = result.method;
-      pendingAuth_.mfaSecret = result.mfaSecret;
+
       const std::string msg = "MFA erforderlich. Bitte MFA-Code eingeben.";
       const std::string prevError = lastError_;
       logUserAction(core::AuditEntry::ActionType::UPDATE, actor, actor,

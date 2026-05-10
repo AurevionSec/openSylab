@@ -383,7 +383,7 @@ bool test_database_DeleteSample() {
   ASSERT_FALSE(db.hasError());
   ASSERT_FALSE(entries.empty());
   const AuditEntry *entry =
-      findAuditEntry(entries, AuditEntry::ActionType::UPDATE,
+      findAuditEntry(entries, AuditEntry::ActionType::DELETE,
                      AuditEntry::EntityType::SAMPLE, "TEST004", "tester");
   ASSERT_NOT_NULL(entry);
   ASSERT_NE(entry->getDetails().find("Proben-ID"), std::string::npos);
@@ -413,7 +413,7 @@ bool test_database_DeleteOrder_LogsAudit() {
       db.getAuditLogByEntity(AuditEntry::EntityType::ORDER, "DEL_ORDER_1");
   ASSERT_FALSE(entries.empty());
   const AuditEntry *entry =
-      findAuditEntry(entries, AuditEntry::ActionType::UPDATE,
+      findAuditEntry(entries, AuditEntry::ActionType::DELETE,
                      AuditEntry::EntityType::ORDER, "DEL_ORDER_1", "tester");
   ASSERT_NOT_NULL(entry);
   ASSERT_NE(entry->getDetails().find("Auftrags-ID"), std::string::npos);
@@ -469,7 +469,7 @@ bool test_database_DeleteTestResult_LogsAudit() {
       db.getAuditLogByEntity(AuditEntry::EntityType::RESULT, "DEL_RES_1");
   ASSERT_FALSE(entries.empty());
   const AuditEntry *entry =
-      findAuditEntry(entries, AuditEntry::ActionType::UPDATE,
+      findAuditEntry(entries, AuditEntry::ActionType::DELETE,
                      AuditEntry::EntityType::RESULT, "DEL_RES_1", "tester");
   ASSERT_NOT_NULL(entry);
   ASSERT_NE(entry->getDetails().find("Ergebnis-ID"), std::string::npos);
@@ -517,10 +517,10 @@ bool test_database_AuditLogsSampleCrud() {
   auto deletedEntries =
       db.getAuditLogByEntity(AuditEntry::EntityType::SAMPLE, "AUDIT_CRUD");
   ASSERT_FALSE(deletedEntries.empty());
-  // Find the UPDATE entry that contains "Proben-ID" (the soft-delete audit entry)
+  // Find the DELETE entry that contains "Proben-ID" (the soft-delete audit entry)
   const AuditEntry *deletedEntry = nullptr;
   for (const auto &e : deletedEntries) {
-    if (e && e->getAction() == AuditEntry::ActionType::UPDATE
+    if (e && e->getAction() == AuditEntry::ActionType::DELETE
           && e->getEntity() == AuditEntry::EntityType::SAMPLE
           && e->getDetails().find("Proben-ID") != std::string::npos) {
       deletedEntry = e.get();

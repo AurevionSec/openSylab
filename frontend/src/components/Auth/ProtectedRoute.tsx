@@ -25,8 +25,13 @@ export const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) 
     return <Navigate to="/login" replace />;
   }
 
+  // isAuthenticated but user not loaded (localStorage corruption) — force re-login
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
   // Check role-based access if required
-  if (requiredRole && user?.role !== requiredRole) {
+  if (requiredRole && user.role !== requiredRole) {
     return <Navigate to="/" replace />;
   }
 

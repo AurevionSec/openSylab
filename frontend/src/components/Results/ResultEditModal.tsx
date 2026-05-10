@@ -85,6 +85,29 @@ export const ResultEditModal = ({ isOpen, onClose, result, onSuccess }: ResultEd
 
   if (!isOpen || !result) return null;
 
+  if (result.status === 'VALIDATED') {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="bg-white rounded shadow-xl max-w-md w-full p-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-bold text-gray-900">Edit Test Result</h2>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+              <svg className="w-6 h-6" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
+                <path d="M6 18L18 6M6 6l12 12"></path>
+              </svg>
+            </button>
+          </div>
+          <p className="text-amber-700 bg-amber-50 border border-amber-200 rounded p-3 text-sm">
+            This result has been validated and cannot be edited.
+          </p>
+          <div className="mt-4 flex justify-end">
+            <button onClick={onClose} className="px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 text-sm font-medium">Close</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 animate-backdrop">
       <div className="bg-white rounded shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">

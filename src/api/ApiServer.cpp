@@ -162,18 +162,24 @@ ApiResponse makeError(int status, const std::string &code,
 }
 
 ApiResponse makeDbErrorResponse(const std::string &message) {
+  std::cerr << "[DB] " << message << "\n";
   const std::string lower = toLower(message);
   if (lower.find("nicht gefunden") != std::string::npos) {
-    return makeError(404, "not_found", "Record not found", message);
+    return makeError(404, "not_found", "Record not found",
+                     "The requested record does not exist.");
   }
-  if (lower.find("unique constraint failed") != std::string::npos) {
-    return makeError(409, "conflict", "Duplicate record", message);
+  if (lower.find("unique constraint failed") != std::string::npos ||
+      lower.find("duplicate") != std::string::npos) {
+    return makeError(409, "conflict", "Duplicate record",
+                     "A record with this identifier already exists.");
   }
   if (lower.find("darf nicht leer") != std::string::npos ||
       lower.find("ung\u00fcltig") != std::string::npos) {
-    return makeError(400, "validation_error", "Invalid input", message);
+    return makeError(400, "validation_error", "Invalid input",
+                     "One or more fields contain invalid values.");
   }
-  return makeError(500, "internal_error", "Database error", message);
+  return makeError(500, "internal_error", "An internal error occurred",
+                   "Please contact the system administrator.");
 }
 
 bool parseIntValue(const std::string &value, int &out) {

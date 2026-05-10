@@ -348,12 +348,6 @@ private:
   sqlite3 *db_ = nullptr;
   bool isOpen_ = false;
   std::string lastError_;
-  struct PendingAuth {
-    bool active = false;
-    std::string username;
-    AuthMethod method = AuthMethod::LOCAL;
-    std::string mfaSecret;
-  } pendingAuth_;
 
   // Hilfsfunktionen
   void setError(const std::string &error);

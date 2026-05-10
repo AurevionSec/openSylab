@@ -44,16 +44,18 @@ export const AuditLog = () => {
   };
 
   const handleApplyFilter = () => {
+    cancelledRef.current = false;
     fetchAuditLog();
   };
 
   const handleResetFilter = () => {
+    cancelledRef.current = false;
     const resetFilter = { limit: 50 };
     setFilter(resetFilter);
     setError('');
     getAuditLog(resetFilter)
-      .then(data => setEntries(data))
-      .catch(() => setError('Failed to load audit log'));
+      .then(data => { if (!cancelledRef.current) setEntries(data); })
+      .catch(() => { if (!cancelledRef.current) setError('Failed to load audit log'); });
   };
 
   if (loading) {
