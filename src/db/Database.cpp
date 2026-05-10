@@ -2644,7 +2644,7 @@ bool Database::updateTestResult(const core::TestResult &result,
   }
 
   const std::string computedFlag =
-      core::TestResult::flagToString(result.getFlag());
+      core::TestResult::flagToString(result.evaluateFlag());
 
   std::ostringstream details;
   bool hasChanges = false;
@@ -2830,7 +2830,7 @@ bool Database::updateTestResultWithAudit(const core::TestResult &result,
   }
 
   const std::string computedFlag =
-      core::TestResult::flagToString(result.getFlag());
+      core::TestResult::flagToString(result.evaluateFlag());
 
   std::ostringstream details;
   bool hasChanges = false;
