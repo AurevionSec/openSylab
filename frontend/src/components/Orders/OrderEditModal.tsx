@@ -4,7 +4,7 @@ import { Input } from '../common/Input';
 import { Button } from '../common/Button';
 import { getOrderById, updateOrder } from '../../services/orders';
 import type { Order } from '../../types/order';
-import { ORDER_STATUSES, ORDER_PRIORITIES } from '../../utils/constants';
+import { ORDER_STATUSES, ORDER_PRIORITIES, ORDER_TRANSITIONS } from '../../utils/constants';
 
 interface OrderEditModalProps {
   isOpen: boolean;
@@ -178,9 +178,11 @@ export const OrderEditModal = ({ isOpen, orderId, onClose, onSuccess }: OrderEdi
                     className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#0055FF] focus:border-transparent"
                     required
                   >
-                    {Object.entries(ORDER_STATUSES).map(([key, label]) => (
+                    {([formData.status, ...(ORDER_TRANSITIONS[formData.status] ?? [])] as string[])
+                      .filter((key, i, arr) => arr.indexOf(key) === i)
+                      .map((key) => (
                       <option key={key} value={key}>
-                        {label}
+                        {ORDER_STATUSES[key as keyof typeof ORDER_STATUSES] ?? key}
                       </option>
                     ))}
                   </select>

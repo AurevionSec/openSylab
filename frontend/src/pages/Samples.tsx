@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Layout } from '../components/Layout/Layout';
 import { Card } from '../components/common/Card';
 import { Button } from '../components/common/Button';
+import { ErrorBanner } from '../components/common/ErrorBanner';
 import { DeleteConfirmDialog } from '../components/common/DeleteConfirmDialog';
 import { SampleCreateModal } from '../components/Samples/SampleCreateModal';
 import { SampleEditModal } from '../components/Samples/SampleEditModal';
@@ -9,15 +10,12 @@ import { getSamples, deleteSample } from '../services/samples';
 import type { Sample } from '../types/sample';
 import { SAMPLE_STATUSES } from '../utils/constants';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { useEntityList } from '../hooks/useEntityList';
 
 export const Samples = () => {
   useDocumentTitle({ module: 'Samples' });
-  const [samples, setSamples] = useState<Sample[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalSamples, setTotalSamples] = useState(0);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedSampleId, setSelectedSampleId] = useState<string | null>(null);
@@ -25,27 +23,15 @@ export const Samples = () => {
   const [sampleToDelete, setSampleToDelete] = useState<Sample | null>(null);
   const itemsPerPage = 20;
 
-  useEffect(() => {
-    const fetchSamples = async () => {
-      setLoading(true);
-      try {
-        const data = await getSamples({
-          status: selectedStatus || undefined,
-          limit: itemsPerPage,
-          offset: (currentPage - 1) * itemsPerPage,
-        });
-        setSamples(data.samples);
-        setTotalSamples(data.total);
-      } catch (err) {
-        setError('Failed to load samples');
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchSamples();
-  }, [selectedStatus, currentPage]);
+  const { data: samples, total: totalSamples, loading, error, refetch } = useEntityList(
+    () =>
+      getSamples({
+        status: selectedStatus || undefined,
+        limit: itemsPerPage,
+        offset: (currentPage - 1) * itemsPerPage,
+      }).then((r) => ({ data: r.samples, total: r.total })),
+    [selectedStatus, currentPage]
+  );
 
   const totalPages = Math.ceil(totalSamples / itemsPerPage);
 
@@ -61,25 +47,7 @@ export const Samples = () => {
 
   const handleCreateSuccess = (newSample: Sample) => {
     console.log('[Samples] Sample created successfully:', newSample);
-    // Refresh the samples list
-    const fetchSamples = async () => {
-      setLoading(true);
-      try {
-        const data = await getSamples({
-          status: selectedStatus || undefined,
-          limit: itemsPerPage,
-          offset: (currentPage - 1) * itemsPerPage,
-        });
-        setSamples(data.samples);
-        setTotalSamples(data.total);
-      } catch (err) {
-        setError('Failed to load samples');
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchSamples();
+    refetch();
   };
 
   const handleEditClick = (sampleId: string) => {
@@ -89,25 +57,7 @@ export const Samples = () => {
 
   const handleEditSuccess = (updatedSample: Sample) => {
     console.log('[Samples] Sample updated successfully:', updatedSample);
-    // Refresh the samples list
-    const fetchSamples = async () => {
-      setLoading(true);
-      try {
-        const data = await getSamples({
-          status: selectedStatus || undefined,
-          limit: itemsPerPage,
-          offset: (currentPage - 1) * itemsPerPage,
-        });
-        setSamples(data.samples);
-        setTotalSamples(data.total);
-      } catch (err) {
-        setError('Failed to load samples');
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchSamples();
+    refetch();
   };
 
   const handleDeleteClick = (sample: Sample) => {
@@ -117,30 +67,10 @@ export const Samples = () => {
 
   const handleDeleteConfirm = async () => {
     if (!sampleToDelete) return;
-
     console.log('[Samples] Deleting sample:', sampleToDelete.sample_id);
     await deleteSample(sampleToDelete.sample_id);
-
     console.log('[Samples] Sample deleted successfully');
-    // Refresh the samples list
-    const fetchSamples = async () => {
-      setLoading(true);
-      try {
-        const data = await getSamples({
-          status: selectedStatus || undefined,
-          limit: itemsPerPage,
-          offset: (currentPage - 1) * itemsPerPage,
-        });
-        setSamples(data.samples);
-        setTotalSamples(data.total);
-      } catch (err) {
-        setError('Failed to load samples');
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    await fetchSamples();
+    refetch();
   };
 
   return (
@@ -198,16 +128,14 @@ export const Samples = () => {
             </div>
           </div>
 
+          <ErrorBanner message={error || null} />
+
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <div className="text-center">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
                 <p className="mt-4 text-gray-600">Loading samples...</p>
               </div>
-            </div>
-          ) : error ? (
-            <div className="bg-red-50 border border-red-200 rounded p-4">
-              <p className="text-red-800">{error}</p>
             </div>
           ) : samples.length === 0 ? (
             <div className="text-center py-12">

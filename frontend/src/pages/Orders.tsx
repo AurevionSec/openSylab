@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Layout } from '../components/Layout/Layout';
 import { Card } from '../components/common/Card';
 import { Button } from '../components/common/Button';
+import { ErrorBanner } from '../components/common/ErrorBanner';
 import { DeleteConfirmDialog } from '../components/common/DeleteConfirmDialog';
 import { OrderCreateModal } from '../components/Orders/OrderCreateModal';
 import { OrderEditModal } from '../components/Orders/OrderEditModal';
@@ -9,16 +10,13 @@ import { getOrders, deleteOrder } from '../services/orders';
 import type { Order } from '../types/order';
 import { ORDER_STATUSES, ORDER_PRIORITIES } from '../utils/constants';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { useEntityList } from '../hooks/useEntityList';
 
 export const Orders = () => {
   useDocumentTitle({ module: 'Orders' });
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<string>('');
   const [selectedPriority, setSelectedPriority] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalOrders, setTotalOrders] = useState(0);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
@@ -26,29 +24,18 @@ export const Orders = () => {
   const [orderToDelete, setOrderToDelete] = useState<Order | null>(null);
   const itemsPerPage = 20;
 
-  useEffect(() => {
-    const fetchOrders = async () => {
-      setLoading(true);
-      try {
-        const data = await getOrders({
-          status: selectedStatus || undefined,
-          priority: selectedPriority || undefined,
-          limit: itemsPerPage,
-          offset: (currentPage - 1) * itemsPerPage,
-        });
-        setOrders(data.orders);
-        setTotalOrders(data.total);
-        setError('');
-      } catch (err) {
-        setError('Failed to load orders');
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
+  const { data: orders, total: totalOrders, loading, error, refetch } = useEntityList(
+    () =>
+      getOrders({
+        status: selectedStatus || undefined,
+        priority: selectedPriority || undefined,
+        limit: itemsPerPage,
+        offset: (currentPage - 1) * itemsPerPage,
+      }).then((r) => ({ data: r.orders, total: r.total })),
+    [selectedStatus, selectedPriority, currentPage]
+  );
 
-    fetchOrders();
-  }, [selectedStatus, selectedPriority, currentPage]);
+  const totalPages = Math.ceil(totalOrders / itemsPerPage);
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
@@ -57,26 +44,7 @@ export const Orders = () => {
 
   const handleCreateSuccess = (newOrder: Order) => {
     console.log('[Orders] Order created successfully:', newOrder);
-    // Refresh the orders list
-    const fetchOrders = async () => {
-      setLoading(true);
-      try {
-        const data = await getOrders({
-          status: selectedStatus || undefined,
-          priority: selectedPriority || undefined,
-          limit: itemsPerPage,
-          offset: (currentPage - 1) * itemsPerPage,
-        });
-        setOrders(data.orders);
-        setTotalOrders(data.total);
-      } catch (err) {
-        setError('Failed to load orders');
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchOrders();
+    refetch();
   };
 
   const handleEditClick = (orderId: string) => {
@@ -86,26 +54,7 @@ export const Orders = () => {
 
   const handleEditSuccess = (updatedOrder: Order) => {
     console.log('[Orders] Order updated successfully:', updatedOrder);
-    // Refresh the orders list
-    const fetchOrders = async () => {
-      setLoading(true);
-      try {
-        const data = await getOrders({
-          status: selectedStatus || undefined,
-          priority: selectedPriority || undefined,
-          limit: itemsPerPage,
-          offset: (currentPage - 1) * itemsPerPage,
-        });
-        setOrders(data.orders);
-        setTotalOrders(data.total);
-      } catch (err) {
-        setError('Failed to load orders');
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchOrders();
+    refetch();
   };
 
   const handleDeleteClick = (order: Order) => {
@@ -115,34 +64,11 @@ export const Orders = () => {
 
   const handleDeleteConfirm = async () => {
     if (!orderToDelete) return;
-
     console.log('[Orders] Deleting order:', orderToDelete.id);
     await deleteOrder(orderToDelete.id.toString());
-
     console.log('[Orders] Order deleted successfully');
-    // Refresh the orders list
-    const fetchOrders = async () => {
-      setLoading(true);
-      try {
-        const data = await getOrders({
-          status: selectedStatus || undefined,
-          priority: selectedPriority || undefined,
-          limit: itemsPerPage,
-          offset: (currentPage - 1) * itemsPerPage,
-        });
-        setOrders(data.orders);
-        setTotalOrders(data.total);
-      } catch (err) {
-        setError('Failed to load orders');
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    await fetchOrders();
+    refetch();
   };
-
-  const totalPages = Math.ceil(totalOrders / itemsPerPage);
 
   return (
     <Layout>
@@ -213,11 +139,7 @@ export const Orders = () => {
               </div>
             </div>
 
-            {error && (
-              <div className="bg-red-50 border border-red-200 rounded p-4 mb-6">
-                <p className="text-red-800">{error}</p>
-              </div>
-            )}
+            <ErrorBanner message={error || null} />
 
             {loading ? (
               <div className="flex items-center justify-center py-12">

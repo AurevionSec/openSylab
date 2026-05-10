@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Layout } from '../components/Layout/Layout';
 import { Card } from '../components/common/Card';
 import { Button } from '../components/common/Button';
+import { ErrorBanner } from '../components/common/ErrorBanner';
 import { DeleteConfirmDialog } from '../components/common/DeleteConfirmDialog';
 import { ResultCreateModal } from '../components/Results/ResultCreateModal';
 import { ResultEditModal } from '../components/Results/ResultEditModal';
@@ -9,16 +10,13 @@ import { getResults, deleteResult } from '../services/results';
 import type { TestResult } from '../types/result';
 import { RESULT_STATUSES, RESULT_FLAGS } from '../utils/constants';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { useEntityList } from '../hooks/useEntityList';
 
 export const Results = () => {
   useDocumentTitle({ module: 'Test Results' });
-  const [results, setResults] = useState<TestResult[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<string>('');
   const [selectedFlag, setSelectedFlag] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalResults, setTotalResults] = useState(0);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedResult, setSelectedResult] = useState<TestResult | null>(null);
@@ -26,52 +24,27 @@ export const Results = () => {
   const [resultToDelete, setResultToDelete] = useState<TestResult | null>(null);
   const itemsPerPage = 20;
 
-  useEffect(() => {
-    const fetchResults = async () => {
-      setLoading(true);
-      try {
-        const data = await getResults({
-          status: selectedStatus || undefined,
-          flag: selectedFlag || undefined,
-          limit: itemsPerPage,
-          offset: (currentPage - 1) * itemsPerPage,
-        });
-        setResults(data.results);
-        setTotalResults(data.total);
-        setError('');
-      } catch (err) {
-        setError('Failed to load results');
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
+  const { data: results, total: totalResults, loading, error, refetch } = useEntityList(
+    () =>
+      getResults({
+        status: selectedStatus || undefined,
+        flag: selectedFlag || undefined,
+        limit: itemsPerPage,
+        offset: (currentPage - 1) * itemsPerPage,
+      }).then((r) => ({ data: r.results, total: r.total })),
+    [selectedStatus, selectedFlag, currentPage]
+  );
 
-    fetchResults();
-  }, [selectedStatus, selectedFlag, currentPage]);
+  const totalPages = Math.ceil(totalResults / itemsPerPage);
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const handleCreateSuccess = (newResult: TestResult) => {
     console.log('[Results] Result created successfully:', newResult);
-    // Refresh the results list
-    const fetchResults = async () => {
-      setLoading(true);
-      try {
-        const data = await getResults({
-          status: selectedStatus || undefined,
-          flag: selectedFlag || undefined,
-          limit: itemsPerPage,
-          offset: (currentPage - 1) * itemsPerPage,
-        });
-        setResults(data.results);
-        setTotalResults(data.total);
-      } catch (err) {
-        setError('Failed to load results');
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchResults();
+    refetch();
   };
 
   const handleEditClick = (result: TestResult) => {
@@ -81,26 +54,7 @@ export const Results = () => {
 
   const handleEditSuccess = (updatedResult: TestResult) => {
     console.log('[Results] Result updated successfully:', updatedResult);
-    // Refresh the results list
-    const fetchResults = async () => {
-      setLoading(true);
-      try {
-        const data = await getResults({
-          status: selectedStatus || undefined,
-          flag: selectedFlag || undefined,
-          limit: itemsPerPage,
-          offset: (currentPage - 1) * itemsPerPage,
-        });
-        setResults(data.results);
-        setTotalResults(data.total);
-      } catch (err) {
-        setError('Failed to load results');
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchResults();
+    refetch();
   };
 
   const handleDeleteClick = (result: TestResult) => {
@@ -110,34 +64,11 @@ export const Results = () => {
 
   const handleDeleteConfirm = async () => {
     if (!resultToDelete) return;
-
     console.log('[Results] Deleting result:', resultToDelete.id);
     await deleteResult(resultToDelete.id.toString());
-
     console.log('[Results] Result deleted successfully');
-    // Refresh the results list
-    const fetchResults = async () => {
-      setLoading(true);
-      try {
-        const data = await getResults({
-          status: selectedStatus || undefined,
-          flag: selectedFlag || undefined,
-          limit: itemsPerPage,
-          offset: (currentPage - 1) * itemsPerPage,
-        });
-        setResults(data.results);
-        setTotalResults(data.total);
-      } catch (err) {
-        setError('Failed to load results');
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    await fetchResults();
+    refetch();
   };
-
-  const totalPages = Math.ceil(totalResults / itemsPerPage);
 
   return (
     <Layout>
@@ -208,11 +139,7 @@ export const Results = () => {
               </div>
             </div>
 
-            {error && (
-              <div className="bg-red-50 border border-red-200 rounded p-4 mb-6">
-                <p className="text-red-800">{error}</p>
-              </div>
-            )}
+            <ErrorBanner message={error || null} />
 
             {loading ? (
               <div className="flex items-center justify-center py-12">
@@ -269,7 +196,6 @@ export const Results = () => {
                             result.status === 'PENDING' ? 'bg-yellow-50 text-yellow-800 border-yellow-200' :
                             result.status === 'VALIDATED' ? 'bg-green-50 text-green-700 border-green-200' :
                             result.status === 'REVIEWED' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                            result.status === 'ENTERED' ? 'bg-blue-50 text-blue-700 border-blue-200' :
                             result.status === 'REJECTED' ? 'bg-red-50 text-red-700 border-red-200' :
                             'bg-gray-100 text-gray-600 border-gray-300'
                           }`}>
@@ -339,7 +265,7 @@ export const Results = () => {
                 <div>
                   <nav className="isolate inline-flex -space-x-px rounded-md shadow-sm">
                     <button
-                      onClick={() => setCurrentPage(currentPage - 1)}
+                      onClick={() => handlePageChange(currentPage - 1)}
                       disabled={currentPage === 1}
                       className="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
@@ -348,7 +274,7 @@ export const Results = () => {
                     {[...Array(totalPages)].map((_, i) => (
                       <button
                         key={i + 1}
-                        onClick={() => setCurrentPage(i + 1)}
+                        onClick={() => handlePageChange(i + 1)}
                         className={`relative inline-flex items-center px-4 py-2 text-sm font-semibold ${
                           currentPage === i + 1
                             ? 'z-10 bg-blue-600 text-white'
@@ -359,7 +285,7 @@ export const Results = () => {
                       </button>
                     ))}
                     <button
-                      onClick={() => setCurrentPage(currentPage + 1)}
+                      onClick={() => handlePageChange(currentPage + 1)}
                       disabled={currentPage === totalPages}
                       className="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
