@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import type { FormEvent } from 'react';
 import { Input } from '../common/Input';
 import { Button } from '../common/Button';
@@ -32,6 +32,15 @@ export const SampleCreateModal = ({ isOpen, onClose, onSuccess }: SampleCreateMo
   const { isSupported: barcodeSupported, isScanning, error: barcodeError, videoRef, startScan, stopScan } = useBarcode({
     onDetected: handleBarcodeDetected,
   });
+
+  useEffect(() => {
+    if (!isOpen) {
+      setFormData({ sample_id: '', patient_id: '', patient_name: '', description: '', status: 'REGISTERED' });
+      setError('');
+      setShowBarcodeScanner(false);
+      stopScan();
+    }
+  }, [isOpen, stopScan]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();

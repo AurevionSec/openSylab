@@ -2575,9 +2575,14 @@ after_user_update:
     }
 
     auto sampleStats = database_->getSampleStats(filter);
+    if (database_->hasError()) {
+      return makeDbErrorResponse(database_->getLastError());
+    }
     auto orderStats = database_->getOrderStats(filter);
+    if (database_->hasError()) {
+      return makeDbErrorResponse(database_->getLastError());
+    }
     auto resultStats = database_->getResultStats(filter);
-
     if (database_->hasError()) {
       return makeDbErrorResponse(database_->getLastError());
     }

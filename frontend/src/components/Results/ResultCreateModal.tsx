@@ -49,7 +49,13 @@ export const ResultCreateModal = ({ isOpen, onClose, onSuccess }: ResultCreateMo
   const [ordersLoading, setOrdersLoading] = useState(false);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      setFormData({ result_id: '', order_id: '', parameter: '', value: '', unit: '',
+                    reference_min: '', reference_max: '', flag: 'NORMAL', status: 'PENDING',
+                    reviewed_by: '', notes: '' });
+      setError('');
+      return;
+    }
     setOrdersLoading(true);
     getOrders({ limit: 200 })
       .then((r) =>
