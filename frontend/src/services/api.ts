@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { JWT_TOKEN_STORAGE_KEY, API_KEY_STORAGE_KEY, USER_INFO_STORAGE_KEY } from '../utils/constants';
-import { isTokenExpired } from './auth';
+
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1',
@@ -14,7 +14,9 @@ api.interceptors.request.use((config) => {
   // Try JWT token first
   const jwtToken = localStorage.getItem(JWT_TOKEN_STORAGE_KEY);
   if (jwtToken) {
-    if (isTokenExpired()) {
+    const _expiry = localStorage.getItem('opensylab_token_expiry');
+    const _isExpired = !_expiry || Date.now() >= parseInt(_expiry, 10);
+    if (_isExpired) {
       localStorage.removeItem(JWT_TOKEN_STORAGE_KEY);
       localStorage.removeItem(USER_INFO_STORAGE_KEY);
       if (window.location.pathname !== '/login') {

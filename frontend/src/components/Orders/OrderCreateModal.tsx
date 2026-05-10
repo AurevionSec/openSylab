@@ -52,9 +52,7 @@ export const OrderCreateModal = ({ isOpen, onClose, onSuccess }: OrderCreateModa
     setError('');
     setLoading(true);
     try {
-      console.log('[OrderCreate] Creating order:', formData);
       const newOrder = await createOrder(formData);
-      console.log('[OrderCreate] Order created successfully:', newOrder);
       setFormData({
         order_id: '',
         sample_id: '',
@@ -143,8 +141,8 @@ export const OrderCreateModal = ({ isOpen, onClose, onSuccess }: OrderCreateModa
                       <p className="p-2 text-sm text-gray-500">Loading samples...</p>
                     ) : filteredSamples.length === 0 ? (
                       {samplesError
-                ? <p className="p-2 text-sm text-red-600">{samplesError}</p>
-                : <p className="p-2 text-sm text-gray-500">Keine Proben gefunden. Zuerst eine Probe anlegen.</p>}
+                        ? <p className="p-2 text-sm text-red-600">{samplesError}</p>
+                        : <p className="p-2 text-sm text-gray-500">Keine Proben gefunden. Zuerst eine Probe anlegen.</p>}
                     ) : (
                       filteredSamples.slice(0, 10).map((s) => (
                         <button

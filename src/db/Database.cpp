@@ -2111,7 +2111,7 @@ bool Database::createTestResult(const core::TestResult &result,
   }
 
   const std::string computedFlag =
-      core::TestResult::flagToString(result.evaluateFlag());
+      core::TestResult::flagToString(result.getFlag());
 
   char *errMsg = nullptr;
   int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,

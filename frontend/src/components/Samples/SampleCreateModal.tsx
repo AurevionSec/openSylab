@@ -39,9 +39,7 @@ export const SampleCreateModal = ({ isOpen, onClose, onSuccess }: SampleCreateMo
     setLoading(true);
 
     try {
-      console.log('[SampleCreate] Submitting sample:', formData);
       const newSample = await createSample(formData);
-      console.log('[SampleCreate] Sample created successfully:', newSample);
 
       // Reset form
       setFormData({

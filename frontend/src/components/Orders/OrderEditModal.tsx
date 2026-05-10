@@ -46,8 +46,7 @@ export const OrderEditModal = ({ isOpen, orderId, onClose, onSuccess }: OrderEdi
             notes: order.notes,
           });
         } catch (err: any) {
-          console.error('[OrderEdit] Error loading order:', err);
-          setError('Failed to load order data. Please try again.');
+                setError('Failed to load order data. Please try again.');
         } finally {
           setLoadingData(false);
         }
@@ -65,9 +64,7 @@ export const OrderEditModal = ({ isOpen, orderId, onClose, onSuccess }: OrderEdi
     setLoading(true);
 
     try {
-      console.log('[OrderEdit] Updating order:', orderId, formData);
       const updatedOrder = await updateOrder(orderId, formData);
-      console.log('[OrderEdit] Order updated successfully:', updatedOrder);
 
       // Call success callback
       if (onSuccess) {
@@ -77,7 +74,6 @@ export const OrderEditModal = ({ isOpen, orderId, onClose, onSuccess }: OrderEdi
       // Close modal
       onClose();
     } catch (err: any) {
-      console.error('[OrderEdit] Error updating order:', err);
       let errorMessage = 'Failed to update order. Please try again.';
 
       if (err.response?.data?.error?.message) {
