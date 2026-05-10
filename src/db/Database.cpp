@@ -5124,11 +5124,7 @@ bool Database::assignUserRole(int userId, const std::string &roleName,
     return false;
   }
 
-  auto existing = getUser(userId);
-  if (!existing) {
-    return false;
-  }
-
+  // Open transaction BEFORE reads to prevent TOCTOU on security-critical user state
   char *errMsg = nullptr;
   rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
                     &errMsg);
@@ -5137,6 +5133,42 @@ bool Database::assignUserRole(int userId, const std::string &roleName,
              std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
     sqlite3_free(errMsg);
     return false;
+  }
+
+  auto existing = getUser(userId);
+  if (!existing) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
+
+  // Protect against demoting the last active admin via this function
+  const bool wasAdmin = (existing->getRole() == core::User::Role::ADMIN);
+  const bool stillAdmin = (core::User::stringToRole(roleName) == core::User::Role::ADMIN);
+  if (wasAdmin && !stillAdmin) {
+    const char *countSQL =
+        "SELECT COUNT(*) FROM users WHERE role = ? AND active = 1 AND id != ?;";
+    sqlite3_stmt *rawCount = nullptr;
+    const std::string adminRoleStr = core::User::roleToString(core::User::Role::ADMIN);
+    if (sqlite3_prepare_v2(db_, countSQL, -1, &rawCount, nullptr) != SQLITE_OK) {
+      sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+      setError("Fehler beim Prüfen der Admin-Anzahl: " + std::string(sqlite3_errmsg(db_)));
+      return false;
+    }
+    {
+      auto countStmt = makeStatement(rawCount);
+      sqlite3_bind_text(countStmt.get(), 1, adminRoleStr.c_str(), -1, SQLITE_TRANSIENT);
+      sqlite3_bind_int(countStmt.get(), 2, userId);
+      if (sqlite3_step(countStmt.get()) != SQLITE_ROW) {
+        sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+        setError("Fehler beim Lesen der Admin-Anzahl");
+        return false;
+      }
+      if (sqlite3_column_int(countStmt.get(), 0) == 0) {
+        sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+        setError("Letzten aktiven Administrator kann nicht entfernt werden");
+        return false;
+      }
+    }
   }
 
   const char *updateSQL = "UPDATE users SET role = ? WHERE id = ?;";

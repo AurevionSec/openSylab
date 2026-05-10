@@ -2459,6 +2459,28 @@ bool test_database_DeleteUser_LastAdminProtected() {
   return true;
 }
 
+bool test_database_AssignUserRole_LastAdminProtected() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  // Only one admin — reassigning to Operator should fail
+  auto admin = db.getUserByUsername("admin");
+  ASSERT_NOT_NULL(admin);
+  ASSERT_FALSE(db.assignUserRole(admin->getId(), "Operator", "admin"));
+  ASSERT_FALSE(db.getLastError().empty());
+
+  // Verify role unchanged
+  auto still = db.getUserByUsername("admin");
+  ASSERT_NOT_NULL(still);
+  ASSERT_EQ(still->getRole(), User::Role::ADMIN);
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
 void registerDatabaseTests() {
   registerTest("Database::OpenAndClose", test_database_OpenAndClose);
   registerTest("Database::InitializeSchema", test_database_InitializeSchema);
@@ -2586,4 +2608,6 @@ void registerDatabaseTests() {
                test_database_UpdateUser_DeactivateLastAdmin_Protected);
   registerTest("Database::DeleteUser_LastAdminProtected",
                test_database_DeleteUser_LastAdminProtected);
+  registerTest("Database::AssignUserRole_LastAdminProtected",
+               test_database_AssignUserRole_LastAdminProtected);
 }
