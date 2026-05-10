@@ -2284,7 +2284,7 @@ Database::createTestResultsBatch(const std::vector<core::TestResult> &results,
     }
 
     const std::string computedFlag =
-        core::TestResult::flagToString(item.evaluateFlag());
+        core::TestResult::flagToString(item.getFlag());
 
     sqlite3_bind_text(stmt.get(), 1, item.getResultId().c_str(), -1,
                       SQLITE_TRANSIENT);
@@ -2646,7 +2646,7 @@ bool Database::updateTestResult(const core::TestResult &result,
   }
 
   const std::string computedFlag =
-      core::TestResult::flagToString(result.evaluateFlag());
+      core::TestResult::flagToString(result.getFlag());
 
   std::ostringstream details;
   bool hasChanges = false;
