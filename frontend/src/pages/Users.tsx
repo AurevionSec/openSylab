@@ -210,7 +210,7 @@ const UserModal = ({ user, onClose, onSubmit }: UserModalProps) => {
     setLoading(true);
 
     try {
-      const payload: any = {
+      const payload: Record<string, unknown> = {
         username: formData.username,
         role: formData.role,
         full_name: formData.full_name,

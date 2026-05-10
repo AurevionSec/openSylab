@@ -3446,7 +3446,7 @@ bool Database::exportStatsReportToCsv(
     if (!value.has_value()) {
       return std::string("none");
     }
-    std::tm tm = *std::localtime(&value.value());
+    std::tm tm{}; localtime_r(&value.value(), &tm);
     std::ostringstream ss;
     ss << std::put_time(&tm, "%Y-%m-%d");
     return ss.str();

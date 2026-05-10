@@ -109,9 +109,10 @@ AuditEntry::EntityType AuditEntry::stringToEntity(const std::string &str) {
 }
 
 std::string AuditEntry::getTimestampString() const {
-  std::tm *tm = std::localtime(&timestamp_);
+  std::tm tm_buf{};
+  localtime_r(&timestamp_, &tm_buf);
   std::ostringstream oss;
-  oss << std::put_time(tm, "%Y-%m-%d %H:%M:%S");
+  oss << std::put_time(&tm_buf, "%Y-%m-%d %H:%M:%S");
   return oss.str();
 }
 

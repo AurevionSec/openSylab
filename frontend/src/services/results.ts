@@ -2,6 +2,29 @@ import api from './api';
 import type { TestResult, ResultFilter, ResultListResponse } from '../types/result';
 
 // Map backend status strings to frontend enum values
+interface BackendResult {
+  id: number;
+  result_id: string;
+  order_id: number;
+  test_parameter?: string;
+  parameter?: string;
+  value: string;
+  unit?: string;
+  reference_range?: string;
+  reference_low?: number;
+  reference_high?: number;
+  min_value?: string;
+  max_value?: string;
+  flag: string;
+  status: string;
+  measured_by?: string;
+  measured_date?: number;
+  reviewed_by?: string;
+  reviewed_date?: number;
+  comment?: string;
+  notes?: string;
+}
+
 const mapStatus = (backendStatus: string): TestResult['status'] => {
   const statusMap: Record<string, TestResult['status']> = {
     'Ausstehend': 'PENDING',
@@ -42,11 +65,11 @@ const mapFlag = (backendFlag: string): TestResult['flag'] => {
 };
 
 // Transform backend result to frontend result
-const transformResult = (backendResult: any): TestResult => {
+const transformResult = (backendResult: BackendResult): TestResult => {
   return {
     id: backendResult.id,
     result_id: backendResult.result_id,
-    order_id: backendResult.order_id,
+    order_id: String(backendResult.order_id),
     parameter: backendResult.test_parameter || backendResult.parameter || '',  // Backend uses "test_parameter"
     value: backendResult.value || '',
     unit: backendResult.unit || '',
@@ -77,7 +100,7 @@ export const getResults = async (filters?: ResultFilter): Promise<ResultListResp
     ...filters,
     status: filters.status ? mapStatusToBackend(filters.status) : undefined,
   } : undefined;
-  const response = await api.get<{ data: any[]; total: number }>('/results', {
+  const response = await api.get<{ data: BackendResult[]; total: number }>('/results', {
     params: translatedFilters,
   });
 
@@ -93,12 +116,12 @@ export const getResults = async (filters?: ResultFilter): Promise<ResultListResp
 };
 
 export const getResultById = async (id: string): Promise<TestResult> => {
-  const response = await api.get<{ data: any }>(`/results/${id}`);
+  const response = await api.get<{ data: BackendResult }>(`/results/${id}`);
   return transformResult(response.data.data);
 };
 
 export const createResult = async (result: Omit<TestResult, 'id' | 'reviewed_date'>): Promise<TestResult> => {
-  const response = await api.post<{ data: any }>('/results', {
+  const response = await api.post<{ data: BackendResult }>('/results', {
     result_id: result.result_id,
     order_id: result.order_id,
     test_parameter: result.parameter,
@@ -115,7 +138,7 @@ export const createResult = async (result: Omit<TestResult, 'id' | 'reviewed_dat
 };
 
 export const updateResult = async (id: string, result: Partial<TestResult>): Promise<TestResult> => {
-  const updateData: any = {};
+  const updateData: Record<string, unknown> = {};
 
   if (result.result_id !== undefined) updateData.result_id = result.result_id;
   if (result.order_id !== undefined) updateData.order_id = result.order_id;
@@ -129,7 +152,7 @@ export const updateResult = async (id: string, result: Partial<TestResult>): Pro
   if (result.reviewed_by !== undefined) updateData.reviewed_by = result.reviewed_by;
   if (result.notes !== undefined) updateData.notes = result.notes;
 
-  const response = await api.put<{ data: any }>(`/results/${id}`, updateData);
+  const response = await api.put<{ data: BackendResult }>(`/results/${id}`, updateData);
   return transformResult(response.data.data);
 };
 

@@ -55,7 +55,6 @@ CsvResultImport::importResults(const std::string &filePath) {
   // Header überspringen wenn aktiviert
   if (hasHeader_ && std::getline(file, line)) {
     headerLine_ = line;
-    std::cerr << "Header: " << line << "\n";
     if (!validateHeader(headerLine_)) {
       setError("Ungueltiger CSV-Header. Erwartet: result_id,order_id,"
                "test_parameter,value,unit,ref_low,ref_high,measured_by");
