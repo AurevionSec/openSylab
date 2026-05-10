@@ -110,7 +110,7 @@ export const createResult = async (result: Omit<TestResult, 'id' | 'reviewed_dat
 export const updateResult = async (id: string, result: Partial<TestResult>): Promise<TestResult> => {
   const updateData: any = {};
 
-  if (result.result_id) updateData.result_id = result.result_id;
+  if (result.result_id !== undefined) updateData.result_id = result.result_id;
   if (result.order_id !== undefined) updateData.order_id = result.order_id;
   if (result.parameter !== undefined) updateData.test_parameter = result.parameter;
   if (result.value !== undefined) updateData.value = result.value;
