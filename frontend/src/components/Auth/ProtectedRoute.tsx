@@ -27,18 +27,7 @@ export const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) 
 
   // Check role-based access if required
   if (requiredRole && user?.role !== requiredRole) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center bg-red-50 border border-red-200 rounded-lg p-8 max-w-md">
-          <h2 className="text-2xl font-bold text-red-800 mb-2">Access Denied</h2>
-          <p className="text-red-600">
-            You do not have permission to access this page.
-            This page requires {requiredRole} role.
-          </p>
-          <Navigate to="/" replace />
-        </div>
-      </div>
-    );
+    return <Navigate to="/" replace />;
   }
 
   return <>{children}</>;

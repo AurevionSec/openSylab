@@ -210,23 +210,23 @@ const UserModal = ({ user, onClose, onSubmit }: UserModalProps) => {
     setLoading(true);
 
     try {
-      const payload: Record<string, unknown> = {
+      const basePayload: UpdateUserPayload = {
         username: formData.username,
-        role: formData.role,
+        role: formData.role as UserRole,
         full_name: formData.full_name,
         email: formData.email,
         active: formData.active,
       };
 
       if (formData.password) {
-        payload.password = formData.password;
+        basePayload.password = formData.password;
       } else if (!user) {
         setError('Password is required for new users');
         setLoading(false);
         return;
       }
 
-      await onSubmit(payload);
+      await onSubmit(user ? basePayload : (basePayload as CreateUserPayload));
     } catch (err: unknown) {
       setError((err instanceof Error ? err.message : String(err)));
     } finally {
