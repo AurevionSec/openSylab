@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 
 /**
  * OPENSYLAB TITLE ARCHITECTURE
@@ -84,26 +84,8 @@ export const useDocumentTitle = (options: DocumentTitleOptions) => {
  * Returns isDirty flag and control functions
  */
 export const useDirtyState = () => {
-  const isDirtyRef = useRef(false);
-
-  const setDirty = () => {
-    if (!isDirtyRef.current) {
-      isDirtyRef.current = true;
-      // Trigger re-render by updating title
-      window.dispatchEvent(new CustomEvent('dirtyStateChange', { detail: { isDirty: true } }));
-    }
-  };
-
-  const setClean = () => {
-    if (isDirtyRef.current) {
-      isDirtyRef.current = false;
-      window.dispatchEvent(new CustomEvent('dirtyStateChange', { detail: { isDirty: false } }));
-    }
-  };
-
-  return {
-    isDirty: isDirtyRef.current,
-    setDirty,
-    setClean,
-  };
+  const [isDirty, setIsDirtyState] = useState(false);
+  const setDirty = useCallback(() => setIsDirtyState(true), []);
+  const setClean = useCallback(() => setIsDirtyState(false), []);
+  return { isDirty, setDirty, setClean };
 };

@@ -16,7 +16,7 @@ interface ResultCreateModalProps {
 
 function computeFlag(value: string, refMin: string, refMax: string): TestResult['flag'] {
   const v = parseFloat(value);
-  if (isNaN(v)) return 'NORMAL';
+  if (isNaN(v)) return 'UNDEFINED';
   const min = parseFloat(refMin);
   const max = parseFloat(refMax);
   if (!isNaN(min) && v < min) return 'LOW';
@@ -57,6 +57,7 @@ export const ResultCreateModal = ({ isOpen, onClose, onSuccess }: ResultCreateMo
   }, [isOpen]);
 
   useEffect(() => {
+    if (!formData.value) return;
     const autoFlag = computeFlag(formData.value, formData.reference_min, formData.reference_max);
     setFormData((prev) => ({ ...prev, flag: autoFlag }));
   }, [formData.value, formData.reference_min, formData.reference_max]);

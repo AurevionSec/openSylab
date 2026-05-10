@@ -31,6 +31,7 @@ export const OrderEditModal = ({ isOpen, orderId, onClose, onSuccess }: OrderEdi
   useEffect(() => {
     if (isOpen && orderId) {
       const loadOrder = async () => {
+        setFormData({ order_id: '', sample_id: '', test_type: '', status: 'REQUESTED', priority: 'NORMAL', requested_by: '', notes: '' });
         setLoadingData(true);
         setError('');
         try {

@@ -51,7 +51,12 @@ export const Import = () => {
     const reader = new FileReader();
     reader.onload = (evt) => {
       const text = evt.target?.result as string;
-      const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
+      const allLines = text.split(/\r?\n/).filter(l => l.trim() !== '');
+      // Skip header row if it starts with known column names
+      const firstLower = allLines[0]?.toLowerCase() ?? '';
+      const lines = (firstLower.startsWith('sample_id') || firstLower.startsWith('id,'))
+        ? allLines.slice(1)
+        : allLines;
       const parsed: ImportRow[] = lines.map((line, i) => ({
         lineNumber: i + 1,
         raw: line,

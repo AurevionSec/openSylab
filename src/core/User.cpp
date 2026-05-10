@@ -196,26 +196,8 @@ bool User::verifyPassword(const std::string &password) const {
     return result == 0;
   }
 
-  // Legacy DJB2 hash format (for backward compatibility)
-  // This allows existing users to still log in until they change their password
-  // WARNING: This fallback should be removed in a future version after user migration
-  const std::string salt = "OpenSylab_v0.2_Salt";
-  std::string salted = salt + password + salt;
-
-  unsigned long hash1 = 5381;
-  unsigned long hash2 = 52711;
-
-  for (char c : salted) {
-    hash1 = ((hash1 << 5) + hash1) ^ static_cast<unsigned char>(c);
-    hash2 = ((hash2 << 5) + hash2) + static_cast<unsigned char>(c);
-  }
-
-  std::ostringstream oss;
-  oss << std::hex << std::setfill('0');
-  oss << std::setw(16) << hash1;
-  oss << std::setw(16) << hash2;
-
-  return oss.str() == passwordHash_;
+  // Hash format not recognised as PBKDF2 — reject (legacy DJB2 removed per CLAUDE.md)
+  return false;
 }
 
 void User::setPassword(const std::string &password) {

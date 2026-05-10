@@ -29,6 +29,7 @@ export const SampleEditModal = ({ isOpen, sampleId, onClose, onSuccess }: Sample
   useEffect(() => {
     if (isOpen && sampleId) {
       const loadSample = async () => {
+        setFormData({ sample_id: '', patient_id: '', patient_name: '', description: '', status: 'REGISTERED' });
         setLoadingData(true);
         setError('');
         try {

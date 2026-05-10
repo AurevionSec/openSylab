@@ -1198,7 +1198,7 @@ int Database::getSamplesCount(const SampleFilter &filter) {
     return -1;
   }
 
-  int count = sqlite3_column_int(stmt.get(), 0);
+  int count = static_cast<int>(sqlite3_column_int64(stmt.get(), 0));
   return count;
 }
 
@@ -1863,7 +1863,7 @@ int Database::getOrdersCount(const OrderFilter &filter) {
     setError("Fehler beim Zaehlen der Auftraege: " + std::string(sqlite3_errmsg(db_)));
     return -1;
   }
-  return sqlite3_column_int(stmt.get(), 0);
+  return static_cast<int>(sqlite3_column_int64(stmt.get(), 0));
 }
 
 bool Database::updateOrder(const core::Order &order, const std::string &actor) {
@@ -2551,7 +2551,7 @@ int Database::getTestResultsCount(std::optional<int> orderIdFilter) {
     setError("Fehler beim Zaehlen der Ergebnisse: " + std::string(sqlite3_errmsg(db_)));
     return -1;
   }
-  return sqlite3_column_int(stmt.get(), 0);
+  return static_cast<int>(sqlite3_column_int64(stmt.get(), 0));
 }
 
 std::vector<std::unique_ptr<core::TestResult>>
@@ -2631,7 +2631,17 @@ bool Database::updateTestResult(const core::TestResult &result,
     return false;
   }
 
+  char *errMsg = nullptr;
+  int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr, &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Starten der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    return false;
+  }
+
   if (!updateTestResultCore(result)) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     return false;
   }
 
@@ -2671,6 +2681,15 @@ bool Database::updateTestResult(const core::TestResult &result,
       hasChanges ? details.str() : "Keine Änderungen";
   logResultAction(core::AuditEntry::ActionType::UPDATE, result.getResultId(),
                   normalizeActor(actor), detailText);
+
+  rc = sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Commit: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
 
   return true;
 }
@@ -4155,6 +4174,11 @@ bool Database::logSupportAccess(core::AuditEntry::EntityType entity,
 bool Database::logResultRetryImport(const std::vector<std::string> &resultIds,
                                     const std::string &user,
                                     const std::string &filePath) {
+  clearError();
+  if (!isOpen_) {
+    setError("Datenbank ist nicht geöffnet");
+    return false;
+  }
   if (resultIds.empty()) {
     return true;
   }

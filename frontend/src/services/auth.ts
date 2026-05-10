@@ -18,15 +18,12 @@ export interface LoginResponse {
  */
 export const login = async (username: string, password: string): Promise<{ success: boolean; user?: User; error?: string }> => {
   try {
-    console.log('[AUTH] Logging in with username:', username);
-    console.log('[AUTH] API URL:', import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1');
 
     const response = await api.post<LoginResponse>('/auth/login', {
       username,
       password,
     });
 
-    console.log('[AUTH] Login successful:', response.data);
 
     const { token, user, expiresIn } = response.data;
 
@@ -38,7 +35,6 @@ export const login = async (username: string, password: string): Promise<{ succe
     const expirationTime = Date.now() + expiresIn * 1000;
     localStorage.setItem('opensylab_token_expiry', expirationTime.toString());
 
-    console.log('[AUTH] Token stored, expires in:', expiresIn, 'seconds');
 
     return { success: true, user };
   } catch (error: any) {
@@ -72,7 +68,6 @@ export const logout = (): void => {
   // Also remove legacy API key if present
   localStorage.removeItem(API_KEY_STORAGE_KEY);
 
-  console.log('[AUTH] Logged out, all tokens cleared');
 };
 
 /**
@@ -119,7 +114,6 @@ export const isAuthenticated = (): boolean => {
 
   // Check if token is expired
   if (isTokenExpired()) {
-    console.log('[AUTH] Token expired, clearing authentication');
     logout();
     return false;
   }
@@ -133,7 +127,6 @@ export const isAuthenticated = (): boolean => {
  */
 export const validateApiKey = async (apiKey: string): Promise<boolean> => {
   try {
-    console.log('[AUTH] Validating API key (legacy):', apiKey.substring(0, 10) + '...');
 
     const response = await api.get('/samples', {
       headers: {
@@ -144,7 +137,6 @@ export const validateApiKey = async (apiKey: string): Promise<boolean> => {
       },
     });
 
-    console.log('[AUTH] API key validation response:', response.status);
     return response.status === 200;
   } catch (error) {
     console.error('[AUTH] API key validation error:', error);

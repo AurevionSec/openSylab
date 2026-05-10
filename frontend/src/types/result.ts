@@ -18,7 +18,8 @@ export type ResultFlag =
   | 'NORMAL'
   | 'LOW'
   | 'HIGH'
-  | 'CRITICAL';
+  | 'CRITICAL'
+  | 'UNDEFINED';
 
 export type ResultStatus =
   | 'PENDING'
