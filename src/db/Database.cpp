@@ -3922,6 +3922,8 @@ bool Database::exportAuditLogToCsv(const std::string &filePath,
   if (rc != SQLITE_DONE) {
     setError("Fehler beim Abrufen der Audit-Einträge: " +
              std::string(sqlite3_errmsg(db_)));
+    output.close();
+    std::remove(filePath.c_str());
     return false;
   }
 
