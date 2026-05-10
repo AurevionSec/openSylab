@@ -595,13 +595,14 @@ bool Database::initializeSchema() {
     return false;
   }
 
-  // Seed a default admin account on fresh databases (no users exist yet).
-  // This ensures a fresh deployment is accessible without a separate setup step.
-  // Seed a default admin on a completely empty database (no audit entry — system init).
-  {
+  // Seed default admin on fresh DB — wrapped in try/catch for RNG failures.
+  try {
     const char *countSQL = "SELECT COUNT(*) FROM users;";
     sqlite3_stmt *cRaw = nullptr;
-    if (sqlite3_prepare_v2(db_, countSQL, -1, &cRaw, nullptr) == SQLITE_OK) {
+    if (sqlite3_prepare_v2(db_, countSQL, -1, &cRaw, nullptr) != SQLITE_OK) {
+      std::cerr << "[WARNING] Default admin check failed: " << sqlite3_errmsg(db_)
+                << " — run create_admin tool manually.\n";
+    } else {
       auto cStmt = makeStatement(cRaw);
       if (sqlite3_step(cStmt.get()) == SQLITE_ROW &&
           sqlite3_column_int(cStmt.get(), 0) == 0) {
@@ -614,7 +615,10 @@ bool Database::initializeSchema() {
             VALUES (?, ?, ?, 1, ?, 0, '', '');
         )";
         sqlite3_stmt *iRaw = nullptr;
-        if (sqlite3_prepare_v2(db_, insertSQL, -1, &iRaw, nullptr) == SQLITE_OK) {
+        if (sqlite3_prepare_v2(db_, insertSQL, -1, &iRaw, nullptr) != SQLITE_OK) {
+          std::cerr << "[WARNING] Default admin INSERT failed: " << sqlite3_errmsg(db_)
+                    << " — run create_admin tool manually.\n";
+        } else {
           auto iStmt = makeStatement(iRaw);
           sqlite3_bind_text(iStmt.get(), 1, "admin", -1, SQLITE_TRANSIENT);
           sqlite3_bind_text(iStmt.get(), 2, hash.c_str(), -1, SQLITE_TRANSIENT);
@@ -623,10 +627,16 @@ bool Database::initializeSchema() {
           if (sqlite3_step(iStmt.get()) == SQLITE_DONE) {
             std::cerr << "[WARNING] Default admin created (admin/admin). "
                          "Change password immediately!\n";
+          } else {
+            std::cerr << "[WARNING] Default admin INSERT step failed — run "
+                         "create_admin tool manually.\n";
           }
         }
       }
     }
+  } catch (const std::exception &e) {
+    std::cerr << "[WARNING] Default admin seeding failed: " << e.what()
+              << " — run create_admin tool manually.\n";
   }
 
   std::cerr << "Datenbankschema erfolgreich initialisiert" << std::endl;
@@ -4511,34 +4521,7 @@ bool Database::updateUser(const core::User &user, const std::string &actor) {
     return false;
   }
 
-  // Protect against removing the last active admin
-  const bool wasAdmin = (existing->getRole() == core::User::Role::ADMIN);
-  const bool stillAdmin = (user.getRole() == core::User::Role::ADMIN);
-  const bool beingDeactivated = !user.isActive();
-  if (wasAdmin && (!stillAdmin || beingDeactivated)) {
-    const char *countSQL =
-        "SELECT COUNT(*) FROM users WHERE role = ? AND active = 1 AND id != ?;";
-    sqlite3_stmt *rawCount = nullptr;
-    const std::string adminRoleStr = core::User::roleToString(core::User::Role::ADMIN);
-    if (sqlite3_prepare_v2(db_, countSQL, -1, &rawCount, nullptr) != SQLITE_OK) {
-      setError("Fehler beim Prüfen der Admin-Anzahl: " + std::string(sqlite3_errmsg(db_)));
-      return false;
-    }
-    {
-      auto countStmt = makeStatement(rawCount);
-      sqlite3_bind_text(countStmt.get(), 1, adminRoleStr.c_str(), -1, SQLITE_TRANSIENT);
-      sqlite3_bind_int(countStmt.get(), 2, user.getId());
-      if (sqlite3_step(countStmt.get()) != SQLITE_ROW) {
-        setError("Fehler beim Lesen der Admin-Anzahl");
-        return false;
-      }
-      if (sqlite3_column_int(countStmt.get(), 0) == 0) {
-        setError("Letzten aktiven Administrator kann nicht entfernt oder deaktiviert werden");
-        return false;
-      }
-    }
-  }
-
+  // Open transaction FIRST, then check last-admin guard atomically (prevents TOCTOU)
   char *errMsg = nullptr;
   int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
                         &errMsg);
@@ -4547,6 +4530,37 @@ bool Database::updateUser(const core::User &user, const std::string &actor) {
              std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
     sqlite3_free(errMsg);
     return false;
+  }
+
+  // Protect against removing the last active admin (inside transaction for atomicity)
+  const bool wasAdmin = (existing->getRole() == core::User::Role::ADMIN);
+  const bool stillAdmin = (user.getRole() == core::User::Role::ADMIN);
+  const bool beingDeactivated = existing->isActive() && !user.isActive(); // state delta
+  if (wasAdmin && (!stillAdmin || beingDeactivated)) {
+    const char *countSQL =
+        "SELECT COUNT(*) FROM users WHERE role = ? AND active = 1 AND id != ?;";
+    sqlite3_stmt *rawCount = nullptr;
+    const std::string adminRoleStr = core::User::roleToString(core::User::Role::ADMIN);
+    if (sqlite3_prepare_v2(db_, countSQL, -1, &rawCount, nullptr) != SQLITE_OK) {
+      sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+      setError("Fehler beim Prüfen der Admin-Anzahl: " + std::string(sqlite3_errmsg(db_)));
+      return false;
+    }
+    {
+      auto countStmt = makeStatement(rawCount);
+      sqlite3_bind_text(countStmt.get(), 1, adminRoleStr.c_str(), -1, SQLITE_TRANSIENT);
+      sqlite3_bind_int(countStmt.get(), 2, user.getId());
+      if (sqlite3_step(countStmt.get()) != SQLITE_ROW) {
+        sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+        setError("Fehler beim Lesen der Admin-Anzahl");
+        return false;
+      }
+      if (sqlite3_column_int(countStmt.get(), 0) == 0) {
+        sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+        setError("Letzten aktiven Administrator kann nicht entfernt oder deaktiviert werden");
+        return false;
+      }
+    }
   }
 
   const char *updateSQL = R"(
@@ -4660,32 +4674,7 @@ bool Database::deleteUser(int id, const std::string &actor) {
     return false;
   }
 
-  // Prevent deactivating the last active admin
-  if (existing->getRole() == core::User::Role::ADMIN) {
-    const char *countSQL =
-        "SELECT COUNT(*) FROM users WHERE role = ? AND active = 1 AND id != ?;";
-    sqlite3_stmt *rawCount = nullptr;
-    const std::string adminRoleStr = core::User::roleToString(core::User::Role::ADMIN);
-    if (sqlite3_prepare_v2(db_, countSQL, -1, &rawCount, nullptr) != SQLITE_OK) {
-      setError("Fehler beim Prüfen der Admin-Anzahl: " + std::string(sqlite3_errmsg(db_)));
-      return false;
-    }
-    {
-      auto countStmt = makeStatement(rawCount);
-      sqlite3_bind_text(countStmt.get(), 1, adminRoleStr.c_str(), -1, SQLITE_TRANSIENT);
-      sqlite3_bind_int(countStmt.get(), 2, id);
-      if (sqlite3_step(countStmt.get()) != SQLITE_ROW) {
-        setError("Fehler beim Lesen der Admin-Anzahl");
-        return false;
-      }
-      int remaining = sqlite3_column_int(countStmt.get(), 0);
-      if (remaining == 0) {
-        setError("Letzten aktiven Administrator kann nicht deaktiviert werden");
-        return false;
-      }
-    }
-  }
-
+  // Open transaction FIRST, then check last-admin guard atomically (prevents TOCTOU)
   char *errMsg = nullptr;
   int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
                         &errMsg);
@@ -4694,6 +4683,35 @@ bool Database::deleteUser(int id, const std::string &actor) {
              std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
     sqlite3_free(errMsg);
     return false;
+  }
+
+  // Prevent deactivating the last active admin (inside transaction for atomicity)
+  if (existing->getRole() == core::User::Role::ADMIN) {
+    const char *countSQL =
+        "SELECT COUNT(*) FROM users WHERE role = ? AND active = 1 AND id != ?;";
+    sqlite3_stmt *rawCount = nullptr;
+    const std::string adminRoleStr = core::User::roleToString(core::User::Role::ADMIN);
+    if (sqlite3_prepare_v2(db_, countSQL, -1, &rawCount, nullptr) != SQLITE_OK) {
+      sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+      setError("Fehler beim Prüfen der Admin-Anzahl: " + std::string(sqlite3_errmsg(db_)));
+      return false;
+    }
+    {
+      auto countStmt = makeStatement(rawCount);
+      sqlite3_bind_text(countStmt.get(), 1, adminRoleStr.c_str(), -1, SQLITE_TRANSIENT);
+      sqlite3_bind_int(countStmt.get(), 2, id);
+      if (sqlite3_step(countStmt.get()) != SQLITE_ROW) {
+        sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+        setError("Fehler beim Lesen der Admin-Anzahl");
+        return false;
+      }
+      int remaining = sqlite3_column_int(countStmt.get(), 0);
+      if (remaining == 0) {
+        sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+        setError("Letzten aktiven Administrator kann nicht deaktiviert werden");
+        return false;
+      }
+    }
   }
 
   const char *deleteSQL = "UPDATE users SET active = 0 WHERE id = ?;";
