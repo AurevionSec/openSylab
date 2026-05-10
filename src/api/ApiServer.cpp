@@ -2014,14 +2014,6 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                        "Check server logs for details.");
     }
 
-    std::ostringstream out;
-    out << "{\"data\":[";
-    for (size_t i = 0; i < results.size(); ++i) {
-      if (i > 0) {
-        out << ",";
-      }
-      out << resultToJson(*results[i]);
-    }
     // Total is now accurate: either filtered count (hasMem) or DB count (no filter)
     int resultsTotal = hasMemFilter
         ? static_cast<int>(results.size())
@@ -2041,6 +2033,14 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       } else {
         results.clear();
       }
+    }
+    std::ostringstream out;
+    out << "{\"data\":[";
+    for (size_t i = 0; i < results.size(); ++i) {
+      if (i > 0) {
+        out << ",";
+      }
+      out << resultToJson(*results[i]);
     }
     if (resultsTotal < 0) resultsTotal = static_cast<int>(results.size());
     out << "],\"total\":" << resultsTotal << "}";
