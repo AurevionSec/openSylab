@@ -10,6 +10,7 @@ import Results from './pages/Results';
 import Users from './pages/Users';
 import AuditLog from './pages/AuditLog';
 import Profile from './pages/Profile';
+import Import from './pages/Import';
 
 function App() {
   return (
@@ -71,6 +72,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <Profile />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/import"
+              element={
+                <ProtectedRoute>
+                  <Import />
                 </ProtectedRoute>
               }
             />

@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import type { FormEvent } from 'react';
 import { Input } from '../common/Input';
 import { Button } from '../common/Button';
 import { createSample } from '../../services/samples';
 import type { Sample } from '../../types/sample';
 import { SAMPLE_STATUSES } from '../../utils/constants';
+import { useBarcode } from '../../hooks/useBarcode';
 
 interface SampleCreateModalProps {
   isOpen: boolean;
@@ -22,6 +23,15 @@ export const SampleCreateModal = ({ isOpen, onClose, onSuccess }: SampleCreateMo
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
+  const handleBarcodeDetected = useCallback((code: string) => {
+    handleChange('sample_id', code);
+    setShowBarcodeScanner(false);
+  }, []);
+  const { isSupported: barcodeSupported, isScanning, error: barcodeError, videoRef, startScan, stopScan } = useBarcode({
+    onDetected: handleBarcodeDetected,
+  });
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -49,13 +59,14 @@ export const SampleCreateModal = ({ isOpen, onClose, onSuccess }: SampleCreateMo
 
       // Close modal
       onClose();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[SampleCreate] Error creating sample:', err);
       let errorMessage = 'Failed to create sample. Please try again.';
 
-      if (err.response?.data?.error?.message) {
-        errorMessage = err.response.data.error.message;
-      } else if (err.message) {
+      if (err && typeof err === 'object' && 'response' in err) {
+        const r = err as { response?: { data?: { error?: { message?: string } } } };
+        errorMessage = r.response?.data?.error?.message ?? errorMessage;
+      } else if (err instanceof Error) {
         errorMessage = err.message;
       }
 
@@ -104,15 +115,35 @@ export const SampleCreateModal = ({ isOpen, onClose, onSuccess }: SampleCreateMo
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Input
-                type="text"
-                label="Sample ID *"
-                placeholder="e.g., S2024-001"
-                value={formData.sample_id}
-                onChange={(e) => handleChange('sample_id', e.target.value)}
-                required
-                autoFocus
-              />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Sample ID *</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="e.g., S2024-001"
+                    value={formData.sample_id}
+                    onChange={(e) => handleChange('sample_id', e.target.value)}
+                    required
+                    autoFocus
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#0055FF] focus:border-transparent text-sm"
+                  />
+                  {barcodeSupported && (
+                    <button
+                      type="button"
+                      title="Barcode scannen"
+                      onClick={() => { setShowBarcodeScanner(true); startScan(); }}
+                      className="px-3 py-2 border border-gray-300 rounded hover:bg-gray-50 transition-colors text-gray-600"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+                {!barcodeSupported && (
+                  <p className="mt-1 text-xs text-gray-400">Barcode-Scanner nicht verfügbar — bitte manuell eingeben</p>
+                )}
+              </div>
 
               <Input
                 type="text"
@@ -163,6 +194,28 @@ export const SampleCreateModal = ({ isOpen, onClose, onSuccess }: SampleCreateMo
                 className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#0055FF] focus:border-transparent resize-none"
               />
             </div>
+
+            {showBarcodeScanner && (
+              <div className="fixed inset-0 bg-black bg-opacity-75 z-60 flex flex-col items-center justify-center p-4">
+                <div className="bg-black rounded-lg overflow-hidden w-full max-w-sm">
+                  <div className="p-4 flex justify-between items-center bg-gray-900">
+                    <span className="text-white text-sm font-medium">Barcode scannen</span>
+                    <button
+                      type="button"
+                      onClick={() => { stopScan(); setShowBarcodeScanner(false); }}
+                      className="text-gray-400 hover:text-white"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                  <video ref={videoRef} className="w-full" playsInline muted />
+                  {barcodeError && <p className="p-3 text-red-400 text-xs">{barcodeError}</p>}
+                  {isScanning && <p className="p-3 text-green-400 text-xs text-center">Scanning...</p>}
+                </div>
+              </div>
+            )}
 
             <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
               <Button
