@@ -142,6 +142,7 @@ public:
   [[nodiscard]] std::vector<std::unique_ptr<core::Sample>> getAllSamples();
   [[nodiscard]] std::vector<std::unique_ptr<core::Sample>>
   getSamplesByFilter(const SampleFilter &filter);
+  [[nodiscard]] int getSamplesCount(const SampleFilter &filter);
   [[nodiscard]] bool updateSample(const core::Sample &sample,
                                   const std::string &actor = "");
   [[nodiscard]] bool deleteSample(int id, const std::string &actor = "");
