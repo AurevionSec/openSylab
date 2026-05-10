@@ -3558,6 +3558,7 @@ bool Database::exportStatsReportToCsv(
                               "stats_report", normalizeActor(actor),
                               details.str());
   if (!logAudit(auditEntry)) {
+    std::remove(filePath.c_str());
     return false;
   }
 
@@ -3942,6 +3943,8 @@ bool Database::exportAuditLogToCsv(const std::string &filePath,
 
   if (!output) {
     setError("Fehler beim Schreiben der Exportdatei");
+    output.close();
+    std::remove(filePath.c_str());
     return false;
   }
 
