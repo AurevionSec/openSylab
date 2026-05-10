@@ -222,6 +222,10 @@ bool CsvImport::writeRetryCsv(
   }
 
   file.close();
+  if (!file) {
+    std::remove(filePath.c_str());
+    return false;
+  }
   return true;
 }
 

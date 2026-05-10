@@ -19,10 +19,9 @@ TlsContext::~TlsContext() {
     SSL_CTX_free(sslContext_);
     sslContext_ = nullptr;
   }
-
-  // Cleanup OpenSSL
-  EVP_cleanup();
-  ERR_free_strings();
+  // EVP_cleanup() and ERR_free_strings() are deprecated in OpenSSL 1.1.0+ and
+  // perform global teardown — calling them in an instance destructor violates RAII.
+  // OpenSSL 1.1.0+ manages its own global state automatically.
 }
 
 bool TlsContext::initialize(const std::string& certPath, const std::string& keyPath) {

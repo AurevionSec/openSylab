@@ -350,6 +350,11 @@ bool CsvResultImport::writeRetryCsv(
     file << failed.record << "\n";
   }
 
+  file.close();
+  if (!file) {
+    std::remove(filePath.c_str());
+    return false;
+  }
   return true;
 }
 
