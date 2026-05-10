@@ -237,7 +237,9 @@ std::vector<std::string> extractResources(const std::string &json,
   while ((pos = json.find(needle, pos)) != std::string::npos) {
     size_t start = findObjectStart(json, pos);
     std::string obj = extractObject(json, start);
-    if (!obj.empty()) {
+    // Validate that the extracted object actually contains the expected resourceType
+    // (findObjectStart may return a wrong '{' if a preceding string value contains '{')
+    if (!obj.empty() && obj.find(needle) != std::string::npos) {
       resources.push_back(obj);
       pos = start + obj.size();
     } else {

@@ -211,6 +211,23 @@ bool Hl7Exchange::importOruR01Message(const std::string &message,
   return true;
 }
 
+// Escapes HL7 v2 encoding characters in field values per Section 2.7.1
+static std::string hl7Escape(const std::string &val) {
+  std::string out;
+  out.reserve(val.size());
+  for (char c : val) {
+    switch (c) {
+    case '\\': out += "\\E\\"; break;
+    case '|':  out += "\\F\\"; break;
+    case '^':  out += "\\S\\"; break;
+    case '~':  out += "\\R\\"; break;
+    case '&':  out += "\\T\\"; break;
+    default:   out += c;
+    }
+  }
+  return out;
+}
+
 std::string Hl7Exchange::exportOruR01Message(
     const core::Sample &sample, const core::Order &order,
     const std::vector<core::TestResult> &results) {
@@ -219,16 +236,19 @@ std::string Hl7Exchange::exportOruR01Message(
 
   out << "MSH|^~\\&|OPENSYLAB|LAB|OPENSYLAB|LAB|" << timestamp
       << "||ORU^R01|OSY" << timestamp << "|P|2.5.1\r";
-  out << "PID|1||" << sample.getPatientId() << "||"
-      << sample.getPatientName() << "\r";
-  out << "OBR|1|" << order.getOrderId() << "|" << order.getSampleId()
-      << "|" << order.getTestType() << "\r";
+  out << "PID|1||" << hl7Escape(sample.getPatientId()) << "||"
+      << hl7Escape(sample.getPatientName()) << "\r";
+  out << "OBR|1|" << hl7Escape(order.getOrderId()) << "|"
+      << hl7Escape(order.getSampleId())
+      << "|" << hl7Escape(order.getTestType()) << "\r";
 
   int index = 1;
   for (const auto &result : results) {
-    out << "OBX|" << index++ << "|ST|" << result.getTestParameter()
-        << "||" << result.getValue() << "|" << result.getUnit()
-        << "|" << result.getReferenceRange() << "\r";
+    out << "OBX|" << index++ << "|ST|"
+        << hl7Escape(result.getTestParameter())
+        << "||" << hl7Escape(result.getValue())
+        << "|" << hl7Escape(result.getUnit())
+        << "|" << hl7Escape(result.getReferenceRange()) << "\r";
   }
 
   return out.str();

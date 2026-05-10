@@ -40,8 +40,11 @@ std::string urlDecode(const std::string &value) {
       const std::string hex = value.substr(i + 1, 2);
       char *end = nullptr;
       const long decoded = std::strtol(hex.c_str(), &end, 16);
-      if (end && *end == '\0' && decoded != 0) {
-        result.push_back(static_cast<char>(decoded));
+      if (end && *end == '\0') {
+        if (decoded != 0) {
+          result.push_back(static_cast<char>(decoded));
+        }
+        // Skip %00 (null byte) — do not emit it or fall through to literal emission
         i += 2;
         continue;
       }
