@@ -31,7 +31,7 @@ export const login = async (username: string, password: string): Promise<{ succe
       'Administrator': 'ADMIN', 'admin': 'ADMIN',
       'Operator': 'OPERATOR', 'operator': 'OPERATOR',
       'Betrachter': 'VIEWER', 'viewer': 'VIEWER',
-      'Custom': 'CUSTOM', 'custom': 'CUSTOM',
+      'Custom': 'CUSTOM', 'custom': 'CUSTOM', 'Benutzerdefiniert': 'CUSTOM',
     };
     const rawRole: string = rawUser.role ?? '';
     const user = { ...rawUser, role: roleMap[rawRole] ?? (rawRole ? rawRole.toUpperCase() : 'VIEWER') };

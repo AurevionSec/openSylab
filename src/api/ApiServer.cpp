@@ -1956,6 +1956,17 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       }
       offset = offsetValue;
     }
+    // Parse optional status filter
+    std::string statusFilter;
+    auto statusResultIt = query.find("status");
+    if (statusResultIt != query.end() && !statusResultIt->second.empty()) {
+      // Translate frontend status tokens to backend equivalents
+      const std::string &s = statusResultIt->second;
+      if (s == "REVIEWED")  statusFilter = "ENTERED";
+      else if (s == "AMENDED") statusFilter = "REPEATED";
+      else statusFilter = s;
+    }
+
     std::optional<int> resultsOrderIdFilter;
     auto orderIt = query.find("order_id");
     if (orderIt != query.end()) {
@@ -1968,6 +1979,17 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       resultsOrderIdFilter = orderId;
     } else {
       results = database_->getAllTestResults(limit, offset);
+    }
+
+    // Apply status filter in-memory if provided
+    if (!statusFilter.empty()) {
+      std::vector<std::unique_ptr<core::TestResult>> filtered;
+      for (auto &r : results) {
+        if (r->getStatusString() == statusFilter) {
+          filtered.push_back(std::move(r));
+        }
+      }
+      results = std::move(filtered);
     }
 
     if (database_->hasError()) {
