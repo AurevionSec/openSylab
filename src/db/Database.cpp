@@ -1437,6 +1437,8 @@ bool Database::exportSamplesToCsv(const std::string &filePath) {
   std::ofstream output(filePath);
   if (!output.is_open()) {
     setError("Exportdatei konnte nicht geschrieben werden");
+    output.close();
+    std::remove(filePath.c_str());
     return false;
   }
 
@@ -1450,6 +1452,8 @@ bool Database::exportSamplesToCsv(const std::string &filePath) {
   if (rc != SQLITE_OK) {
     setError("Fehler beim Vorbereiten des SELECT: " +
              std::string(sqlite3_errmsg(db_)));
+    output.close();
+    std::remove(filePath.c_str());
     return false;
   }
   auto stmt = makeStatement(rawStmt);
@@ -1481,6 +1485,8 @@ bool Database::exportSamplesToCsv(const std::string &filePath) {
 
   if (!output) {
     setError("Fehler beim Schreiben der Exportdatei");
+    output.close();
+    std::remove(filePath.c_str());
     return false;
   }
 
@@ -2933,6 +2939,8 @@ bool Database::exportValidatedResultsToCsv(const std::string &filePath,
   std::ofstream output(filePath);
   if (!output.is_open()) {
     setError("Exportdatei konnte nicht geschrieben werden");
+    output.close();
+    std::remove(filePath.c_str());
     return false;
   }
 
@@ -2954,6 +2962,8 @@ bool Database::exportValidatedResultsToCsv(const std::string &filePath,
   if (rc != SQLITE_OK) {
     setError("Fehler beim Vorbereiten des SELECT: " +
              std::string(sqlite3_errmsg(db_)));
+    output.close();
+    std::remove(filePath.c_str());
     return false;
   }
   auto stmt = makeStatement(rawStmt);
@@ -3003,6 +3013,8 @@ bool Database::exportValidatedResultsToCsv(const std::string &filePath,
 
   if (!output) {
     setError("Fehler beim Schreiben der Exportdatei");
+    output.close();
+    std::remove(filePath.c_str());
     return false;
   }
 
@@ -3013,6 +3025,8 @@ bool Database::exportValidatedResultsToCsv(const std::string &filePath,
     setError("Fehler beim Starten der Transaktion: " +
              std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
     sqlite3_free(errMsg);
+    output.close();
+    std::remove(filePath.c_str());
     return false;
   }
 
@@ -3455,6 +3469,8 @@ bool Database::exportStatsReportToCsv(
   std::ofstream output(filePath);
   if (!output.is_open()) {
     setError("Exportdatei konnte nicht geschrieben werden");
+    output.close();
+    std::remove(filePath.c_str());
     return false;
   }
 
@@ -3532,6 +3548,8 @@ bool Database::exportStatsReportToCsv(
 
   if (!output) {
     setError("Fehler beim Schreiben der Exportdatei");
+    output.close();
+    std::remove(filePath.c_str());
     return false;
   }
 
@@ -3840,6 +3858,8 @@ bool Database::exportAuditLogToCsv(const std::string &filePath,
   std::ofstream output(filePath);
   if (!output.is_open()) {
     setError("Exportdatei konnte nicht geschrieben werden");
+    output.close();
+    std::remove(filePath.c_str());
     return false;
   }
 
@@ -3880,6 +3900,8 @@ bool Database::exportAuditLogToCsv(const std::string &filePath,
   if (rc != SQLITE_OK) {
     setError("Fehler beim Vorbereiten des SELECT: " +
              std::string(sqlite3_errmsg(db_)));
+    output.close();
+    std::remove(filePath.c_str());
     return false;
   }
   auto stmt = makeStatement(rawStmt);
