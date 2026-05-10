@@ -42,8 +42,7 @@ export const SampleEditModal = ({ isOpen, sampleId, onClose, onSuccess }: Sample
             status: sample.status,
           });
         } catch (err: any) {
-          console.error('[SampleEdit] Error loading sample:', err);
-          setError('Failed to load sample data. Please try again.');
+                setError('Failed to load sample data. Please try again.');
         } finally {
           setLoadingData(false);
         }
@@ -61,9 +60,7 @@ export const SampleEditModal = ({ isOpen, sampleId, onClose, onSuccess }: Sample
     setLoading(true);
 
     try {
-      console.log('[SampleEdit] Updating sample:', sampleId, formData);
       const updatedSample = await updateSample(sampleId, formData);
-      console.log('[SampleEdit] Sample updated successfully:', updatedSample);
 
       // Call success callback
       if (onSuccess) {
@@ -73,7 +70,6 @@ export const SampleEditModal = ({ isOpen, sampleId, onClose, onSuccess }: Sample
       // Close modal
       onClose();
     } catch (err: any) {
-      console.error('[SampleEdit] Error updating sample:', err);
       let errorMessage = 'Failed to update sample. Please try again.';
 
       if (err.response?.data?.error?.message) {

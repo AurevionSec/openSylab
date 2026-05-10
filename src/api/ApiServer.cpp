@@ -2038,7 +2038,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
   // GET /api/v1/users - List all users (admin only)
   if (path == "/api/v1/users" && isGet) {
     // Check if user is admin
-    if (!jwtPayload.has_value() || jwtPayload->role != "ADMIN") {
+    if (!jwtPayload.has_value() || (jwtPayload->role != "ADMIN" && jwtPayload->role != "Administrator")) {
       return makeError(403, "forbidden", "Admin access required",
                        "Only administrators can list users.");
     }
@@ -2081,7 +2081,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
 
   // POST /api/v1/users - Create new user (admin only)
   if (path == "/api/v1/users" && isPost) {
-    if (!jwtPayload.has_value() || jwtPayload->role != "ADMIN") {
+    if (!jwtPayload.has_value() || (jwtPayload->role != "ADMIN" && jwtPayload->role != "Administrator")) {
       return makeError(403, "forbidden", "Admin access required",
                        "Only administrators can create users.");
     }
@@ -2183,7 +2183,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                        "Provide numeric user_id.");
     }
 
-    if (!jwtPayload.has_value() || jwtPayload->role != "ADMIN") {
+    if (!jwtPayload.has_value() || (jwtPayload->role != "ADMIN" && jwtPayload->role != "Administrator")) {
       return makeError(403, "forbidden", "Admin access required",
                        "Only administrators can update users.");
     }
@@ -2353,7 +2353,7 @@ after_user_update:
                        "Provide numeric user_id.");
     }
 
-    if (!jwtPayload.has_value() || jwtPayload->role != "ADMIN") {
+    if (!jwtPayload.has_value() || (jwtPayload->role != "ADMIN" && jwtPayload->role != "Administrator")) {
       return makeError(403, "forbidden", "Admin access required",
                        "Only administrators can delete users.");
     }
@@ -2376,7 +2376,7 @@ after_user_update:
 
   // GET /api/v1/audit - Get audit log (admin only)
   if (path == "/api/v1/audit" && isGet) {
-    if (!jwtPayload.has_value() || jwtPayload->role != "ADMIN") {
+    if (!jwtPayload.has_value() || (jwtPayload->role != "ADMIN" && jwtPayload->role != "Administrator")) {
       return makeError(403, "forbidden", "Admin access required",
                        "Only administrators can view audit logs.");
     }
