@@ -60,7 +60,7 @@ const transformResult = (backendResult: any): TestResult => {
 };
 
 export const getResults = async (filters?: ResultFilter): Promise<ResultListResponse> => {
-  const response = await api.get<{ data: any[] }>('/results', {
+  const response = await api.get<{ data: any[]; total: number }>('/results', {
     params: filters,
   });
 
@@ -69,7 +69,7 @@ export const getResults = async (filters?: ResultFilter): Promise<ResultListResp
 
   return {
     results,
-    total: results.length,
+    total: response.data.total ?? results.length,
     limit: filters?.limit || results.length,
     offset: filters?.offset || 0,
   };

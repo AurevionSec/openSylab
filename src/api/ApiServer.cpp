@@ -959,6 +959,12 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       if (!validateStringLength(payload["sample_id"], 1, 64, validationError)) {
         return makeError(400, "validation_error", "Invalid sample_id", validationError);
       }
+      // Validate sample_id references an existing sample
+      auto sampleRef = database_->getSampleByBarcode(payload["sample_id"]);
+      if (!sampleRef) {
+        return makeError(422, "unprocessable_entity", "Sample not found",
+                         "The provided sample_id does not exist.");
+      }
       if (!validateStringLength(payload["test_type"], 1, 255, validationError)) {
         return makeError(400, "validation_error", "Invalid test_type", validationError);
       }
@@ -1066,6 +1072,20 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       if (!parseIntValue(payload["order_id"], orderId) || orderId <= 0) {
         return makeError(400, "validation_error", "Invalid order_id",
                          "Provide numeric order_id.");
+      }
+      // Validate order exists and has active status
+      auto orderRef = database_->getOrderByOrderId(payload["order_id"]);
+      if (!orderRef) {
+        return makeError(422, "unprocessable_entity", "Order not found",
+                         "The provided order_id does not exist.");
+      }
+      {
+        auto orderStatus = orderRef->getStatus();
+        if (orderStatus != core::Order::Status::IN_PROGRESS &&
+            orderStatus != core::Order::Status::COMPLETED) {
+          return makeError(409, "conflict", "Order not active",
+                           "Results can only be added to IN_PROGRESS or COMPLETED orders.");
+        }
       }
 
       // Validate required field lengths
@@ -1850,7 +1870,9 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       }
       out << orderToJson(*orders[i]);
     }
-    out << "]}";
+    int ordersTotal = database_->getOrdersCount(filter);
+    if (ordersTotal < 0) ordersTotal = static_cast<int>(orders.size());
+    out << "],\"total\":" << ordersTotal << "}";
 
     std::ostringstream details;
     details << "API READ /orders"
@@ -1937,6 +1959,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       }
       offset = offsetValue;
     }
+    std::optional<int> resultsOrderIdFilter;
     auto orderIt = query.find("order_id");
     if (orderIt != query.end()) {
       int orderId = 0;
@@ -1945,6 +1968,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                          "Provide numeric order_id.");
       }
       results = database_->getTestResultsByOrderId(orderId, limit, offset);
+      resultsOrderIdFilter = orderId;
     } else {
       results = database_->getAllTestResults(limit, offset);
     }
@@ -1962,7 +1986,9 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       }
       out << resultToJson(*results[i]);
     }
-    out << "]}";
+    int resultsTotal = database_->getTestResultsCount(resultsOrderIdFilter);
+    if (resultsTotal < 0) resultsTotal = static_cast<int>(results.size());
+    out << "],\"total\":" << resultsTotal << "}";
 
     std::ostringstream details;
     details << "API READ /results"

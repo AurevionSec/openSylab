@@ -159,6 +159,7 @@ public:
   [[nodiscard]] std::vector<std::unique_ptr<core::Order>> getAllOrders();
   [[nodiscard]] std::vector<std::unique_ptr<core::Order>>
   getOrdersByFilter(const OrderFilter &filter);
+  [[nodiscard]] int getOrdersCount(const OrderFilter &filter);
   [[nodiscard]] bool updateOrder(const core::Order &order,
                                  const std::string &actor = "");
   [[nodiscard]] bool deleteOrder(int id, const std::string &actor = "");
@@ -173,6 +174,7 @@ public:
   getTestResultsByOrderId(int orderId,
                           std::optional<int> limit = std::nullopt,
                           std::optional<int> offset = std::nullopt);
+  [[nodiscard]] int getTestResultsCount(std::optional<int> orderIdFilter = std::nullopt);
   [[nodiscard]] std::vector<std::unique_ptr<core::TestResult>>
   getAllTestResults(std::optional<int> limit = std::nullopt,
                     std::optional<int> offset = std::nullopt);
