@@ -32,6 +32,8 @@ const mapFlag = (backendFlag: string): TestResult['flag'] => {
     'LOW': 'LOW',
     'HIGH': 'HIGH',
     'CRITICAL': 'CRITICAL',
+    'UNDEFINED': 'UNDEFINED',
+    'Unbekannt': 'UNDEFINED',
   };
   return flagMap[backendFlag] || 'NORMAL';
 };
@@ -80,6 +82,14 @@ export const getResultById = async (id: string): Promise<TestResult> => {
   return transformResult(response.data.data);
 };
 
+const mapStatusToBackend = (status: string): string => {
+  const statusMap: Record<string, string> = {
+    'REVIEWED': 'ENTERED',
+    'AMENDED': 'REPEATED',
+  };
+  return statusMap[status] ?? status;
+};
+
 export const createResult = async (result: Omit<TestResult, 'id' | 'reviewed_date'>): Promise<TestResult> => {
   const response = await api.post<{ data: any }>('/results', {
     result_id: result.result_id,
@@ -87,10 +97,10 @@ export const createResult = async (result: Omit<TestResult, 'id' | 'reviewed_dat
     test_parameter: result.parameter,
     value: result.value,
     unit: result.unit,
-    min_value: result.reference_min,
-    max_value: result.reference_max,
+    reference_low: result.reference_min,
+    reference_high: result.reference_max,
     flag: result.flag,
-    status: result.status,
+    status: mapStatusToBackend(result.status || 'PENDING'),
     reviewed_by: result.reviewed_by,
     notes: result.notes,
   });
@@ -102,13 +112,13 @@ export const updateResult = async (id: string, result: Partial<TestResult>): Pro
 
   if (result.result_id) updateData.result_id = result.result_id;
   if (result.order_id !== undefined) updateData.order_id = result.order_id;
-  if (result.parameter !== undefined) updateData.parameter = result.parameter;
+  if (result.parameter !== undefined) updateData.test_parameter = result.parameter;
   if (result.value !== undefined) updateData.value = result.value;
   if (result.unit !== undefined) updateData.unit = result.unit;
-  if (result.reference_min) updateData.min_value = result.reference_min;
-  if (result.reference_max) updateData.max_value = result.reference_max;
+  if (result.reference_min !== undefined) updateData.reference_low = result.reference_min;
+  if (result.reference_max !== undefined) updateData.reference_high = result.reference_max;
   if (result.flag !== undefined) updateData.flag = result.flag;
-  if (result.status !== undefined) updateData.status = result.status;
+  if (result.status !== undefined) updateData.status = mapStatusToBackend(result.status);
   if (result.reviewed_by !== undefined) updateData.reviewed_by = result.reviewed_by;
   if (result.notes !== undefined) updateData.notes = result.notes;
 

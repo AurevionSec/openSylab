@@ -46,7 +46,6 @@ export const Samples = () => {
   };
 
   const handleCreateSuccess = (newSample: Sample) => {
-    console.log('[Samples] Sample created successfully:', newSample);
     refetch();
   };
 
@@ -56,7 +55,6 @@ export const Samples = () => {
   };
 
   const handleEditSuccess = (updatedSample: Sample) => {
-    console.log('[Samples] Sample updated successfully:', updatedSample);
     refetch();
   };
 
@@ -67,9 +65,7 @@ export const Samples = () => {
 
   const handleDeleteConfirm = async () => {
     if (!sampleToDelete) return;
-    console.log('[Samples] Deleting sample:', sampleToDelete.sample_id);
     await deleteSample(sampleToDelete.sample_id);
-    console.log('[Samples] Sample deleted successfully');
     refetch();
   };
 

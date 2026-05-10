@@ -43,7 +43,6 @@ export const Orders = () => {
   };
 
   const handleCreateSuccess = (newOrder: Order) => {
-    console.log('[Orders] Order created successfully:', newOrder);
     refetch();
   };
 
@@ -53,7 +52,6 @@ export const Orders = () => {
   };
 
   const handleEditSuccess = (updatedOrder: Order) => {
-    console.log('[Orders] Order updated successfully:', updatedOrder);
     refetch();
   };
 
@@ -64,9 +62,7 @@ export const Orders = () => {
 
   const handleDeleteConfirm = async () => {
     if (!orderToDelete) return;
-    console.log('[Orders] Deleting order:', orderToDelete.id);
     await deleteOrder(orderToDelete.order_id);
-    console.log('[Orders] Order deleted successfully');
     refetch();
   };
 
