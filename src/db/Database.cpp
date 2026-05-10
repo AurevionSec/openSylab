@@ -713,9 +713,10 @@ bool Database::createSample(const core::Sample &sample,
   sqlite3_stmt *rawStmt = nullptr;
   rc = sqlite3_prepare_v2(db_, insertSQL, -1, &rawStmt, nullptr);
   if (rc != SQLITE_OK) {
+    {const std::string _rbErr = sqlite3_errmsg(db_);
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Vorbereiten des INSERT: " +
-             std::string(sqlite3_errmsg(db_)));
+        setError("Fehler beim Vorbereiten des INSERT: " +
+             std::string(_rbErr));}
     return false;
   }
   auto stmt = makeStatement(rawStmt);
@@ -736,9 +737,10 @@ bool Database::createSample(const core::Sample &sample,
   rc = sqlite3_step(stmt.get());
 
   if (rc != SQLITE_DONE) {
+    {const std::string _rbErr = sqlite3_errmsg(db_);
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Einfügen der Probe: " +
-             std::string(sqlite3_errmsg(db_)));
+        setError("Fehler beim Einfügen der Probe: " +
+             std::string(_rbErr));}
     return false;
   }
 
@@ -802,9 +804,10 @@ Database::createSamplesBatch(const std::vector<core::Sample> &samples,
   sqlite3_stmt *rawStmt = nullptr;
   rc = sqlite3_prepare_v2(db_, insertSQL, -1, &rawStmt, nullptr);
   if (rc != SQLITE_OK) {
+    {const std::string _rbErr = sqlite3_errmsg(db_);
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Vorbereiten des INSERT: " +
-             std::string(sqlite3_errmsg(db_)));
+        setError("Fehler beim Vorbereiten des INSERT: " +
+             std::string(_rbErr));}
     return result;
   }
   auto stmt = makeStatement(rawStmt);
@@ -1284,9 +1287,10 @@ bool Database::updateSample(const core::Sample &sample,
   rc = sqlite3_prepare_v2(db_, updateSQL, -1, &rawStmt, nullptr);
 
   if (rc != SQLITE_OK) {
+    {const std::string _rbErr = sqlite3_errmsg(db_);
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Vorbereiten des UPDATE: " +
-             std::string(sqlite3_errmsg(db_)));
+        setError("Fehler beim Vorbereiten des UPDATE: " +
+             std::string(_rbErr));}
     return false;
   }
 
@@ -1309,9 +1313,10 @@ bool Database::updateSample(const core::Sample &sample,
   rc = sqlite3_step(stmt.get());
 
   if (rc != SQLITE_DONE) {
+    {const std::string _rbErr = sqlite3_errmsg(db_);
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Aktualisieren der Probe: " +
-             std::string(sqlite3_errmsg(db_)));
+        setError("Fehler beim Aktualisieren der Probe: " +
+             std::string(_rbErr));}
     return false;
   }
 
@@ -1383,9 +1388,10 @@ bool Database::deleteSample(int id, const std::string &actor) {
   rc = sqlite3_prepare_v2(db_, deleteSQL, -1, &rawStmt, nullptr);
 
   if (rc != SQLITE_OK) {
+    {const std::string _rbErr = sqlite3_errmsg(db_);
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Vorbereiten des UPDATE: " +
-             std::string(sqlite3_errmsg(db_)));
+        setError("Fehler beim Vorbereiten des UPDATE: " +
+             std::string(_rbErr));}
     return false;
   }
 
@@ -1397,9 +1403,10 @@ bool Database::deleteSample(int id, const std::string &actor) {
   rc = sqlite3_step(stmt.get());
 
   if (rc != SQLITE_DONE) {
+    {const std::string _rbErr = sqlite3_errmsg(db_);
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Löschen der Probe: " +
-             std::string(sqlite3_errmsg(db_)));
+        setError("Fehler beim Löschen der Probe: " +
+             std::string(_rbErr));}
     return false;
   }
 
@@ -1547,9 +1554,10 @@ bool Database::createOrder(const core::Order &order, const std::string &actor) {
   sqlite3_stmt *rawStmt = nullptr;
   rc = sqlite3_prepare_v2(db_, insertSQL, -1, &rawStmt, nullptr);
   if (rc != SQLITE_OK) {
+    {const std::string _rbErr = sqlite3_errmsg(db_);
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Vorbereiten des INSERT: " +
-             std::string(sqlite3_errmsg(db_)));
+        setError("Fehler beim Vorbereiten des INSERT: " +
+             std::string(_rbErr));}
     return false;
   }
   auto stmt = makeStatement(rawStmt);
@@ -1576,9 +1584,10 @@ bool Database::createOrder(const core::Order &order, const std::string &actor) {
   rc = sqlite3_step(stmt.get());
 
   if (rc != SQLITE_DONE) {
+    {const std::string _rbErr = sqlite3_errmsg(db_);
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Einfügen des Auftrags: " +
-             std::string(sqlite3_errmsg(db_)));
+        setError("Fehler beim Einfügen des Auftrags: " +
+             std::string(_rbErr));}
     return false;
   }
 
@@ -1958,9 +1967,10 @@ bool Database::updateOrder(const core::Order &order, const std::string &actor) {
   rc = sqlite3_prepare_v2(db_, updateSQL, -1, &rawStmt, nullptr);
 
   if (rc != SQLITE_OK) {
+    {const std::string _rbErr = sqlite3_errmsg(db_);
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Vorbereiten des UPDATE: " +
-             std::string(sqlite3_errmsg(db_)));
+        setError("Fehler beim Vorbereiten des UPDATE: " +
+             std::string(_rbErr));}
     return false;
   }
 
@@ -1989,9 +1999,10 @@ bool Database::updateOrder(const core::Order &order, const std::string &actor) {
   rc = sqlite3_step(stmt.get());
 
   if (rc != SQLITE_DONE) {
+    {const std::string _rbErr = sqlite3_errmsg(db_);
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Aktualisieren des Auftrags: " +
-             std::string(sqlite3_errmsg(db_)));
+        setError("Fehler beim Aktualisieren des Auftrags: " +
+             std::string(_rbErr));}
     return false;
   }
 
@@ -2070,9 +2081,10 @@ bool Database::deleteOrder(int id, const std::string &actor) {
   rc = sqlite3_prepare_v2(db_, deleteSQL, -1, &rawStmt, nullptr);
 
   if (rc != SQLITE_OK) {
+    {const std::string _rbErr = sqlite3_errmsg(db_);
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Vorbereiten des UPDATE: " +
-             std::string(sqlite3_errmsg(db_)));
+        setError("Fehler beim Vorbereiten des UPDATE: " +
+             std::string(_rbErr));}
     return false;
   }
 
@@ -2084,9 +2096,10 @@ bool Database::deleteOrder(int id, const std::string &actor) {
   rc = sqlite3_step(stmt.get());
 
   if (rc != SQLITE_DONE) {
+    {const std::string _rbErr = sqlite3_errmsg(db_);
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Löschen des Auftrags: " +
-             std::string(sqlite3_errmsg(db_)));
+        setError("Fehler beim Löschen des Auftrags: " +
+             std::string(_rbErr));}
     return false;
   }
 
@@ -2184,9 +2197,10 @@ bool Database::createTestResult(const core::TestResult &result,
   sqlite3_stmt *rawStmt = nullptr;
   rc = sqlite3_prepare_v2(db_, insertSQL, -1, &rawStmt, nullptr);
   if (rc != SQLITE_OK) {
+    {const std::string _rbErr = sqlite3_errmsg(db_);
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Vorbereiten des INSERT: " +
-             std::string(sqlite3_errmsg(db_)));
+        setError("Fehler beim Vorbereiten des INSERT: " +
+             std::string(_rbErr));}
     return false;
   }
   auto stmt = makeStatement(rawStmt);
@@ -2218,9 +2232,10 @@ bool Database::createTestResult(const core::TestResult &result,
   rc = sqlite3_step(stmt.get());
 
   if (rc != SQLITE_DONE) {
+    {const std::string _rbErr = sqlite3_errmsg(db_);
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Einfügen des Ergebnisses: " +
-             std::string(sqlite3_errmsg(db_)));
+        setError("Fehler beim Einfügen des Ergebnisses: " +
+             std::string(_rbErr));}
     return false;
   }
 
@@ -2289,9 +2304,10 @@ Database::createTestResultsBatch(const std::vector<core::TestResult> &results,
   sqlite3_stmt *rawStmt = nullptr;
   rc = sqlite3_prepare_v2(db_, insertSQL, -1, &rawStmt, nullptr);
   if (rc != SQLITE_OK) {
+    {const std::string _rbErr = sqlite3_errmsg(db_);
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Vorbereiten des INSERT: " +
-             std::string(sqlite3_errmsg(db_)));
+        setError("Fehler beim Vorbereiten des INSERT: " +
+             std::string(_rbErr));}
     return result;
   }
   auto stmt = makeStatement(rawStmt);
@@ -3150,9 +3166,10 @@ bool Database::deleteTestResult(int id, const std::string &actor) {
   rc = sqlite3_prepare_v2(db_, deleteSQL, -1, &rawStmt, nullptr);
 
   if (rc != SQLITE_OK) {
+    {const std::string _rbErr = sqlite3_errmsg(db_);
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Vorbereiten des UPDATE: " +
-             std::string(sqlite3_errmsg(db_)));
+        setError("Fehler beim Vorbereiten des UPDATE: " +
+             std::string(_rbErr));}
     return false;
   }
 
@@ -3164,9 +3181,10 @@ bool Database::deleteTestResult(int id, const std::string &actor) {
   rc = sqlite3_step(stmt.get());
 
   if (rc != SQLITE_DONE) {
+    {const std::string _rbErr = sqlite3_errmsg(db_);
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Löschen des Ergebnisses: " +
-             std::string(sqlite3_errmsg(db_)));
+        setError("Fehler beim Löschen des Ergebnisses: " +
+             std::string(_rbErr));}
     return false;
   }
 
@@ -4123,9 +4141,10 @@ bool Database::applyAuditRetention(const std::string &actor,
   sqlite3_stmt *rawStmt = nullptr;
   rc = sqlite3_prepare_v2(db_, deleteSQL, -1, &rawStmt, nullptr);
   if (rc != SQLITE_OK) {
+    {const std::string _rbErr = sqlite3_errmsg(db_);
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Vorbereiten des DELETE: " +
-             std::string(sqlite3_errmsg(db_)));
+        setError("Fehler beim Vorbereiten des DELETE: " +
+             std::string(_rbErr));}
     return false;
   }
 
@@ -4134,9 +4153,10 @@ bool Database::applyAuditRetention(const std::string &actor,
 
   rc = sqlite3_step(stmt.get());
   if (rc != SQLITE_DONE) {
+    {const std::string _rbErr = sqlite3_errmsg(db_);
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Anwenden der Retention-Regeln: " +
-             std::string(sqlite3_errmsg(db_)));
+        setError("Fehler beim Anwenden der Retention-Regeln: " +
+             std::string(_rbErr));}
     return false;
   }
 
@@ -4310,9 +4330,10 @@ bool Database::createUser(const core::User &user, const std::string &actor) {
   sqlite3_stmt *rawStmt = nullptr;
   rc = sqlite3_prepare_v2(db_, insertSQL, -1, &rawStmt, nullptr);
   if (rc != SQLITE_OK) {
+    {const std::string _rbErr = sqlite3_errmsg(db_);
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Vorbereiten des INSERT: " +
-             std::string(sqlite3_errmsg(db_)));
+        setError("Fehler beim Vorbereiten des INSERT: " +
+             std::string(_rbErr));}
     return false;
   }
   auto stmt = makeStatement(rawStmt);
@@ -4336,9 +4357,10 @@ bool Database::createUser(const core::User &user, const std::string &actor) {
   rc = sqlite3_step(stmt.get());
 
   if (rc != SQLITE_DONE) {
+    {const std::string _rbErr = sqlite3_errmsg(db_);
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Einfügen des Benutzers: " +
-             std::string(sqlite3_errmsg(db_)));
+        setError("Fehler beim Einfügen des Benutzers: " +
+             std::string(_rbErr));}
     return false;
   }
 
@@ -4544,8 +4566,9 @@ bool Database::updateUser(const core::User &user, const std::string &actor) {
     sqlite3_stmt *rawCount = nullptr;
     const std::string adminRoleStr = core::User::roleToString(core::User::Role::ADMIN);
     if (sqlite3_prepare_v2(db_, countSQL, -1, &rawCount, nullptr) != SQLITE_OK) {
+      {const std::string _rbErr = sqlite3_errmsg(db_);
       sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-      setError("Fehler beim Prüfen der Admin-Anzahl: " + std::string(sqlite3_errmsg(db_)));
+            setError("Fehler beim Prüfen der Admin-Anzahl: " + std::string(_rbErr));}
       return false;
     }
     {
@@ -4582,9 +4605,10 @@ bool Database::updateUser(const core::User &user, const std::string &actor) {
   rc = sqlite3_prepare_v2(db_, updateSQL, -1, &rawStmt, nullptr);
 
   if (rc != SQLITE_OK) {
+    {const std::string _rbErr = sqlite3_errmsg(db_);
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Vorbereiten des UPDATE: " +
-             std::string(sqlite3_errmsg(db_)));
+        setError("Fehler beim Vorbereiten des UPDATE: " +
+             std::string(_rbErr));}
     return false;
   }
 
@@ -4610,9 +4634,10 @@ bool Database::updateUser(const core::User &user, const std::string &actor) {
   rc = sqlite3_step(stmt.get());
 
   if (rc != SQLITE_DONE) {
+    {const std::string _rbErr = sqlite3_errmsg(db_);
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Aktualisieren des Benutzers: " +
-             std::string(sqlite3_errmsg(db_)));
+        setError("Fehler beim Aktualisieren des Benutzers: " +
+             std::string(_rbErr));}
     return false;
   }
 
@@ -4697,8 +4722,9 @@ bool Database::deleteUser(int id, const std::string &actor) {
     sqlite3_stmt *rawCount = nullptr;
     const std::string adminRoleStr = core::User::roleToString(core::User::Role::ADMIN);
     if (sqlite3_prepare_v2(db_, countSQL, -1, &rawCount, nullptr) != SQLITE_OK) {
+      {const std::string _rbErr = sqlite3_errmsg(db_);
       sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-      setError("Fehler beim Prüfen der Admin-Anzahl: " + std::string(sqlite3_errmsg(db_)));
+            setError("Fehler beim Prüfen der Admin-Anzahl: " + std::string(_rbErr));}
       return false;
     }
     {
@@ -4725,9 +4751,10 @@ bool Database::deleteUser(int id, const std::string &actor) {
   rc = sqlite3_prepare_v2(db_, deleteSQL, -1, &rawStmt, nullptr);
 
   if (rc != SQLITE_OK) {
+    {const std::string _rbErr = sqlite3_errmsg(db_);
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Vorbereiten des DELETE: " +
-             std::string(sqlite3_errmsg(db_)));
+        setError("Fehler beim Vorbereiten des DELETE: " +
+             std::string(_rbErr));}
     return false;
   }
 
@@ -4737,9 +4764,10 @@ bool Database::deleteUser(int id, const std::string &actor) {
   rc = sqlite3_step(stmt.get());
 
   if (rc != SQLITE_DONE) {
+    {const std::string _rbErr = sqlite3_errmsg(db_);
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Deaktivieren des Benutzers: " +
-             std::string(sqlite3_errmsg(db_)));
+        setError("Fehler beim Deaktivieren des Benutzers: " +
+             std::string(_rbErr));}
     return false;
   }
 
@@ -4811,9 +4839,10 @@ bool Database::createRole(const std::string &name,
   sqlite3_stmt *roleStmtRaw = nullptr;
   rc = sqlite3_prepare_v2(db_, insertRoleSQL, -1, &roleStmtRaw, nullptr);
   if (rc != SQLITE_OK) {
+    {const std::string _rbErr = sqlite3_errmsg(db_);
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Vorbereiten des Rollen-INSERT: " +
-             std::string(sqlite3_errmsg(db_)));
+        setError("Fehler beim Vorbereiten des Rollen-INSERT: " +
+             std::string(_rbErr));}
     return false;
   }
   auto roleStmt = makeStatement(roleStmtRaw);
@@ -4823,9 +4852,10 @@ bool Database::createRole(const std::string &name,
 
   rc = sqlite3_step(roleStmt.get());
   if (rc != SQLITE_DONE) {
+    {const std::string _rbErr = sqlite3_errmsg(db_);
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Einfügen der Rolle: " +
-             std::string(sqlite3_errmsg(db_)));
+        setError("Fehler beim Einfügen der Rolle: " +
+             std::string(_rbErr));}
     return false;
   }
 
@@ -4836,9 +4866,10 @@ bool Database::createRole(const std::string &name,
   sqlite3_stmt *permStmtRaw = nullptr;
   rc = sqlite3_prepare_v2(db_, insertPermSQL, -1, &permStmtRaw, nullptr);
   if (rc != SQLITE_OK) {
+    {const std::string _rbErr = sqlite3_errmsg(db_);
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Vorbereiten des Berechtigungs-INSERT: " +
-             std::string(sqlite3_errmsg(db_)));
+        setError("Fehler beim Vorbereiten des Berechtigungs-INSERT: " +
+             std::string(_rbErr));}
     return false;
   }
   auto permStmt = makeStatement(permStmtRaw);
@@ -4854,9 +4885,10 @@ bool Database::createRole(const std::string &name,
 
     rc = sqlite3_step(permStmt.get());
     if (rc != SQLITE_DONE) {
+      {const std::string _rbErr = sqlite3_errmsg(db_);
       sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-      setError("Fehler beim Einfügen der Berechtigung: " +
-               std::string(sqlite3_errmsg(db_)));
+            setError("Fehler beim Einfügen der Berechtigung: " +
+               std::string(_rbErr));}
       return false;
     }
   }
@@ -4939,18 +4971,20 @@ bool Database::updateRole(const std::string &name,
   sqlite3_stmt *deleteStmtRaw = nullptr;
   rc = sqlite3_prepare_v2(db_, deletePermSQL, -1, &deleteStmtRaw, nullptr);
   if (rc != SQLITE_OK) {
+    {const std::string _rbErr = sqlite3_errmsg(db_);
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Vorbereiten des DELETE: " +
-             std::string(sqlite3_errmsg(db_)));
+        setError("Fehler beim Vorbereiten des DELETE: " +
+             std::string(_rbErr));}
     return false;
   }
   auto deleteStmt = makeStatement(deleteStmtRaw);
   sqlite3_bind_text(deleteStmt.get(), 1, name.c_str(), -1, SQLITE_TRANSIENT);
   rc = sqlite3_step(deleteStmt.get());
   if (rc != SQLITE_DONE) {
+    {const std::string _rbErr = sqlite3_errmsg(db_);
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Löschen der Berechtigungen: " +
-             std::string(sqlite3_errmsg(db_)));
+        setError("Fehler beim Löschen der Berechtigungen: " +
+             std::string(_rbErr));}
     return false;
   }
 
@@ -4961,9 +4995,10 @@ bool Database::updateRole(const std::string &name,
   sqlite3_stmt *permStmtRaw = nullptr;
   rc = sqlite3_prepare_v2(db_, insertPermSQL, -1, &permStmtRaw, nullptr);
   if (rc != SQLITE_OK) {
+    {const std::string _rbErr = sqlite3_errmsg(db_);
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Vorbereiten des Berechtigungs-INSERT: " +
-             std::string(sqlite3_errmsg(db_)));
+        setError("Fehler beim Vorbereiten des Berechtigungs-INSERT: " +
+             std::string(_rbErr));}
     return false;
   }
   auto permStmt = makeStatement(permStmtRaw);
@@ -4979,9 +5014,10 @@ bool Database::updateRole(const std::string &name,
 
     rc = sqlite3_step(permStmt.get());
     if (rc != SQLITE_DONE) {
+      {const std::string _rbErr = sqlite3_errmsg(db_);
       sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-      setError("Fehler beim Einfügen der Berechtigung: " +
-               std::string(sqlite3_errmsg(db_)));
+            setError("Fehler beim Einfügen der Berechtigung: " +
+               std::string(_rbErr));}
       return false;
     }
   }
@@ -5150,8 +5186,9 @@ bool Database::assignUserRole(int userId, const std::string &roleName,
     sqlite3_stmt *rawCount = nullptr;
     const std::string adminRoleStr = core::User::roleToString(core::User::Role::ADMIN);
     if (sqlite3_prepare_v2(db_, countSQL, -1, &rawCount, nullptr) != SQLITE_OK) {
+      {const std::string _rbErr = sqlite3_errmsg(db_);
       sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-      setError("Fehler beim Prüfen der Admin-Anzahl: " + std::string(sqlite3_errmsg(db_)));
+            setError("Fehler beim Prüfen der Admin-Anzahl: " + std::string(_rbErr));}
       return false;
     }
     {
@@ -5175,9 +5212,10 @@ bool Database::assignUserRole(int userId, const std::string &roleName,
   sqlite3_stmt *updateStmtRaw = nullptr;
   rc = sqlite3_prepare_v2(db_, updateSQL, -1, &updateStmtRaw, nullptr);
   if (rc != SQLITE_OK) {
+    {const std::string _rbErr = sqlite3_errmsg(db_);
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Vorbereiten des UPDATE: " +
-             std::string(sqlite3_errmsg(db_)));
+        setError("Fehler beim Vorbereiten des UPDATE: " +
+             std::string(_rbErr));}
     return false;
   }
   auto updateStmt = makeStatement(updateStmtRaw);
@@ -5188,9 +5226,10 @@ bool Database::assignUserRole(int userId, const std::string &roleName,
 
   rc = sqlite3_step(updateStmt.get());
   if (rc != SQLITE_DONE) {
+    {const std::string _rbErr = sqlite3_errmsg(db_);
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Zuweisen der Rolle: " +
-             std::string(sqlite3_errmsg(db_)));
+        setError("Fehler beim Zuweisen der Rolle: " +
+             std::string(_rbErr));}
     return false;
   }
 
@@ -5791,9 +5830,10 @@ bool Database::endSession(int userId, const std::string &username,
   sqlite3_stmt *rawStmt = nullptr;
   rc = sqlite3_prepare_v2(db_, updateSQL, -1, &rawStmt, nullptr);
   if (rc != SQLITE_OK) {
+    {const std::string _rbErr = sqlite3_errmsg(db_);
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Vorbereiten des Session-UPDATE: " +
-             std::string(sqlite3_errmsg(db_)));
+        setError("Fehler beim Vorbereiten des Session-UPDATE: " +
+             std::string(_rbErr));}
     return false;
   }
 
@@ -5803,9 +5843,10 @@ bool Database::endSession(int userId, const std::string &username,
 
   rc = sqlite3_step(stmt.get());
   if (rc != SQLITE_DONE) {
+    {const std::string _rbErr = sqlite3_errmsg(db_);
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Beenden der Sitzung: " +
-             std::string(sqlite3_errmsg(db_)));
+        setError("Fehler beim Beenden der Sitzung: " +
+             std::string(_rbErr));}
     return false;
   }
 
@@ -5876,9 +5917,10 @@ bool Database::startSession(int userId, const std::string &username,
   sqlite3_stmt *rawStmt = nullptr;
   rc = sqlite3_prepare_v2(db_, insertSQL, -1, &rawStmt, nullptr);
   if (rc != SQLITE_OK) {
+    {const std::string _rbErr = sqlite3_errmsg(db_);
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Vorbereiten des Session-INSERT: " +
-             std::string(sqlite3_errmsg(db_)));
+        setError("Fehler beim Vorbereiten des Session-INSERT: " +
+             std::string(_rbErr));}
     return false;
   }
 
@@ -5891,9 +5933,10 @@ bool Database::startSession(int userId, const std::string &username,
 
   rc = sqlite3_step(stmt.get());
   if (rc != SQLITE_DONE) {
+    {const std::string _rbErr = sqlite3_errmsg(db_);
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Starten der Sitzung: " +
-             std::string(sqlite3_errmsg(db_)));
+        setError("Fehler beim Starten der Sitzung: " +
+             std::string(_rbErr));}
     return false;
   }
 

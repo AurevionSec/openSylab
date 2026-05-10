@@ -1681,8 +1681,11 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       return ApiResponse{204, "", "application/json"};
     }
 
-    return makeError(404, "not_found", "Endpoint not found",
-                     "Check the requested path.");
+    // Don't return 404 here for /api/v1/users/ — that handler comes after this block
+    if (path.rfind("/api/v1/users/", 0) != 0) {
+      return makeError(404, "not_found", "Endpoint not found",
+                       "Check the requested path.");
+    }
   }
 
   // Allow user management endpoints (POST/PUT/DELETE /api/v1/users/...) to proceed
