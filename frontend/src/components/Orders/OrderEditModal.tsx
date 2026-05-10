@@ -148,14 +148,15 @@ export const OrderEditModal = ({ isOpen, orderId, onClose, onSuccess }: OrderEdi
                   autoFocus
                 />
 
-                <Input
-                  type="text"
-                  label="Sample ID *"
-                  placeholder="e.g., S2024-001"
-                  value={formData.sample_id}
-                  onChange={(e) => handleChange('sample_id', e.target.value)}
-                  required
-                />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Sample ID
+                  </label>
+                  <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded text-sm font-mono text-gray-700">
+                    {formData.sample_id || '—'}
+                  </div>
+                  <p className="mt-1 text-xs text-gray-400">Sample cannot be changed after order creation.</p>
+                </div>
               </div>
 
               <Input

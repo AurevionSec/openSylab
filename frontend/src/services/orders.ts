@@ -50,7 +50,7 @@ const transformOrder = (backendOrder: any): Order => {
 };
 
 export const getOrders = async (filters?: OrderFilter): Promise<OrderListResponse> => {
-  const response = await api.get<{ data: any[] }>('/orders', {
+  const response = await api.get<{ data: any[]; total: number }>('/orders', {
     params: filters,
   });
 
@@ -59,7 +59,7 @@ export const getOrders = async (filters?: OrderFilter): Promise<OrderListRespons
 
   return {
     orders,
-    total: orders.length,
+    total: response.data.total ?? orders.length,
     limit: filters?.limit || orders.length,
     offset: filters?.offset || 0,
   };

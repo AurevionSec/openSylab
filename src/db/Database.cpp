@@ -1828,6 +1828,44 @@ Database::getOrdersByFilter(const OrderFilter &filter) {
   return orders;
 }
 
+int Database::getOrdersCount(const OrderFilter &filter) {
+  clearError();
+  if (!isOpen_) {
+    setError("Datenbank ist nicht geöffnet");
+    return -1;
+  }
+
+  std::ostringstream sql;
+  sql << "SELECT COUNT(*) FROM orders WHERE 1=1";
+  if (!filter.status.empty())   sql << " AND status = ?";
+  if (!filter.sampleId.empty()) sql << " AND sample_id = ?";
+  if (!filter.priority.empty()) sql << " AND priority = ?";
+  sql << ";";
+
+  sqlite3_stmt *rawStmt = nullptr;
+  int rc = sqlite3_prepare_v2(db_, sql.str().c_str(), -1, &rawStmt, nullptr);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Zaehlen der Auftraege: " + std::string(sqlite3_errmsg(db_)));
+    return -1;
+  }
+  auto stmt = makeStatement(rawStmt);
+
+  int idx = 1;
+  if (!filter.status.empty())
+    sqlite3_bind_text(stmt.get(), idx++, filter.status.c_str(), -1, SQLITE_TRANSIENT);
+  if (!filter.sampleId.empty())
+    sqlite3_bind_text(stmt.get(), idx++, filter.sampleId.c_str(), -1, SQLITE_TRANSIENT);
+  if (!filter.priority.empty())
+    sqlite3_bind_text(stmt.get(), idx++, filter.priority.c_str(), -1, SQLITE_TRANSIENT);
+
+  rc = sqlite3_step(stmt.get());
+  if (rc != SQLITE_ROW) {
+    setError("Fehler beim Zaehlen der Auftraege: " + std::string(sqlite3_errmsg(db_)));
+    return -1;
+  }
+  return sqlite3_column_int(stmt.get(), 0);
+}
+
 bool Database::updateOrder(const core::Order &order, const std::string &actor) {
   clearError();
 
@@ -2481,6 +2519,39 @@ Database::getTestResultsByOrderId(int orderId, std::optional<int> limit,
   }
 
   return results;
+}
+
+int Database::getTestResultsCount(std::optional<int> orderIdFilter) {
+  clearError();
+  if (!isOpen_) {
+    setError("Datenbank ist nicht geöffnet");
+    return -1;
+  }
+
+  std::string sql = "SELECT COUNT(*) FROM test_results";
+  if (orderIdFilter.has_value()) {
+    sql += " WHERE order_id = ?";
+  }
+  sql += ";";
+
+  sqlite3_stmt *rawStmt = nullptr;
+  int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &rawStmt, nullptr);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Zaehlen der Ergebnisse: " + std::string(sqlite3_errmsg(db_)));
+    return -1;
+  }
+  auto stmt = makeStatement(rawStmt);
+
+  if (orderIdFilter.has_value()) {
+    sqlite3_bind_int(stmt.get(), 1, orderIdFilter.value());
+  }
+
+  rc = sqlite3_step(stmt.get());
+  if (rc != SQLITE_ROW) {
+    setError("Fehler beim Zaehlen der Ergebnisse: " + std::string(sqlite3_errmsg(db_)));
+    return -1;
+  }
+  return sqlite3_column_int(stmt.get(), 0);
 }
 
 std::vector<std::unique_ptr<core::TestResult>>
