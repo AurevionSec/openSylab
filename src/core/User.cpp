@@ -229,10 +229,12 @@ std::string User::roleToString(Role role) {
 
 User::Role User::stringToRole(const std::string &str) {
   static const std::unordered_map<std::string, Role> roleMap = {
-      {"Administrator", Role::ADMIN}, {"ADMIN", Role::ADMIN},
-      {"Admin", Role::ADMIN},         {"Operator", Role::OPERATOR},
-      {"OPERATOR", Role::OPERATOR},   {"Betrachter", Role::VIEWER},
-      {"VIEWER", Role::VIEWER},       {"Viewer", Role::VIEWER},
+      {"Administrator", Role::ADMIN},        {"ADMIN", Role::ADMIN},
+      {"Admin", Role::ADMIN},                {"Operator", Role::OPERATOR},
+      {"OPERATOR", Role::OPERATOR},          {"Betrachter", Role::VIEWER},
+      {"VIEWER", Role::VIEWER},              {"Viewer", Role::VIEWER},
+      {"Benutzerdefiniert", Role::CUSTOM},   {"CUSTOM", Role::CUSTOM},
+      {"Custom", Role::CUSTOM},
   };
 
   auto it = roleMap.find(str);
