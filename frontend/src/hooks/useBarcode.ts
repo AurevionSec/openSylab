@@ -54,10 +54,14 @@ export function useBarcode({ onDetected }: UseBarcodeOptions): UseBarcodeReturn 
       });
       streamRef.current = stream;
 
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
+      if (!videoRef.current) {
+        stream.getTracks().forEach(t => t.stop());
+        streamRef.current = null;
+        setIsScanning(false);
+        return;
       }
+      videoRef.current.srcObject = stream;
+      await videoRef.current.play();
 
       if (!detectorRef.current) {
         detectorRef.current = new BarcodeDetector({ formats: ['code_128', 'qr_code', 'ean_13', 'code_39'] });
