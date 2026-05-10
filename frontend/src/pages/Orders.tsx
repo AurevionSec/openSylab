@@ -74,6 +74,7 @@ export const Orders = () => {
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <h2 className="text-3xl font-bold text-gray-900">Orders</h2>
+          {canWrite && (
           <Button onClick={() => setIsCreateModalOpen(true)}>
             <span className="flex items-center gap-2">
               <svg
@@ -90,6 +91,7 @@ export const Orders = () => {
               Create Order
             </span>
           </Button>
+          )}
         </div>
 
         <Card>

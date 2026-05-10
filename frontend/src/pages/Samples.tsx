@@ -80,6 +80,7 @@ export const Samples = () => {
             <h2 className="text-3xl font-bold text-gray-900">Samples</h2>
             <p className="text-gray-600 mt-1">Manage and view all laboratory samples</p>
           </div>
+          {canWrite && (
           <Button
             variant="primary"
             onClick={() => setIsCreateModalOpen(true)}
@@ -99,6 +100,7 @@ export const Samples = () => {
               Create Sample
             </span>
           </Button>
+          )}
         </div>
 
         <Card>

@@ -32,7 +32,12 @@ export const OrderCreateModal = ({ isOpen, onClose, onSuccess }: OrderCreateModa
   const [sampleSearch, setSampleSearch] = useState('');
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      setFormData({ order_id: '', sample_id: '', test_type: '', status: 'REQUESTED', priority: 'NORMAL', requested_by: '', notes: '' });
+      setSampleSearch('');
+      setError('');
+      return;
+    }
     setSamplesError('');
     setSamplesLoading(true);
     getSamples({ limit: 200 })
