@@ -578,3 +578,11 @@
 **Status:** v0.6.0 + Security Fixes → Ready for v0.7.0
 **Security:** ✅ Production-ready cryptography implemented
 **Next Milestone:** Complete CRUD + Frontend enhancements
+
+---
+
+### Pre-existing: transformSample maps updated_at to registration_date [Compliance]
+
+- [ ] Check backend `sampleToJson()` in `src/api/ApiServer.cpp` — does it send an `updated_at` or `update_date` field?
+- [ ] If yes: fix `transformSample` in `frontend/src/services/samples.ts` to use `backendSample.updated_date ?? backendSample.registration_date`
+- [ ] ISO 15189 compliance: displaying stale modification timestamps on validated samples is a compliance gap
