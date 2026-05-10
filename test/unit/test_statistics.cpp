@@ -338,11 +338,11 @@ bool test_statistics_ExportOrderConsistency() {
   ASSERT_TRUE(resultsIndex > ordersIndex);
 
   const std::vector<std::string> sampleStatuses = {
-      "samples,Erfasst,",
-      "samples,In Analyse,",
-      "samples,Analysiert,",
-      "samples,Validiert,",
-      "samples,Archiviert,"};
+      "samples,REGISTERED,",
+      "samples,IN_ANALYSIS,",
+      "samples,ANALYZED,",
+      "samples,VALIDATED,",
+      "samples,ARCHIVED,"};
 
   int lastIndex = samplesIndex;
   for (const auto &statusPrefix : sampleStatuses) {

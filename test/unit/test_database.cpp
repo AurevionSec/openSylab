@@ -6,12 +6,15 @@
 #include "db/Database.h"
 #include "test_macros.h"
 #include <algorithm>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
 #include <fstream>
 #include <sstream>
 #include <sqlite3.h>
+#include <openssl/hmac.h>
+#include <openssl/evp.h>
 
 using namespace opensylab::db;
 using namespace opensylab::core;
@@ -26,14 +29,19 @@ std::string uniqueDbPath() {
 } // namespace
 
 int computeMfaCode(const std::string &secret, std::time_t now) {
-  const long step = static_cast<long>(now / 30);
-  std::string material = secret + ":" + std::to_string(step);
-
-  unsigned long hash = 5381;
-  for (unsigned char c : material) {
-    hash = ((hash << 5) + hash) ^ c;
-  }
-  return static_cast<int>(hash % 1000000UL);
+  if (secret.empty()) return -1;
+  uint64_t timeStep = static_cast<uint64_t>(now) / 30;
+  unsigned char timeBytes[8];
+  uint64_t ts = timeStep;
+  for (int i = 7; i >= 0; i--) { timeBytes[i] = ts & 0xFF; ts >>= 8; }
+  unsigned char hmac[20];
+  unsigned int hmacLen = 20;
+  HMAC(EVP_sha1(), secret.c_str(), static_cast<int>(secret.length()),
+       timeBytes, sizeof(timeBytes), hmac, &hmacLen);
+  int offset = hmac[19] & 0x0F;
+  uint32_t trunc = ((hmac[offset] & 0x7F) << 24) | ((hmac[offset+1] & 0xFF) << 16)
+                 | ((hmac[offset+2] & 0xFF) << 8) | (hmac[offset+3] & 0xFF);
+  return static_cast<int>(trunc % 1000000U);
 }
 
 const AuditEntry *findAuditEntry(
@@ -60,7 +68,6 @@ const AuditEntry *findAuditEntry(
   }
   return nullptr;
 }
-} // namespace
 
 bool test_database_OpenAndClose() {
   std::string dbPath = uniqueDbPath();
@@ -298,8 +305,8 @@ bool test_database_LogSampleStatusUpdate() {
                      AuditEntry::EntityType::SAMPLE, "AUDIT001", "tester");
   ASSERT_NOT_NULL(entry);
   ASSERT_NE(entry->getDetails().find("Status"), std::string::npos);
-  ASSERT_NE(entry->getDetails().find("Erfasst"), std::string::npos);
-  ASSERT_NE(entry->getDetails().find("Validiert"), std::string::npos);
+  ASSERT_NE(entry->getDetails().find("REGISTERED"), std::string::npos);
+  ASSERT_NE(entry->getDetails().find("VALIDATED"), std::string::npos);
 
   Database::SampleFilter statusFilter;
   statusFilter.status = Sample::statusToString(Sample::Status::VALIDATED);
@@ -366,16 +373,17 @@ bool test_database_DeleteSample() {
   // Probe löschen
   ASSERT_TRUE(db.deleteSample(sampleId, "tester"));
 
-  // Prüfen dass Probe nicht mehr existiert
+  // Soft-delete: sample still exists with ARCHIVED status
   auto deleted = db.getSampleByBarcode("TEST004");
-  ASSERT_NULL(deleted);
+  ASSERT_NOT_NULL(deleted);
+  ASSERT_EQ(deleted->getStatus(), Sample::Status::ARCHIVED);
 
   auto entries =
       db.getAuditLogByEntity(AuditEntry::EntityType::SAMPLE, "TEST004");
   ASSERT_FALSE(db.hasError());
   ASSERT_FALSE(entries.empty());
   const AuditEntry *entry =
-      findAuditEntry(entries, AuditEntry::ActionType::DELETE,
+      findAuditEntry(entries, AuditEntry::ActionType::UPDATE,
                      AuditEntry::EntityType::SAMPLE, "TEST004", "tester");
   ASSERT_NOT_NULL(entry);
   ASSERT_NE(entry->getDetails().find("Proben-ID"), std::string::npos);
@@ -405,7 +413,7 @@ bool test_database_DeleteOrder_LogsAudit() {
       db.getAuditLogByEntity(AuditEntry::EntityType::ORDER, "DEL_ORDER_1");
   ASSERT_FALSE(entries.empty());
   const AuditEntry *entry =
-      findAuditEntry(entries, AuditEntry::ActionType::DELETE,
+      findAuditEntry(entries, AuditEntry::ActionType::UPDATE,
                      AuditEntry::EntityType::ORDER, "DEL_ORDER_1", "tester");
   ASSERT_NOT_NULL(entry);
   ASSERT_NE(entry->getDetails().find("Auftrags-ID"), std::string::npos);
@@ -461,7 +469,7 @@ bool test_database_DeleteTestResult_LogsAudit() {
       db.getAuditLogByEntity(AuditEntry::EntityType::RESULT, "DEL_RES_1");
   ASSERT_FALSE(entries.empty());
   const AuditEntry *entry =
-      findAuditEntry(entries, AuditEntry::ActionType::DELETE,
+      findAuditEntry(entries, AuditEntry::ActionType::UPDATE,
                      AuditEntry::EntityType::RESULT, "DEL_RES_1", "tester");
   ASSERT_NOT_NULL(entry);
   ASSERT_NE(entry->getDetails().find("Ergebnis-ID"), std::string::npos);
@@ -509,9 +517,16 @@ bool test_database_AuditLogsSampleCrud() {
   auto deletedEntries =
       db.getAuditLogByEntity(AuditEntry::EntityType::SAMPLE, "AUDIT_CRUD");
   ASSERT_FALSE(deletedEntries.empty());
-  const AuditEntry *deletedEntry =
-      findAuditEntry(deletedEntries, AuditEntry::ActionType::DELETE,
-                     AuditEntry::EntityType::SAMPLE, "AUDIT_CRUD", "tester");
+  // Find the UPDATE entry that contains "Proben-ID" (the soft-delete audit entry)
+  const AuditEntry *deletedEntry = nullptr;
+  for (const auto &e : deletedEntries) {
+    if (e && e->getAction() == AuditEntry::ActionType::UPDATE
+          && e->getEntity() == AuditEntry::EntityType::SAMPLE
+          && e->getDetails().find("Proben-ID") != std::string::npos) {
+      deletedEntry = e.get();
+      break;
+    }
+  }
   ASSERT_NOT_NULL(deletedEntry);
   ASSERT_NE(deletedEntry->getDetails().find("Proben-ID"), std::string::npos);
 
@@ -818,7 +833,7 @@ bool test_database_ValidateResultLogsAudit() {
       findAuditEntry(entries, AuditEntry::ActionType::VALIDATE,
                      AuditEntry::EntityType::RESULT, "RES_AUDIT_1", "tester");
   ASSERT_NOT_NULL(entry);
-  ASSERT_EQ(entry->getDetails(), "Status: Eingegeben -> Validiert");
+  ASSERT_EQ(entry->getDetails(), "Status: ENTERED -> VALIDATED");
 
   db.close();
   std::remove(dbPath.c_str());

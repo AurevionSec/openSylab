@@ -1729,6 +1729,10 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
     }
 
     int total = database_->getSamplesCount(filter);
+    if (database_->hasError()) {
+      return makeError(500, "internal_error", database_->getLastError(),
+                       "Check server logs for details.");
+    }
     if (total < 0) {
         total = static_cast<int>(samples.size());
     }
@@ -1869,6 +1873,10 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       out << orderToJson(*orders[i]);
     }
     int ordersTotal = database_->getOrdersCount(filter);
+    if (database_->hasError()) {
+      return makeError(500, "internal_error", database_->getLastError(),
+                       "Check server logs for details.");
+    }
     if (ordersTotal < 0) ordersTotal = static_cast<int>(orders.size());
     out << "],\"total\":" << ordersTotal << "}";
 

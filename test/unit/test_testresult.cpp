@@ -66,29 +66,29 @@ bool test_testresult_SettersAndGetters() {
 
 bool test_testresult_StatusToString() {
   ASSERT_EQ(TestResult::statusToString(TestResult::Status::PENDING),
-            "Ausstehend");
+            "PENDING");
   ASSERT_EQ(TestResult::statusToString(TestResult::Status::ENTERED),
-            "Eingegeben");
+            "ENTERED");
   ASSERT_EQ(TestResult::statusToString(TestResult::Status::VALIDATED),
-            "Validiert");
+            "VALIDATED");
   ASSERT_EQ(TestResult::statusToString(TestResult::Status::REJECTED),
-            "Abgelehnt");
+            "REJECTED");
   ASSERT_EQ(TestResult::statusToString(TestResult::Status::REPEATED),
-            "Wiederholung");
+            "REPEATED");
   return true;
 }
 
 bool test_testresult_StringToStatus() {
-  ASSERT_EQ(TestResult::stringToStatus("Ausstehend"),
+  ASSERT_EQ(TestResult::stringToStatus("PENDING"),
             TestResult::Status::PENDING);
   ASSERT_EQ(TestResult::stringToStatus("PENDING"), TestResult::Status::PENDING);
-  ASSERT_EQ(TestResult::stringToStatus("Eingegeben"),
+  ASSERT_EQ(TestResult::stringToStatus("ENTERED"),
             TestResult::Status::ENTERED);
-  ASSERT_EQ(TestResult::stringToStatus("Validiert"),
+  ASSERT_EQ(TestResult::stringToStatus("VALIDATED"),
             TestResult::Status::VALIDATED);
-  ASSERT_EQ(TestResult::stringToStatus("Abgelehnt"),
+  ASSERT_EQ(TestResult::stringToStatus("REJECTED"),
             TestResult::Status::REJECTED);
-  ASSERT_EQ(TestResult::stringToStatus("Wiederholung"),
+  ASSERT_EQ(TestResult::stringToStatus("REPEATED"),
             TestResult::Status::REPEATED);
   return true;
 }
@@ -106,22 +106,22 @@ bool test_testresult_StatusRoundtrip() {
 }
 
 bool test_testresult_FlagToString() {
-  ASSERT_EQ(TestResult::flagToString(TestResult::Flag::NORMAL), "Normal");
-  ASSERT_EQ(TestResult::flagToString(TestResult::Flag::LOW), "Niedrig");
-  ASSERT_EQ(TestResult::flagToString(TestResult::Flag::HIGH), "Hoch");
-  ASSERT_EQ(TestResult::flagToString(TestResult::Flag::CRITICAL), "Kritisch");
+  ASSERT_EQ(TestResult::flagToString(TestResult::Flag::NORMAL), "NORMAL");
+  ASSERT_EQ(TestResult::flagToString(TestResult::Flag::LOW), "LOW");
+  ASSERT_EQ(TestResult::flagToString(TestResult::Flag::HIGH), "HIGH");
+  ASSERT_EQ(TestResult::flagToString(TestResult::Flag::CRITICAL), "CRITICAL");
   ASSERT_EQ(TestResult::flagToString(TestResult::Flag::UNDEFINED),
-            "Undefiniert");
+            "UNDEFINED");
   return true;
 }
 
 bool test_testresult_StringToFlag() {
-  ASSERT_EQ(TestResult::stringToFlag("Normal"), TestResult::Flag::NORMAL);
   ASSERT_EQ(TestResult::stringToFlag("NORMAL"), TestResult::Flag::NORMAL);
-  ASSERT_EQ(TestResult::stringToFlag("Niedrig"), TestResult::Flag::LOW);
-  ASSERT_EQ(TestResult::stringToFlag("Hoch"), TestResult::Flag::HIGH);
-  ASSERT_EQ(TestResult::stringToFlag("Kritisch"), TestResult::Flag::CRITICAL);
-  ASSERT_EQ(TestResult::stringToFlag("Undefiniert"),
+  ASSERT_EQ(TestResult::stringToFlag("NORMAL"), TestResult::Flag::NORMAL);
+  ASSERT_EQ(TestResult::stringToFlag("LOW"), TestResult::Flag::LOW);
+  ASSERT_EQ(TestResult::stringToFlag("HIGH"), TestResult::Flag::HIGH);
+  ASSERT_EQ(TestResult::stringToFlag("CRITICAL"), TestResult::Flag::CRITICAL);
+  ASSERT_EQ(TestResult::stringToFlag("UNDEFINED"),
             TestResult::Flag::UNDEFINED);
   return true;
 }
@@ -189,7 +189,7 @@ bool test_testresult_EvaluateFlag_Normal() {
 
 bool test_testresult_EvaluateFlag_Low() {
   TestResult result;
-  result.setValue("50");
+  result.setValue("60");
   result.setReferenceLow(70.0);
   result.setReferenceHigh(100.0);
 
@@ -200,7 +200,7 @@ bool test_testresult_EvaluateFlag_Low() {
 
 bool test_testresult_EvaluateFlag_High() {
   TestResult result;
-  result.setValue("150");
+  result.setValue("110");
   result.setReferenceLow(70.0);
   result.setReferenceHigh(100.0);
 

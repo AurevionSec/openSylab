@@ -251,7 +251,7 @@ bool test_csvresultimport_FlagCalculation_Low() {
   auto db = createTestDatabase();
 
   std::string csvContent = "result_id,order_id,test_parameter,value,unit,ref_low,ref_high\n"
-                           "R001,1,Glucose,50,mg/dL,70,100\n"; // Unter Referenz
+                           "R001,1,Glucose,60,mg/dL,70,100\n"; // Unter Referenz (LOW zone: 55-70)
 
   std::string filename = createTempCsv(csvContent);
 
@@ -269,7 +269,7 @@ bool test_csvresultimport_FlagCalculation_High() {
   auto db = createTestDatabase();
 
   std::string csvContent = "result_id,order_id,test_parameter,value,unit,ref_low,ref_high\n"
-                           "R001,1,Glucose,150,mg/dL,70,100\n"; // Über Referenz
+                           "R001,1,Glucose,110,mg/dL,70,100\n"; // Über Referenz (HIGH zone: 100-115)
 
   std::string filename = createTempCsv(csvContent);
 

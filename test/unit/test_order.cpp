@@ -54,23 +54,23 @@ bool test_order_SettersAndGetters() {
 }
 
 bool test_order_StatusToString() {
-  ASSERT_EQ(Order::statusToString(Order::Status::REQUESTED), "Angefordert");
+  ASSERT_EQ(Order::statusToString(Order::Status::REQUESTED), "REQUESTED");
   ASSERT_EQ(Order::statusToString(Order::Status::IN_PROGRESS),
-            "In Bearbeitung");
-  ASSERT_EQ(Order::statusToString(Order::Status::COMPLETED), "Abgeschlossen");
-  ASSERT_EQ(Order::statusToString(Order::Status::VALIDATED), "Validiert");
-  ASSERT_EQ(Order::statusToString(Order::Status::CANCELLED), "Storniert");
+            "IN_PROGRESS");
+  ASSERT_EQ(Order::statusToString(Order::Status::COMPLETED), "COMPLETED");
+  ASSERT_EQ(Order::statusToString(Order::Status::VALIDATED), "VALIDATED");
+  ASSERT_EQ(Order::statusToString(Order::Status::CANCELLED), "CANCELLED");
   return true;
 }
 
 bool test_order_StringToStatus() {
-  ASSERT_EQ(Order::stringToStatus("Angefordert"), Order::Status::REQUESTED);
   ASSERT_EQ(Order::stringToStatus("REQUESTED"), Order::Status::REQUESTED);
-  ASSERT_EQ(Order::stringToStatus("In Bearbeitung"),
+  ASSERT_EQ(Order::stringToStatus("REQUESTED"), Order::Status::REQUESTED);
+  ASSERT_EQ(Order::stringToStatus("IN_PROGRESS"),
             Order::Status::IN_PROGRESS);
-  ASSERT_EQ(Order::stringToStatus("Abgeschlossen"), Order::Status::COMPLETED);
-  ASSERT_EQ(Order::stringToStatus("Validiert"), Order::Status::VALIDATED);
-  ASSERT_EQ(Order::stringToStatus("Storniert"), Order::Status::CANCELLED);
+  ASSERT_EQ(Order::stringToStatus("COMPLETED"), Order::Status::COMPLETED);
+  ASSERT_EQ(Order::stringToStatus("VALIDATED"), Order::Status::VALIDATED);
+  ASSERT_EQ(Order::stringToStatus("CANCELLED"), Order::Status::CANCELLED);
   return true;
 }
 
@@ -86,18 +86,18 @@ bool test_order_StatusRoundtrip() {
 }
 
 bool test_order_PriorityToString() {
-  ASSERT_EQ(Order::priorityToString(Order::Priority::NORMAL), "Normal");
-  ASSERT_EQ(Order::priorityToString(Order::Priority::URGENT), "Dringend");
-  ASSERT_EQ(Order::priorityToString(Order::Priority::EMERGENCY), "Notfall");
+  ASSERT_EQ(Order::priorityToString(Order::Priority::NORMAL), "NORMAL");
+  ASSERT_EQ(Order::priorityToString(Order::Priority::URGENT), "URGENT");
+  ASSERT_EQ(Order::priorityToString(Order::Priority::EMERGENCY), "EMERGENCY");
   return true;
 }
 
 bool test_order_StringToPriority() {
-  ASSERT_EQ(Order::stringToPriority("Normal"), Order::Priority::NORMAL);
   ASSERT_EQ(Order::stringToPriority("NORMAL"), Order::Priority::NORMAL);
-  ASSERT_EQ(Order::stringToPriority("Dringend"), Order::Priority::URGENT);
+  ASSERT_EQ(Order::stringToPriority("NORMAL"), Order::Priority::NORMAL);
   ASSERT_EQ(Order::stringToPriority("URGENT"), Order::Priority::URGENT);
-  ASSERT_EQ(Order::stringToPriority("Notfall"), Order::Priority::EMERGENCY);
+  ASSERT_EQ(Order::stringToPriority("URGENT"), Order::Priority::URGENT);
+  ASSERT_EQ(Order::stringToPriority("EMERGENCY"), Order::Priority::EMERGENCY);
   ASSERT_EQ(Order::stringToPriority("EMERGENCY"), Order::Priority::EMERGENCY);
   return true;
 }

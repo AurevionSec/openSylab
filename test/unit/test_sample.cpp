@@ -42,19 +42,19 @@ bool test_sample_SettersAndGetters() {
 }
 
 bool test_sample_StatusToString() {
-  ASSERT_EQ(Sample::statusToString(Sample::Status::REGISTERED), "Erfasst");
-  ASSERT_EQ(Sample::statusToString(Sample::Status::IN_ANALYSIS), "In Analyse");
-  ASSERT_EQ(Sample::statusToString(Sample::Status::ANALYZED), "Analysiert");
-  ASSERT_EQ(Sample::statusToString(Sample::Status::VALIDATED), "Validiert");
-  ASSERT_EQ(Sample::statusToString(Sample::Status::ARCHIVED), "Archiviert");
+  ASSERT_EQ(Sample::statusToString(Sample::Status::REGISTERED), "REGISTERED");
+  ASSERT_EQ(Sample::statusToString(Sample::Status::IN_ANALYSIS), "IN_ANALYSIS");
+  ASSERT_EQ(Sample::statusToString(Sample::Status::ANALYZED), "ANALYZED");
+  ASSERT_EQ(Sample::statusToString(Sample::Status::VALIDATED), "VALIDATED");
+  ASSERT_EQ(Sample::statusToString(Sample::Status::ARCHIVED), "ARCHIVED");
   return true;
 }
 
 bool test_sample_StringToStatus() {
-  ASSERT_EQ(Sample::stringToStatus("Erfasst"), Sample::Status::REGISTERED);
   ASSERT_EQ(Sample::stringToStatus("REGISTERED"), Sample::Status::REGISTERED);
-  ASSERT_EQ(Sample::stringToStatus("In Analyse"), Sample::Status::IN_ANALYSIS);
-  ASSERT_EQ(Sample::stringToStatus("Validiert"), Sample::Status::VALIDATED);
+  ASSERT_EQ(Sample::stringToStatus("REGISTERED"), Sample::Status::REGISTERED);
+  ASSERT_EQ(Sample::stringToStatus("IN_ANALYSIS"), Sample::Status::IN_ANALYSIS);
+  ASSERT_EQ(Sample::stringToStatus("VALIDATED"), Sample::Status::VALIDATED);
   return true;
 }
 

@@ -42,7 +42,7 @@ bool test_api_SerializeSampleJson() {
   const std::string json = ApiRouter::sampleToJson(sample);
   ASSERT_NE(json.find("\"sample_id\":\"S_API_1\""), std::string::npos);
   ASSERT_NE(json.find("\"patient_id\":\"P_API_1\""), std::string::npos);
-  ASSERT_NE(json.find("\"status\":\"Erfasst\""), std::string::npos);
+  ASSERT_NE(json.find("\"status\":\"REGISTERED\""), std::string::npos);
   return true;
 }
 
@@ -55,7 +55,7 @@ bool test_api_SerializeOrderJson() {
   const std::string json = ApiRouter::orderToJson(order);
   ASSERT_NE(json.find("\"order_id\":\"O_API_1\""), std::string::npos);
   ASSERT_NE(json.find("\"sample_id\":\"S_API_1\""), std::string::npos);
-  ASSERT_NE(json.find("\"status\":\"Angefordert\""), std::string::npos);
+  ASSERT_NE(json.find("\"status\":\"REQUESTED\""), std::string::npos);
   return true;
 }
 
@@ -72,7 +72,7 @@ bool test_api_SerializeResultJson() {
   const std::string json = ApiRouter::resultToJson(result);
   ASSERT_NE(json.find("\"result_id\":\"R_API_1\""), std::string::npos);
   ASSERT_NE(json.find("\"order_id\":42"), std::string::npos);
-  ASSERT_NE(json.find("\"status\":\"Validiert\""), std::string::npos);
+  ASSERT_NE(json.find("\"status\":\"VALIDATED\""), std::string::npos);
   return true;
 }
 
@@ -545,7 +545,7 @@ bool test_api_WriteSampleCreateAndUpdate() {
       "Alice\"}";
 
   ApiResponse createRes = router.handleRequest(createReq);
-  ASSERT_EQ(createRes.status, 200);
+  ASSERT_EQ(createRes.status, 201);
   ASSERT_NE(createRes.body.find("\"sample_id\":\"S_API_WRITE\""),
             std::string::npos);
 
@@ -588,7 +588,7 @@ bool test_api_WriteOrderCreateAndUpdate() {
       "PCR\"}";
 
   ApiResponse createRes = router.handleRequest(createReq);
-  ASSERT_EQ(createRes.status, 200);
+  ASSERT_EQ(createRes.status, 201);
   ASSERT_NE(createRes.body.find("\"order_id\":\"O_API_WRITE\""),
             std::string::npos);
 
@@ -624,6 +624,8 @@ bool test_api_WriteResultCreateAndUpdate() {
   ASSERT_TRUE(db->createOrder(order));
   auto createdOrder = db->getOrderByOrderId("O_API_RES");
   ASSERT_TRUE(createdOrder != nullptr);
+  createdOrder->setStatus(Order::Status::IN_PROGRESS);
+  ASSERT_TRUE(db->updateOrder(*createdOrder, "tester"));
 
   ApiRouter router(db);
   ApiRequest createReq;
@@ -637,7 +639,7 @@ bool test_api_WriteResultCreateAndUpdate() {
   createReq.body = payload.str();
 
   ApiResponse createRes = router.handleRequest(createReq);
-  ASSERT_EQ(createRes.status, 200);
+  ASSERT_EQ(createRes.status, 201);
   ASSERT_NE(createRes.body.find("\"result_id\":\"R_API_WRITE\""),
             std::string::npos);
 

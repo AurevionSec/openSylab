@@ -2703,7 +2703,7 @@ bool Database::updateTestResult(const core::TestResult &result,
 
 bool Database::updateTestResultCore(const core::TestResult &result) {
   const std::string computedFlag =
-      core::TestResult::flagToString(result.getFlag());
+      core::TestResult::flagToString(result.evaluateFlag());
   const char *updateSQL = R"(
         UPDATE test_results SET
             result_id = ?,
@@ -5903,13 +5903,16 @@ Database::AuthResult Database::authenticatePrimary(const std::string &username,
           return result;
         }
 
-        if (core::User::hashPassword(password) != storedHash) {
-          const std::string msg = "Ungültiger Benutzername oder Passwort";
-          setError(msg);
-          logUserAction(core::AuditEntry::ActionType::UPDATE, actor, actor,
-                        "Login fehlgeschlagen (LDAP, falsches Passwort)");
-          setError(msg);
-          return result;
+        {
+          core::User tempUser("", storedHash, core::User::Role::OPERATOR);
+          if (!tempUser.verifyPassword(password)) {
+            const std::string msg = "Ungültiger Benutzername oder Passwort";
+            setError(msg);
+            logUserAction(core::AuditEntry::ActionType::UPDATE, actor, actor,
+                          "Login fehlgeschlagen (LDAP, falsches Passwort)");
+            setError(msg);
+            return result;
+          }
         }
 
         // Sicherstellen, dass es einen lokalen Benutzer für Rollen/ACL gibt.
