@@ -847,6 +847,11 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                      "Provide X-API-Key or Authorization: Bearer <token>.");
   }
 
+  // Determine effective role: JWT role or OPERATOR for API-key auth
+  const std::string effectiveRole = jwtPayload.has_value()
+      ? jwtPayload->role
+      : "OPERATOR";
+
   const bool isGet = method == "get";
   const bool isPost = method == "post";
   const bool isPut = method == "put";
@@ -878,6 +883,12 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
     if (!parseJsonObject(body, payload, parseError)) {
       return makeError(400, "validation_error", "Invalid JSON payload",
                        parseError);
+    }
+
+    // RBAC: VIEWER role cannot write lab data
+    if (!isGet && effectiveRole == "VIEWER") {
+      return makeError(403, "forbidden", "Insufficient permissions",
+                       "VIEWER role cannot create, update, or delete records.");
     }
 
     if (path == "/api/v1/samples" && isPost) {
@@ -1300,8 +1311,10 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       if (!database_->updateSample(updated, actor)) {
         return makeDbErrorResponse(database_->getLastError());
       }
+      auto refreshedSample = database_->getSampleByBarcode(updated.getSampleId());
+      const core::Sample &rspSample = refreshedSample ? *refreshedSample : updated;
       return ApiResponse{200,
-                         "{\"data\":" + sampleToJson(updated) + "}",
+                         "{\"data\":" + sampleToJson(rspSample) + "}",
                          "application/json"};
     }
 
@@ -1408,8 +1421,10 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       if (!database_->updateOrder(updated, actor)) {
         return makeDbErrorResponse(database_->getLastError());
       }
+      auto refreshedOrder = database_->getOrderByOrderId(updated.getOrderId());
+      const core::Order &rspOrder = refreshedOrder ? *refreshedOrder : updated;
       return ApiResponse{200,
-                         "{\"data\":" + orderToJson(updated) + "}",
+                         "{\"data\":" + orderToJson(rspOrder) + "}",
                          "application/json"};
     }
 
@@ -1567,8 +1582,10 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       if (!database_->updateTestResult(updated, actor)) {
         return makeDbErrorResponse(database_->getLastError());
       }
+      auto refreshedResult = database_->getTestResultByResultId(updated.getResultId());
+      const core::TestResult &rspResult = refreshedResult ? *refreshedResult : updated;
       return ApiResponse{200,
-                         "{\"data\":" + resultToJson(updated) + "}",
+                         "{\"data\":" + resultToJson(rspResult) + "}",
                          "application/json"};
     }
   }
@@ -1744,14 +1761,12 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
 
     auto samples = database_->getSamplesByFilter(filter);
     if (database_->hasError()) {
-      return makeError(500, "internal_error", database_->getLastError(),
-                       "Check server logs for details.");
+      return makeDbErrorResponse(database_->getLastError());
     }
 
     int total = database_->getSamplesCount(filter);
     if (database_->hasError()) {
-      return makeError(500, "internal_error", database_->getLastError(),
-                       "Check server logs for details.");
+      return makeDbErrorResponse(database_->getLastError());
     }
     if (total < 0) {
         total = static_cast<int>(samples.size());
@@ -1804,8 +1819,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
     }
     auto sample = database_->getSampleByBarcode(sampleId);
     if (database_->hasError()) {
-      return makeError(500, "internal_error", database_->getLastError(),
-                       "Check server logs for details.");
+      return makeDbErrorResponse(database_->getLastError());
     }
     if (!sample) {
       return makeError(404, "not_found", "Sample not found",
@@ -1880,8 +1894,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
 
     auto orders = database_->getOrdersByFilter(filter);
     if (database_->hasError()) {
-      return makeError(500, "internal_error", database_->getLastError(),
-                       "Check server logs for details.");
+      return makeDbErrorResponse(database_->getLastError());
     }
 
     std::ostringstream out;
@@ -1894,8 +1907,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
     }
     int ordersTotal = database_->getOrdersCount(filter);
     if (database_->hasError()) {
-      return makeError(500, "internal_error", database_->getLastError(),
-                       "Check server logs for details.");
+      return makeDbErrorResponse(database_->getLastError());
     }
     if (ordersTotal < 0) ordersTotal = static_cast<int>(orders.size());
     out << "],\"total\":" << ordersTotal << "}";
@@ -1934,8 +1946,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
     }
     auto order = database_->getOrderByOrderId(orderId);
     if (database_->hasError()) {
-      return makeError(500, "internal_error", database_->getLastError(),
-                       "Check server logs for details.");
+      return makeDbErrorResponse(database_->getLastError());
     }
     if (!order) {
       return makeError(404, "not_found", "Order not found",
@@ -2039,8 +2050,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
     }
 
     if (database_->hasError()) {
-      return makeError(500, "internal_error", database_->getLastError(),
-                       "Check server logs for details.");
+      return makeDbErrorResponse(database_->getLastError());
     }
 
     // Total is now accurate: either filtered count (hasMem) or DB count (no filter)
@@ -2048,8 +2058,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
         ? static_cast<int>(results.size())
         : database_->getTestResultsCount(resultsOrderIdFilter);
     if (!hasMemFilter && database_->hasError()) {
-      return makeError(500, "internal_error", database_->getLastError(),
-                       "Check server logs for details.");
+      return makeDbErrorResponse(database_->getLastError());
     }
     // When in-memory filters ran (no DB limit/offset), apply pagination now
     if (hasMemFilter && (limit.has_value() || offset.has_value())) {
@@ -2106,8 +2115,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
     }
     auto result = database_->getTestResultByResultId(resultId);
     if (database_->hasError()) {
-      return makeError(500, "internal_error", database_->getLastError(),
-                       "Check server logs for details.");
+      return makeDbErrorResponse(database_->getLastError());
     }
     if (!result) {
       return makeError(404, "not_found", "Result not found",

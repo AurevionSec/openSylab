@@ -118,10 +118,10 @@ bool JwtAuth::isTokenExpired(const TokenPayload &payload) {
   return nowTime > payload.exp;
 }
 
-int JwtAuth::getSecondsUntilExpiration(const TokenPayload &payload) {
+int64_t JwtAuth::getSecondsUntilExpiration(const TokenPayload &payload) {
   auto now = std::chrono::system_clock::now();
   auto nowTime = std::chrono::system_clock::to_time_t(now);
-  return static_cast<int>(payload.exp - nowTime);
+  return static_cast<int64_t>(payload.exp) - static_cast<int64_t>(nowTime);
 }
 
 } // namespace auth

@@ -45,7 +45,18 @@ export const AuditLog = () => {
 
   const handleApplyFilter = () => {
     cancelledRef.current = false;
-    fetchAuditLog();
+    setLoading(true);
+    setError('');
+    getAuditLog(filter)
+      .then(data => { if (!cancelledRef.current) { setEntries(data); } })
+      .catch(err => {
+        if (cancelledRef.current) return;
+        const msg = (err && typeof err === 'object' && 'response' in err)
+          ? (err as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message
+          : err instanceof Error ? err.message : undefined;
+        setError(msg || 'Failed to load audit log');
+      })
+      .finally(() => { if (!cancelledRef.current) setLoading(false); });
   };
 
   const handleResetFilter = () => {

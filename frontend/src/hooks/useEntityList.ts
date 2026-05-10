@@ -26,35 +26,50 @@ export function useEntityList<T>(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const cancelledRef = useRef(false);
+  const loadFnRef = useRef(fetchFn);
+  loadFnRef.current = fetchFn;
 
-  const load = useCallback(async () => {
+  const triggerRef = useRef(0);
+
+  const refetch = useCallback(() => {
+    triggerRef.current += 1;
+    // Increment trigger to force the useEffect to re-run
+    setLoading(true);
+    let cancelled = false;
+    setError('');
+    loadFnRef.current()
+      .then(result => {
+        if (!cancelled) { setData(result.data); setTotal(result.total); }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          const message = err instanceof Error ? err.message : 'Failed to load data';
+          setError(message);
+        }
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
     setLoading(true);
     setError('');
-    try {
-      const result = await fetchFn();
-      if (!cancelledRef.current) {
-        setData(result.data);
-        setTotal(result.total);
-      }
-    } catch (err: unknown) {
-      if (!cancelledRef.current) {
-        const message = err instanceof Error ? err.message : 'Failed to load data';
-        setError(message);
-      }
-    } finally {
-      if (!cancelledRef.current) setLoading(false);
-    }
+    loadFnRef.current()
+      .then(result => {
+        if (!cancelled) { setData(result.data); setTotal(result.total); }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          const message = err instanceof Error ? err.message : 'Failed to load data';
+          setError(message);
+        }
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
 
-  useEffect(() => {
-    cancelledRef.current = false;
-    load();
-    return () => {
-      cancelledRef.current = true;
-    };
-  }, [load]);
-
-  return { data, total, loading, error, refetch: load };
+  return { data, total, loading, error, refetch };
 }

@@ -74,7 +74,7 @@ public:
    * @param payload Token payload
    * @return Seconds until expiration (negative if expired)
    */
-  [[nodiscard]] static int getSecondsUntilExpiration(
+  [[nodiscard]] static int64_t getSecondsUntilExpiration(
       const TokenPayload &payload);
 
   /**

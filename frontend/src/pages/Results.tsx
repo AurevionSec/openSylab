@@ -205,6 +205,8 @@ export const Results = () => {
                               variant="secondary"
                               size="sm"
                               onClick={() => handleEditClick(result)}
+                              disabled={result.status === 'VALIDATED'}
+                              title={result.status === 'VALIDATED' ? 'Validated results cannot be edited' : undefined}
                             >
                               <span className="flex items-center gap-1">
                                 <svg
