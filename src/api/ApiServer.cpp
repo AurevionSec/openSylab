@@ -872,7 +872,9 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       parseQuery(queryString);
 
   // RBAC: VIEWER role cannot write lab data (applies to POST, PUT, DELETE)
-  if (!isGet && effectiveRole == "VIEWER") {
+  // Exception: allow VIEWER to change their own password via PUT /users/me/password
+  if (!isGet && effectiveRole == "VIEWER" &&
+      !(isPut && path == "/api/v1/users/me/password")) {
     return makeError(403, "forbidden", "Insufficient permissions",
                      "VIEWER role cannot create, update, or delete records.");
   }
@@ -2459,6 +2461,11 @@ after_user_update:
     if (!jwtPayload.has_value() || (jwtPayload->role != "ADMIN" && jwtPayload->role != "Administrator")) {
       return makeError(403, "forbidden", "Admin access required",
                        "Only administrators can delete users.");
+    }
+
+    if (jwtPayload.has_value() && jwtPayload->userId == userId) {
+      return makeError(400, "validation_error", "Cannot delete own account",
+                       "Administrators cannot deactivate their own account.");
     }
 
     auto existing = database_->getUser(userId);
