@@ -55,7 +55,7 @@ export const ResultEditModal = ({ isOpen, onClose, result, onSuccess }: ResultEd
     setLoading(true);
 
     try {
-      const updatedResult = await updateResult(result.id.toString(), formData);
+      const updatedResult = await updateResult(result.result_id, formData);
 
       if (onSuccess) {
         onSuccess(updatedResult);
