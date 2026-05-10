@@ -2934,7 +2934,9 @@ bool Database::exportValidatedResultsToCsv(const std::string &filePath,
   }
 
   int exported = 0;
+  std::vector<std::string> exportedResultIds;
   while ((rc = sqlite3_step(stmt.get())) == SQLITE_ROW) {
+    exportedResultIds.push_back(columnText(stmt.get(), 0));
     output << escapeCsvField(columnText(stmt.get(), 0)) << ","
            << columnText(stmt.get(), 1) << ","
            << escapeCsvField(columnText(stmt.get(), 2)) << ","
@@ -2982,24 +2984,7 @@ bool Database::exportValidatedResultsToCsv(const std::string &filePath,
   const std::string details = "Export: " + maskPathForAudit(filePath) +
                               "; Anzahl: " + std::to_string(exported);
 
-  sqlite3_stmt *auditStmt = nullptr;
-  rc = sqlite3_prepare_v2(db_, selectSql.str().c_str(), -1, &auditStmt, nullptr);
-  if (rc != SQLITE_OK) {
-    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Vorbereiten des SELECT: " +
-             std::string(sqlite3_errmsg(db_)));
-    return false;
-  }
-  auto auditSelect = makeStatement(auditStmt);
-  bindIndex = 1;
-  sqlite3_bind_text(auditSelect.get(), bindIndex++, validatedStatus.c_str(), -1,
-                    SQLITE_TRANSIENT);
-  if (orderId.has_value()) {
-    sqlite3_bind_int(auditSelect.get(), bindIndex++, *orderId);
-  }
-
-  while ((rc = sqlite3_step(auditSelect.get())) == SQLITE_ROW) {
-    const std::string resultId = columnText(auditSelect.get(), 0);
+  for (const auto &resultId : exportedResultIds) {
     core::AuditEntry entry(core::AuditEntry::ActionType::EXPORT,
                            core::AuditEntry::EntityType::RESULT, resultId,
                            actor, details);
@@ -3007,13 +2992,6 @@ bool Database::exportValidatedResultsToCsv(const std::string &filePath,
       sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
       return false;
     }
-  }
-
-  if (rc != SQLITE_DONE) {
-    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-    setError("Fehler beim Abrufen der Ergebnisse: " +
-             std::string(sqlite3_errmsg(db_)));
-    return false;
   }
 
   rc = sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &errMsg);
@@ -4053,7 +4031,7 @@ bool Database::applyAuditRetention(const std::string &actor,
 
   const std::time_t now = std::time(nullptr);
   const std::time_t cutoff =
-      now - static_cast<std::time_t>(retentionDays * 24 * 60 * 60);
+      now - static_cast<std::time_t>(retentionDays) * 24 * 60 * 60;
 
   char *errMsg = nullptr;
   int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,

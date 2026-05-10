@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { FormEvent } from 'react';
 import { Input } from '../common/Input';
 import { Button } from '../common/Button';
@@ -27,15 +27,19 @@ export const OrderEditModal = ({ isOpen, orderId, onClose, onSuccess }: OrderEdi
   const [loadingData, setLoadingData] = useState(false);
   const [error, setError] = useState('');
 
+  const cancelledRef = useRef(false);
+
   // Load order data when modal opens
   useEffect(() => {
-    if (isOpen && orderId) {
-      const loadOrder = async () => {
-        setFormData({ order_id: '', sample_id: '', test_type: '', status: 'REQUESTED', priority: 'NORMAL', requested_by: '', notes: '' });
-        setLoadingData(true);
-        setError('');
-        try {
-          const order = await getOrderById(orderId);
+    if (!isOpen || !orderId) return;
+    cancelledRef.current = false;
+    const loadOrder = async () => {
+      setFormData({ order_id: '', sample_id: '', test_type: '', status: 'REQUESTED', priority: 'NORMAL', requested_by: '', notes: '' });
+      setLoadingData(true);
+      setError('');
+      try {
+        const order = await getOrderById(orderId);
+        if (!cancelledRef.current) {
           setFormData({
             order_id: order.order_id,
             sample_id: order.sample_id,
@@ -45,15 +49,15 @@ export const OrderEditModal = ({ isOpen, orderId, onClose, onSuccess }: OrderEdi
             requested_by: order.requested_by,
             notes: order.notes,
           });
-        } catch (err: unknown) {
-                setError('Failed to load order data. Please try again.');
-        } finally {
-          setLoadingData(false);
         }
-      };
-
-      loadOrder();
-    }
+      } catch (err: unknown) {
+        if (!cancelledRef.current) setError('Failed to load order data. Please try again.');
+      } finally {
+        if (!cancelledRef.current) setLoadingData(false);
+      }
+    };
+    loadOrder();
+    return () => { cancelledRef.current = true; };
   }, [isOpen, orderId]);
 
   const handleSubmit = async (e: FormEvent) => {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { FormEvent } from 'react';
 import { Input } from '../common/Input';
 import { Button } from '../common/Button';
@@ -25,15 +25,19 @@ export const SampleEditModal = ({ isOpen, sampleId, onClose, onSuccess }: Sample
   const [loadingData, setLoadingData] = useState(false);
   const [error, setError] = useState('');
 
+  const cancelledRef = useRef(false);
+
   // Load sample data when modal opens
   useEffect(() => {
-    if (isOpen && sampleId) {
-      const loadSample = async () => {
-        setFormData({ sample_id: '', patient_id: '', patient_name: '', description: '', status: 'REGISTERED' });
-        setLoadingData(true);
-        setError('');
-        try {
-          const sample = await getSampleById(sampleId);
+    if (!isOpen || !sampleId) return;
+    cancelledRef.current = false;
+    const loadSample = async () => {
+      setFormData({ sample_id: '', patient_id: '', patient_name: '', description: '', status: 'REGISTERED' });
+      setLoadingData(true);
+      setError('');
+      try {
+        const sample = await getSampleById(sampleId);
+        if (!cancelledRef.current) {
           setFormData({
             sample_id: sample.sample_id,
             patient_id: sample.patient_id,
@@ -41,15 +45,15 @@ export const SampleEditModal = ({ isOpen, sampleId, onClose, onSuccess }: Sample
             description: sample.description,
             status: sample.status,
           });
-        } catch (err: unknown) {
-                setError('Failed to load sample data. Please try again.');
-        } finally {
-          setLoadingData(false);
         }
-      };
-
-      loadSample();
-    }
+      } catch (err: unknown) {
+        if (!cancelledRef.current) setError('Failed to load sample data. Please try again.');
+      } finally {
+        if (!cancelledRef.current) setLoadingData(false);
+      }
+    };
+    loadSample();
+    return () => { cancelledRef.current = true; };
   }, [isOpen, sampleId]);
 
   const handleSubmit = async (e: FormEvent) => {

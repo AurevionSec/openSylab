@@ -40,7 +40,7 @@ std::string urlDecode(const std::string &value) {
       const std::string hex = value.substr(i + 1, 2);
       char *end = nullptr;
       const long decoded = std::strtol(hex.c_str(), &end, 16);
-      if (end && *end == '\0') {
+      if (end && *end == '\0' && decoded != 0) {
         result.push_back(static_cast<char>(decoded));
         i += 2;
         continue;
@@ -712,9 +712,23 @@ ApiResponse ApiRouter::handleLogin(const ApiRequest &request) {
   const std::string &username = usernameIt->second;
   const std::string &password = passwordIt->second;
 
+  // Extract optional MFA code
+  std::optional<std::string> mfaCode;
+  auto mfaIt = payload.find("mfa_code");
+  if (mfaIt != payload.end() && !mfaIt->second.empty()) {
+    mfaCode = mfaIt->second;
+  }
+
   // Authenticate user via database
-  auto user = database_->authenticateUser(username, password);
+  auto user = database_->authenticateUser(username, password, mfaCode);
   if (!user) {
+    const std::string &dbError = database_->getLastError();
+    // Return 403 with actionable message when MFA is required
+    if (dbError.find("MFA") != std::string::npos) {
+      return makeError(403, "mfa_required",
+                       "MFA code required",
+                       "Provide mfa_code in request body.");
+    }
     // Authentication failed - return 401
     return makeError(401, "authentication_failed", "Invalid credentials",
                      "Username or password is incorrect.");
@@ -1643,11 +1657,11 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                      "Check the requested path.");
   }
 
-  // Allow user management endpoints (POST/PUT /api/v1/users/...) to proceed
+  // Allow user management endpoints (POST/PUT/DELETE /api/v1/users/...) to proceed
   // They are handled later in the routing logic
-  if (!isGet && !(path.rfind("/api/v1/users", 0) == 0 && (isPost || isPut))) {
+  if (!isGet && !(path.rfind("/api/v1/users", 0) == 0 && (isPost || isPut || isDelete))) {
     return makeError(405, "validation_error", "Method not allowed",
-                     "Use POST/PUT for write endpoints.");
+                     "Use POST/PUT/DELETE for write endpoints.");
   }
 
   if (path == "/api/v1/samples") {

@@ -19,8 +19,13 @@ function computeFlag(value: string, refMin: string, refMax: string): TestResult[
   if (isNaN(v)) return 'UNDEFINED';
   const min = parseFloat(refMin);
   const max = parseFloat(refMax);
-  if (!isNaN(min) && v < min) return 'LOW';
-  if (!isNaN(max) && v > max) return 'HIGH';
+  if (isNaN(min) || isNaN(max) || min >= max) return 'UNDEFINED';
+  const margin = (max - min) * 0.5;
+  const criticalLow = min - margin;
+  const criticalHigh = max + margin;
+  if (v < criticalLow || v > criticalHigh) return 'CRITICAL';
+  if (v < min) return 'LOW';
+  if (v > max) return 'HIGH';
   return 'NORMAL';
 }
 

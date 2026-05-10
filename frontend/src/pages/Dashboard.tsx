@@ -52,9 +52,9 @@ export const Dashboard = () => {
           };
         }
 
-        const samplesData = await getSamples({ limit: 1000 });
-        const ordersData = await getOrders({ limit: 1000 });
-        const resultsData = await getResults({ limit: 1000 });
+        const samplesData = await getSamples({ limit: 100 });
+        const ordersData = await getOrders({ limit: 100 });
+        const resultsData = await getResults({ limit: 100 });
 
         if (statsData && statsData.samples.total === 0 && samplesData.samples.length > 0) {
           statsData.samples.total = samplesData.samples.length;

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Layout } from '../components/Layout/Layout';
 import { Card } from '../components/common/Card';
 import { Input } from '../components/common/Input';
@@ -16,24 +16,30 @@ export const AuditLog = () => {
   const [filter, setFilter] = useState<AuditLogFilter>({
     limit: 50,
   });
+  const cancelledRef = useRef(false);
 
   useEffect(() => {
+    cancelledRef.current = false;
     fetchAuditLog();
-  }, []);
+    return () => { cancelledRef.current = true; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchAuditLog = async () => {
     try {
       setLoading(true);
       const data = await getAuditLog(filter);
-      setEntries(data);
+      if (!cancelledRef.current) {
+        setEntries(data);
+        setError('');
+      }
     } catch (err: unknown) {
+      if (cancelledRef.current) return;
       const msg = (err && typeof err === 'object' && 'response' in err)
         ? (err as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message
         : err instanceof Error ? err.message : undefined;
       setError(msg || 'Failed to load audit log');
-      console.error(err);
     } finally {
-      setLoading(false);
+      if (!cancelledRef.current) setLoading(false);
     }
   };
 
