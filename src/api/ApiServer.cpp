@@ -634,7 +634,7 @@ std::string ApiRouter::resultToJson(const core::TestResult &result) {
   return out.str();
 }
 
-std::string userToJson(const core::User &user, bool includeSensitive = false) {
+std::string userToJson(const core::User &user) {
   std::ostringstream out;
   out << "{"
       << "\"id\":" << user.getId() << ","
@@ -645,9 +645,6 @@ std::string userToJson(const core::User &user, bool includeSensitive = false) {
       << "\"last_login\":" << static_cast<long long>(user.getLastLogin()) << ","
       << "\"full_name\":" << jsonString(user.getFullName()) << ","
       << "\"email\":" << jsonString(user.getEmail());
-  if (includeSensitive) {
-    out << ",\"password_hash\":" << jsonString(user.getPasswordHash());
-  }
   out << "}";
   return out.str();
 }
@@ -929,7 +926,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
         return makeDbErrorResponse(database_->getLastError());
       }
       const core::Sample &responseSample = created ? *created : sample;
-      return ApiResponse{200,
+      return ApiResponse{201,
                          "{\"data\":" + sampleToJson(responseSample) + "}",
                          "application/json"};
     }
@@ -1035,7 +1032,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
         return makeDbErrorResponse(database_->getLastError());
       }
       const core::Order &responseOrder = created ? *created : order;
-      return ApiResponse{200,
+      return ApiResponse{201,
                          "{\"data\":" + orderToJson(responseOrder) + "}",
                          "application/json"};
     }
@@ -1202,7 +1199,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
         return makeDbErrorResponse(database_->getLastError());
       }
       const core::TestResult &responseResult = created ? *created : result;
-      return ApiResponse{200,
+      return ApiResponse{201,
                          "{\"data\":" + resultToJson(responseResult) + "}",
                          "application/json"};
     }
@@ -2055,7 +2052,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
     out << "{\"data\":[";
     for (size_t i = 0; i < users.size(); ++i) {
       if (i > 0) out << ",";
-      out << userToJson(*users[i], false); // Don't include password hash
+      out << userToJson(*users[i]); // Don't include password hash
     }
     out << "]}";
 
@@ -2078,7 +2075,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                        "User profile not found.");
     }
 
-    return ApiResponse{200, "{\"data\":" + userToJson(*user, false) + "}",
+    return ApiResponse{200, "{\"data\":" + userToJson(*user) + "}",
                        "application/json"};
   }
 
@@ -2166,8 +2163,8 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       return makeDbErrorResponse(database_->getLastError());
     }
     const core::User &responseUser = created ? *created : newUser;
-    return ApiResponse{200,
-                       "{\"data\":" + userToJson(responseUser, false) + "}",
+    return ApiResponse{201,
+                       "{\"data\":" + userToJson(responseUser) + "}",
                        "application/json"};
   }
 
@@ -2273,7 +2270,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
     }
 
     return ApiResponse{200,
-                       "{\"data\":" + userToJson(updated, false) + "}",
+                       "{\"data\":" + userToJson(updated) + "}",
                        "application/json"};
   }
 

@@ -89,7 +89,7 @@ export const Dashboard = () => {
     fetchData();
   }, []);
 
-  const recentSamples = samples
+  const recentSamples = [...samples]
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     .slice(0, 5);
 

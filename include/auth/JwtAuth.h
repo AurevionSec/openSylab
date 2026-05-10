@@ -29,11 +29,11 @@ public:
    * @brief Decoded JWT token payload
    */
   struct TokenPayload {
-    int userId;              ///< User ID from database
+    int userId = 0;          ///< User ID from database
     std::string username;    ///< Username
     std::string role;        ///< User role (admin, user, etc.)
-    std::time_t exp;         ///< Expiration timestamp (Unix epoch)
-    std::time_t iat;         ///< Issued at timestamp (Unix epoch)
+    std::time_t exp = 0;     ///< Expiration timestamp (Unix epoch)
+    std::time_t iat = 0;     ///< Issued at timestamp (Unix epoch)
     std::string issuer;      ///< Token issuer
   };
 

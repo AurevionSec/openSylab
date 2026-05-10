@@ -63,6 +63,7 @@ export const RESULT_FLAGS = {
   LOW: 'Low',
   HIGH: 'High',
   CRITICAL: 'Critical',
+  UNDEFINED: 'Undefined',
 } as const;
 
 export const RESULT_FLAG_COLORS = {

@@ -28,14 +28,16 @@ export const OrderCreateModal = ({ isOpen, onClose, onSuccess }: OrderCreateModa
   const [error, setError] = useState('');
   const [availableSamples, setAvailableSamples] = useState<Sample[]>([]);
   const [samplesLoading, setSamplesLoading] = useState(false);
+  const [samplesError, setSamplesError] = useState('');
   const [sampleSearch, setSampleSearch] = useState('');
 
   useEffect(() => {
     if (!isOpen) return;
+    setSamplesError('');
     setSamplesLoading(true);
     getSamples({ limit: 200 })
       .then((r) => setAvailableSamples(r.samples))
-      .catch(() => setAvailableSamples([]))
+      .catch(() => { setAvailableSamples([]); setSamplesError('Fehler beim Laden der Proben.'); })
       .finally(() => setSamplesLoading(false));
   }, [isOpen]);
 
@@ -140,7 +142,9 @@ export const OrderCreateModal = ({ isOpen, onClose, onSuccess }: OrderCreateModa
                     {samplesLoading ? (
                       <p className="p-2 text-sm text-gray-500">Loading samples...</p>
                     ) : filteredSamples.length === 0 ? (
-                      <p className="p-2 text-sm text-gray-500">No samples found. Create a sample first.</p>
+                      {samplesError
+                ? <p className="p-2 text-sm text-red-600">{samplesError}</p>
+                : <p className="p-2 text-sm text-gray-500">Keine Proben gefunden. Zuerst eine Probe anlegen.</p>}
                     ) : (
                       filteredSamples.slice(0, 10).map((s) => (
                         <button

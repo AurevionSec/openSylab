@@ -44,6 +44,7 @@ export function useBarcode({ onDetected }: UseBarcodeOptions): UseBarcodeReturn 
       setError('BarcodeDetector not supported in this browser.');
       return;
     }
+    if (isScanning) return;
     setError(null);
     setIsScanning(true);
 
@@ -82,7 +83,7 @@ export function useBarcode({ onDetected }: UseBarcodeOptions): UseBarcodeReturn 
       setError(err instanceof Error ? err.message : 'Camera access denied.');
       setIsScanning(false);
     }
-  }, [isSupported, onDetected, stopScan]);
+  }, [isSupported, isScanning, onDetected, stopScan]);
 
   useEffect(() => {
     return () => {

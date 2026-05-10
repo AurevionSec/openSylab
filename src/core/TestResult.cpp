@@ -141,10 +141,10 @@ TestResult::Flag TestResult::evaluateFlag() const {
   }
 
   double numValue = getNumericValue();
-  constexpr double kCriticalLowMultiplier = 0.5;
-  constexpr double kCriticalHighMultiplier = 1.5;
-  double criticalLow = referenceLow_ * kCriticalLowMultiplier;
-  double criticalHigh = referenceHigh_ * kCriticalHighMultiplier;
+  // Use absolute margin for critical bounds so negative reference values work correctly
+  double margin = referenceHigh_ - referenceLow_;
+  double criticalLow  = referenceLow_  - margin * 0.5;
+  double criticalHigh = referenceHigh_ + margin * 0.5;
 
   // Prüfung gegen kritische Grenzen
   if (numValue < criticalLow || numValue > criticalHigh) {

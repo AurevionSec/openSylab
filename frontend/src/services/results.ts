@@ -101,15 +101,15 @@ export const updateResult = async (id: string, result: Partial<TestResult>): Pro
   const updateData: any = {};
 
   if (result.result_id) updateData.result_id = result.result_id;
-  if (result.order_id) updateData.order_id = result.order_id;
-  if (result.parameter) updateData.parameter = result.parameter;
-  if (result.value) updateData.value = result.value;
-  if (result.unit) updateData.unit = result.unit;
+  if (result.order_id !== undefined) updateData.order_id = result.order_id;
+  if (result.parameter !== undefined) updateData.parameter = result.parameter;
+  if (result.value !== undefined) updateData.value = result.value;
+  if (result.unit !== undefined) updateData.unit = result.unit;
   if (result.reference_min) updateData.min_value = result.reference_min;
   if (result.reference_max) updateData.max_value = result.reference_max;
-  if (result.flag) updateData.flag = result.flag;
-  if (result.status) updateData.status = result.status;
-  if (result.reviewed_by) updateData.reviewed_by = result.reviewed_by;
+  if (result.flag !== undefined) updateData.flag = result.flag;
+  if (result.status !== undefined) updateData.status = result.status;
+  if (result.reviewed_by !== undefined) updateData.reviewed_by = result.reviewed_by;
   if (result.notes !== undefined) updateData.notes = result.notes;
 
   const response = await api.put<{ data: any }>(`/results/${id}`, updateData);
