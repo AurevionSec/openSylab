@@ -33,7 +33,8 @@ export const login = async (username: string, password: string): Promise<{ succe
       'Betrachter': 'VIEWER', 'viewer': 'VIEWER',
       'Custom': 'CUSTOM', 'custom': 'CUSTOM',
     };
-    const user = { ...rawUser, role: roleMap[rawUser.role] ?? rawUser.role.toUpperCase() };
+    const rawRole: string = rawUser.role ?? '';
+    const user = { ...rawUser, role: roleMap[rawRole] ?? (rawRole ? rawRole.toUpperCase() : 'VIEWER') };
 
     // Store JWT token and user info
     localStorage.setItem(JWT_TOKEN_STORAGE_KEY, token);
