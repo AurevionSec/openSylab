@@ -1467,6 +1467,8 @@ bool Database::exportSamplesToCsv(const std::string &filePath) {
   if (rc != SQLITE_DONE) {
     setError("Fehler beim Abrufen der Proben: " +
              std::string(sqlite3_errmsg(db_)));
+    output.close();
+    std::remove(filePath.c_str());
     return false;
   }
 
@@ -2987,6 +2989,8 @@ bool Database::exportValidatedResultsToCsv(const std::string &filePath,
   if (rc != SQLITE_DONE) {
     setError("Fehler beim Abrufen der Ergebnisse: " +
              std::string(sqlite3_errmsg(db_)));
+    output.close();
+    std::remove(filePath.c_str());
     return false;
   }
 
@@ -3022,6 +3026,7 @@ bool Database::exportValidatedResultsToCsv(const std::string &filePath,
                            actor, details);
     if (!logAudit(entry)) {
       sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+      std::remove(filePath.c_str());
       return false;
     }
   }
@@ -3032,6 +3037,7 @@ bool Database::exportValidatedResultsToCsv(const std::string &filePath,
              std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
     sqlite3_free(errMsg);
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    std::remove(filePath.c_str());
     return false;
   }
 
