@@ -7,6 +7,7 @@ import { getUsers, createUser, updateUser, deleteUser } from '../services/users'
 import type { User, CreateUserPayload, UpdateUserPayload, UserRole } from '../types/user';
 import { USER_ROLES, ROLE_COLORS } from '../types/user';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { ErrorBanner } from '../components/common/ErrorBanner';
 
 export const Users = () => {
   useDocumentTitle({ module: 'User Management' });
@@ -90,11 +91,7 @@ export const Users = () => {
           </Button>
         </div>
 
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded p-4">
-            <p className="text-red-800">{error}</p>
-          </div>
-        )}
+        <ErrorBanner message={error || null} />
 
         <Card title={`Users (${users.length})`}>
           <div className="overflow-x-auto">
@@ -256,11 +253,7 @@ const UserModal = ({ user, onClose, onSubmit }: UserModalProps) => {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
-              <div className="bg-red-50 border border-red-200 rounded p-4">
-                <p className="text-red-800 text-sm">{error}</p>
-              </div>
-            )}
+            <ErrorBanner message={error || null} />
 
             <Input
               type="text"

@@ -9,6 +9,7 @@ import type { Order } from '../types/order';
 import type { TestResult } from '../types/result';
 import type { DashboardStats } from '../types/stats';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { ErrorBanner } from '../components/common/ErrorBanner';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts';
@@ -157,9 +158,7 @@ export const Dashboard = () => {
   if (error) {
     return (
       <Layout>
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <p className="text-red-800">{error}</p>
-        </div>
+        <ErrorBanner message={error} />
       </Layout>
     );
   }

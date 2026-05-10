@@ -65,7 +65,7 @@ export const Orders = () => {
   const handleDeleteConfirm = async () => {
     if (!orderToDelete) return;
     console.log('[Orders] Deleting order:', orderToDelete.id);
-    await deleteOrder(orderToDelete.id.toString());
+    await deleteOrder(orderToDelete.order_id);
     console.log('[Orders] Order deleted successfully');
     refetch();
   };

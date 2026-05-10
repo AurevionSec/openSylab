@@ -65,7 +65,7 @@ export const Results = () => {
   const handleDeleteConfirm = async () => {
     if (!resultToDelete) return;
     console.log('[Results] Deleting result:', resultToDelete.id);
-    await deleteResult(resultToDelete.id.toString());
+    await deleteResult(resultToDelete.result_id);
     console.log('[Results] Result deleted successfully');
     refetch();
   };

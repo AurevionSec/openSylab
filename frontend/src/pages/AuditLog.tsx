@@ -6,6 +6,7 @@ import { getAuditLog } from '../services/audit';
 import type { AuditEntry, AuditLogFilter, AuditAction, AuditEntity } from '../types/audit';
 import { AUDIT_ACTIONS, AUDIT_ENTITIES, ACTION_COLORS } from '../types/audit';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { ErrorBanner } from '../components/common/ErrorBanner';
 
 export const AuditLog = () => {
   useDocumentTitle({ module: 'Audit Log' });
@@ -63,11 +64,7 @@ export const AuditLog = () => {
           <p className="text-gray-600 mt-1">System activity audit trail for compliance and monitoring</p>
         </div>
 
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded p-4">
-            <p className="text-red-800">{error}</p>
-          </div>
-        )}
+        <ErrorBanner message={error || null} />
 
         {/* Filters */}
         <Card title="Filters">
