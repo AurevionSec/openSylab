@@ -1070,11 +1070,11 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
         return makeError(400, "validation_error", "Invalid order_id",
                          "Provide numeric order_id.");
       }
-      // Validate order exists and has active status
-      auto orderRef = database_->getOrderByOrderId(payload["order_id"]);
+      // Validate order exists and has active status (orderId is the numeric PK)
+      auto orderRef = database_->getOrder(orderId);
       if (!orderRef) {
         return makeError(422, "unprocessable_entity", "Order not found",
-                         "The provided order_id does not exist.");
+                         "Provide the numeric order id (orders.id, not the order_id string).");
       }
       {
         auto orderStatus = orderRef->getStatus();
@@ -2667,7 +2667,8 @@ void ApiServer::handleClientTls(int clientFd) {
   auto lengthIt = request.headers.find("content-length");
   if (lengthIt != request.headers.end()) {
     try {
-      size_t length = static_cast<size_t>(std::stoul(lengthIt->second));
+      constexpr size_t kMaxBodySize = 10 * 1024 * 1024;
+          size_t length = std::min(static_cast<size_t>(std::stoul(lengthIt->second)), kMaxBodySize);
       while (body.size() < length) {
         const int more = SSL_read(ssl, buffer, sizeof(buffer) - 1);
         if (more <= 0) {
@@ -2692,7 +2693,8 @@ void ApiServer::handleClientTls(int clientFd) {
       << "\r\n";
   out << "Content-Type: " << response.contentType << "\r\n";
   out << "Content-Length: " << response.body.size() << "\r\n";
-  out << "Access-Control-Allow-Origin: http://localhost:5173\r\n";
+  const char* corsOrigin = std::getenv("OPENSYLAB_CORS_ORIGIN");
+        out << "Access-Control-Allow-Origin: " << (corsOrigin && *corsOrigin ? corsOrigin : "http://localhost:5173") << "\r\n";
   out << "Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\n";
   out << "Access-Control-Allow-Headers: Content-Type, X-API-Key, Authorization\r\n";
   out << "Access-Control-Max-Age: 3600\r\n";
@@ -2745,7 +2747,8 @@ void ApiServer::handleClientPlain(int clientFd) {
   auto lengthIt = request.headers.find("content-length");
   if (lengthIt != request.headers.end()) {
     try {
-      size_t length = static_cast<size_t>(std::stoul(lengthIt->second));
+      constexpr size_t kMaxBodySize = 10 * 1024 * 1024;
+          size_t length = std::min(static_cast<size_t>(std::stoul(lengthIt->second)), kMaxBodySize);
       while (body.size() < length) {
         const ssize_t more = recv(clientFd, buffer, sizeof(buffer) - 1, 0);
         if (more <= 0) {
@@ -2770,7 +2773,8 @@ void ApiServer::handleClientPlain(int clientFd) {
       << "\r\n";
   out << "Content-Type: " << response.contentType << "\r\n";
   out << "Content-Length: " << response.body.size() << "\r\n";
-  out << "Access-Control-Allow-Origin: http://localhost:5173\r\n";
+  const char* corsOrigin = std::getenv("OPENSYLAB_CORS_ORIGIN");
+        out << "Access-Control-Allow-Origin: " << (corsOrigin && *corsOrigin ? corsOrigin : "http://localhost:5173") << "\r\n";
   out << "Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\n";
   out << "Access-Control-Allow-Headers: Content-Type, X-API-Key, Authorization\r\n";
   out << "Access-Control-Max-Age: 3600\r\n";

@@ -31,22 +31,21 @@ export const ResultEditModal = ({ isOpen, onClose, result, onSuccess }: ResultEd
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (result) {
-      setFormData({
-        result_id: result.result_id,
-        order_id: result.order_id,
-        parameter: result.parameter,
-        value: result.value,
-        unit: result.unit || '',
-        reference_min: result.reference_min || '',
-        reference_max: result.reference_max || '',
-        flag: result.flag,
-        status: result.status,
-        reviewed_by: result.reviewed_by || '',
-        notes: result.notes || '',
-      });
-    }
-  }, [result]);
+    if (!isOpen || !result) return;
+    setFormData({
+      result_id: result.result_id,
+      order_id: result.order_id,
+      parameter: result.parameter,
+      value: result.value,
+      unit: result.unit || '',
+      reference_min: result.reference_min || '',
+      reference_max: result.reference_max || '',
+      flag: result.flag,
+      status: result.status,
+      reviewed_by: result.reviewed_by || '',
+      notes: result.notes || '',
+    });
+  }, [isOpen, result]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();

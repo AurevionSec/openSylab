@@ -115,7 +115,7 @@ JwtAuth::validateToken(const std::string &token) {
 bool JwtAuth::isTokenExpired(const TokenPayload &payload) {
   auto now = std::chrono::system_clock::now();
   auto nowTime = std::chrono::system_clock::to_time_t(now);
-  return nowTime >= payload.exp;
+  return nowTime > payload.exp;
 }
 
 int JwtAuth::getSecondsUntilExpiration(const TokenPayload &payload) {

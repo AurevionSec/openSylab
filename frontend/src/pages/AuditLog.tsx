@@ -39,8 +39,12 @@ export const AuditLog = () => {
   };
 
   const handleResetFilter = () => {
-    setFilter({ limit: 50 });
-    setTimeout(() => fetchAuditLog(), 0);
+    const resetFilter = { limit: 50 };
+    setFilter(resetFilter);
+    // Call getAuditLog directly with reset filter to avoid stale closure
+    getAuditLog(resetFilter as any)
+      .then(data => setAuditEntries(data.entries !== undefined ? data.entries : data))
+      .catch(() => {});
   };
 
   if (loading) {
