@@ -16,7 +16,7 @@ export interface LoginResponse {
 /**
  * Login with username and password (JWT authentication)
  */
-export const login = async (username: string, password: string): Promise<{ success: boolean; user?: User; error?: string }> => {
+export const login = async (username: string, password: string): Promise<{ success: boolean; user?: User; error?: string; mfaRequired?: boolean }> => {
   try {
 
     const response = await api.post<LoginResponse>('/auth/login', {
@@ -48,17 +48,21 @@ export const login = async (username: string, password: string): Promise<{ succe
     return { success: true, user };
   } catch (error: unknown) {
     let errorMessage = 'An error occurred. Please try again.';
+    let mfaRequired = false;
 
     if (error && typeof error === 'object' && 'response' in error) {
-      const r = error as { response?: { status?: number; data?: { error?: { message?: string } } } };
-      if (r.response?.status === 401) {
+      const r = error as { response?: { status?: number; data?: { error?: { code?: string; message?: string } } } };
+      if (r.response?.status === 403 && r.response?.data?.error?.code === 'mfa_required') {
+        mfaRequired = true;
+        errorMessage = r.response.data?.error?.message ?? 'MFA code required.';
+      } else if (r.response?.status === 401) {
         errorMessage = 'Invalid username or password.';
       } else if (r.response?.data?.error?.message) {
         errorMessage = r.response.data.error.message;
       }
     }
 
-    return { success: false, error: errorMessage };
+    return { success: false, error: errorMessage, mfaRequired };
   }
 };
 

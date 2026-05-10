@@ -41,8 +41,12 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401 || error.response?.status === 403) {
-      // Unauthorized - clear authentication and redirect to login
+    const status = error.response?.status;
+    // Exempt the login endpoint from the session-expiry redirect — a 403 from
+    // /auth/login means mfa_required, not an expired session.
+    const isLoginEndpoint = (error.config?.url ?? '').includes('/auth/login');
+    if ((status === 401 || status === 403) && !isLoginEndpoint) {
+      // Session expired or unauthorized — clear auth and redirect to login
       localStorage.removeItem(JWT_TOKEN_STORAGE_KEY);
       localStorage.removeItem(USER_INFO_STORAGE_KEY);
       localStorage.removeItem('opensylab_token_expiry');
