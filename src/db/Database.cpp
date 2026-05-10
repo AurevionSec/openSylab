@@ -353,7 +353,7 @@ bool Database::open() {
   }
 
   isOpen_ = true;
-  std::cout << "Datenbank erfolgreich geöffnet: " << dbPath_ << std::endl;
+  std::cerr << "Datenbank erfolgreich geöffnet: " << dbPath_ << std::endl;
   return true;
 }
 
@@ -595,7 +595,7 @@ bool Database::initializeSchema() {
     return false;
   }
 
-  std::cout << "Datenbankschema erfolgreich initialisiert" << std::endl;
+  std::cerr << "Datenbankschema erfolgreich initialisiert" << std::endl;
   return true;
 }
 

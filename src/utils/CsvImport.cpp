@@ -110,7 +110,7 @@ CsvImport::importSamples(const std::string &filePath) {
     std::string headerLine;
     if (std::getline(file, headerLine)) {
       headerLine_ = headerLine;
-      std::cout << "Header: " << headerLine << std::endl;
+      std::cerr << "Header: " << headerLine << std::endl;
       if (!validateHeader(headerLine_)) {
         setError("Ungueltiger CSV-Header. Erwartet: sample_id,patient_id,"
                  "patient_name,description,status");
@@ -161,7 +161,7 @@ CsvImport::importSamples(const std::string &filePath) {
   file.close();
 
   if (importedCount_ > 0) {
-    std::cout << "\n✓ CSV-Import erfolgreich: " << importedCount_
+    std::cerr << "\n✓ CSV-Import erfolgreich: " << importedCount_
               << " Proben importiert\n";
   } else {
     setError(errorCount > 0

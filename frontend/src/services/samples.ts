@@ -1,6 +1,17 @@
 import api from './api';
 import type { Sample, SampleFilter, SampleListResponse } from '../types/sample';
 
+interface BackendSample {
+  id: number;
+  sample_id: string;
+  patient_id: string;
+  patient_name?: string;
+  description?: string;
+  status: string;
+  registration_date: number;
+  updated_at?: number;
+}
+
 // Map backend status strings to frontend enum values
 const mapStatus = (backendStatus: string): Sample['status'] => {
   // Backend returns German status strings
@@ -20,7 +31,7 @@ const mapStatus = (backendStatus: string): Sample['status'] => {
 };
 
 // Transform backend sample to frontend sample
-const transformSample = (backendSample: any): Sample => {
+const transformSample = (backendSample: BackendSample): Sample => {
   return {
     id: backendSample.id,
     sample_id: backendSample.sample_id,
@@ -34,7 +45,7 @@ const transformSample = (backendSample: any): Sample => {
 };
 
 export const getSamples = async (filters?: SampleFilter): Promise<SampleListResponse> => {
-  const response = await api.get<{ data: any[]; total: number }>('/samples', {
+  const response = await api.get<{ data: BackendSample[]; total: number }>('/samples', {
     params: filters,
   });
 
@@ -50,17 +61,17 @@ export const getSamples = async (filters?: SampleFilter): Promise<SampleListResp
 };
 
 export const getSampleById = async (id: string): Promise<Sample> => {
-  const response = await api.get<{ data: any }>(`/samples/${id}`);
+  const response = await api.get<{ data: BackendSample }>(`/samples/${id}`);
   return transformSample(response.data.data);
 };
 
 export const createSample = async (sample: Omit<Sample, 'id' | 'created_at' | 'updated_at'>): Promise<Sample> => {
-  const response = await api.post<{ data: any }>('/samples', sample);
+  const response = await api.post<{ data: BackendSample }>('/samples', sample);
   return transformSample(response.data.data);
 };
 
 export const updateSample = async (id: string, sample: Partial<Sample>): Promise<Sample> => {
-  const response = await api.put<{ data: any }>(`/samples/${id}`, sample);
+  const response = await api.put<{ data: BackendSample }>(`/samples/${id}`, sample);
   return transformSample(response.data.data);
 };
 

@@ -32,7 +32,20 @@ const mapPriority = (backendPriority: string): Order['priority'] => {
 };
 
 // Transform backend order to frontend order
-const transformOrder = (backendOrder: any): Order => {
+interface BackendOrder {
+  id: number;
+  order_id: string;
+  sample_id: string;
+  test_type: string;
+  status: string;
+  priority: string;
+  requested_date: number;
+  completed_date?: number;
+  requested_by?: string;
+  notes?: string;
+}
+
+const transformOrder = (backendOrder: BackendOrder): Order => {
   return {
     id: backendOrder.id,
     order_id: backendOrder.order_id,
@@ -50,7 +63,7 @@ const transformOrder = (backendOrder: any): Order => {
 };
 
 export const getOrders = async (filters?: OrderFilter): Promise<OrderListResponse> => {
-  const response = await api.get<{ data: any[]; total: number }>('/orders', {
+  const response = await api.get<{ data: BackendOrder[]; total: number }>('/orders', {
     params: filters,
   });
 
@@ -66,17 +79,17 @@ export const getOrders = async (filters?: OrderFilter): Promise<OrderListRespons
 };
 
 export const getOrderById = async (id: string): Promise<Order> => {
-  const response = await api.get<{ data: any }>(`/orders/${id}`);
+  const response = await api.get<{ data: BackendOrder }>(`/orders/${id}`);
   return transformOrder(response.data.data);
 };
 
 export const createOrder = async (order: Omit<Order, 'id' | 'requested_date' | 'completed_date'>): Promise<Order> => {
-  const response = await api.post<{ data: any }>('/orders', order);
+  const response = await api.post<{ data: BackendOrder }>('/orders', order);
   return transformOrder(response.data.data);
 };
 
 export const updateOrder = async (id: string, order: Partial<Order>): Promise<Order> => {
-  const response = await api.put<{ data: any }>(`/orders/${id}`, order);
+  const response = await api.put<{ data: BackendOrder }>(`/orders/${id}`, order);
   return transformOrder(response.data.data);
 };
 
