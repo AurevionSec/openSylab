@@ -20,7 +20,12 @@ function parseCsvRow(line: string): string[] {
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
     if (ch === '"') {
-      inQuotes = !inQuotes;
+      if (inQuotes && i + 1 < line.length && line[i + 1] === '"') {
+        current += '"';
+        i++; // skip second quote of escaped pair
+      } else {
+        inQuotes = !inQuotes;
+      }
     } else if (ch === ',' && !inQuotes) {
       result.push(current.trim());
       current = '';

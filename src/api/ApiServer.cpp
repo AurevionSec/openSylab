@@ -7,6 +7,7 @@
 #include <ctime>
 #include <iomanip>
 #include <iostream>
+#include <unordered_set>
 #include <netinet/in.h>
 #include <sstream>
 #include <sys/socket.h>
@@ -2187,11 +2188,13 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
 
     core::User::Role role = core::User::Role::OPERATOR; // Default
     if (roleIt != payload.end() && !roleIt->second.empty()) {
-      try {
-        role = core::User::stringToRole(roleIt->second);
-      } catch (const std::exception &e) {
-        return makeError(400, "validation_error", "Invalid role", e.what());
+      static const std::unordered_set<std::string> kValidRoles{
+          "ADMIN", "OPERATOR", "VIEWER", "CUSTOM"};
+      if (kValidRoles.find(roleIt->second) == kValidRoles.end()) {
+        return makeError(400, "validation_error", "Invalid role",
+                         "Role must be one of: ADMIN, OPERATOR, VIEWER, CUSTOM");
       }
+      role = core::User::stringToRole(roleIt->second);
     }
 
     core::User newUser(usernameIt->second, "", role);
@@ -2285,11 +2288,13 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
     }
     auto roleIt = payload.find("role");
     if (roleIt != payload.end() && !roleIt->second.empty()) {
-      try {
-        updated.setRole(core::User::stringToRole(roleIt->second));
-      } catch (const std::exception &e) {
-        return makeError(400, "validation_error", "Invalid role", e.what());
+      static const std::unordered_set<std::string> kValidRoles{
+          "ADMIN", "OPERATOR", "VIEWER", "CUSTOM"};
+      if (kValidRoles.find(roleIt->second) == kValidRoles.end()) {
+        return makeError(400, "validation_error", "Invalid role",
+                         "Role must be one of: ADMIN, OPERATOR, VIEWER, CUSTOM");
       }
+      updated.setRole(core::User::stringToRole(roleIt->second));
     }
     auto fullNameIt = payload.find("full_name");
     if (fullNameIt != payload.end()) {
