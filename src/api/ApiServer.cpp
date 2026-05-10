@@ -2018,6 +2018,10 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
     int resultsTotal = hasMemFilter
         ? static_cast<int>(results.size())
         : database_->getTestResultsCount(resultsOrderIdFilter);
+    if (!hasMemFilter && database_->hasError()) {
+      return makeError(500, "internal_error", database_->getLastError(),
+                       "Check server logs for details.");
+    }
     // When in-memory filters ran (no DB limit/offset), apply pagination now
     if (hasMemFilter && (limit.has_value() || offset.has_value())) {
       int startIdx = offset.value_or(0);
