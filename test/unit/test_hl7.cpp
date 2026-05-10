@@ -173,6 +173,31 @@ bool test_hl7_ExportMessageContainsSegments() {
   ASSERT_NE(message.find("PID|"), std::string::npos);
   ASSERT_NE(message.find("OBR|"), std::string::npos);
   ASSERT_NE(message.find("OBX|1|ST|GLU"), std::string::npos);
+  // Verify HL7 special characters are escaped (^ in patient name)
+  ASSERT_NE(message.find("Doe\\S\\Jane"), std::string::npos);
+  ASSERT_EQ(message.find("Doe^Jane"), std::string::npos);
+
+  return true;
+}
+
+bool test_hl7_ExportEscapesSpecialChars() {
+  opensylab::core::Sample sample("S_ESC", "P_ESC");
+  sample.setPatientName("O'Brien|Pipe&Amp");
+  opensylab::core::Order order("O_ESC", "S_ESC", "PARAM|WITH|PIPE");
+
+  opensylab::core::TestResult result("R_ESC", 1, "Param^Value");
+  result.setValue("1.0|extra");
+  result.setUnit("mg/dL");
+  std::vector<opensylab::core::TestResult> results = {result};
+
+  Hl7Exchange exchange(nullptr);
+  const std::string message = exchange.exportOruR01Message(sample, order, results);
+
+  // No unescaped HL7 delimiters in data fields (check that | ^ ~ & \ are escaped)
+  // Patient name field: "O'Brien|Pipe&Amp" -> "O'Brien\F\Pipe\T\Amp"
+  ASSERT_NE(message.find("O'Brien\\F\\Pipe\\T\\Amp"), std::string::npos);
+  // Test parameter: "Param^Value" -> "Param\S\Value"
+  ASSERT_NE(message.find("Param\\S\\Value"), std::string::npos);
 
   return true;
 }
@@ -185,4 +210,6 @@ void registerHl7Tests() {
   registerTest("HL7::ImportLogsErrors", test_hl7_ImportLogsErrors);
   registerTest("HL7::ExportMessageContainsSegments",
                test_hl7_ExportMessageContainsSegments);
+  registerTest("HL7::ExportEscapesSpecialChars",
+               test_hl7_ExportEscapesSpecialChars);
 }

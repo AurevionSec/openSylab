@@ -127,10 +127,43 @@ bool test_fhir_ExportBundleContainsResources() {
   return true;
 }
 
+bool test_fhir_ParseBundleWithBraceInString() {
+  // Regression test: findObjectStart must not pick up '{' inside a string value
+  const std::string tricky = R"FHIR(
+    {"resourceType":"Bundle","entry":[
+      {"resource":{"resourceType":"Patient",
+       "note":"{acme} lab ref",
+       "identifier":[{"value":"P-TRICKY"}],
+       "name":[{"text":"Tricky Patient"}]}},
+      {"resource":{"resourceType":"Specimen",
+       "identifier":[{"value":"S-TRICKY"}]}},
+      {"resource":{"resourceType":"ServiceRequest",
+       "identifier":[{"value":"O-TRICKY"}]}},
+      {"resource":{"resourceType":"Observation",
+       "id":"obs-1",
+       "code":{"coding":[{"code":"GLU","display":"Glucose"}]},
+       "valueQuantity":{"value":5.5,"unit":"mg/dL"},
+       "referenceRange":[{"text":"4-7"}]}}
+    ]})FHIR";
+
+  FhirParser parser;
+  ASSERT_TRUE(parser.parse(tricky));
+
+  FhirParser::MappedData mapped;
+  ASSERT_TRUE(parser.mapBundle(mapped));
+  ASSERT_EQ(mapped.sample.patientId, std::string("P-TRICKY"));
+  ASSERT_EQ(mapped.sample.sampleId, std::string("S-TRICKY"));
+  ASSERT_EQ(mapped.order.orderId, std::string("O-TRICKY"));
+
+  return true;
+}
+
 void registerFhirTests() {
   registerTest("FHIR::ParseValidBundle", test_fhir_ParseValidBundle);
   registerTest("FHIR::ImportCreatesEntities", test_fhir_ImportCreatesEntities);
   registerTest("FHIR::ImportLogsErrors", test_fhir_ImportLogsErrors);
   registerTest("FHIR::ExportBundleContainsResources",
                test_fhir_ExportBundleContainsResources);
+  registerTest("FHIR::ParseBundleWithBraceInString",
+               test_fhir_ParseBundleWithBraceInString);
 }

@@ -595,6 +595,40 @@ bool Database::initializeSchema() {
     return false;
   }
 
+  // Seed a default admin account on fresh databases (no users exist yet).
+  // This ensures a fresh deployment is accessible without a separate setup step.
+  // Seed a default admin on a completely empty database (no audit entry — system init).
+  {
+    const char *countSQL = "SELECT COUNT(*) FROM users;";
+    sqlite3_stmt *cRaw = nullptr;
+    if (sqlite3_prepare_v2(db_, countSQL, -1, &cRaw, nullptr) == SQLITE_OK) {
+      auto cStmt = makeStatement(cRaw);
+      if (sqlite3_step(cStmt.get()) == SQLITE_ROW &&
+          sqlite3_column_int(cStmt.get(), 0) == 0) {
+        const std::string hash = core::User::hashPassword("admin");
+        const std::string role = core::User::roleToString(core::User::Role::ADMIN);
+        const std::time_t now = std::time(nullptr);
+        const char *insertSQL = R"(
+            INSERT OR IGNORE INTO users
+                (username, password_hash, role, active, created_date, last_login, full_name, email)
+            VALUES (?, ?, ?, 1, ?, 0, '', '');
+        )";
+        sqlite3_stmt *iRaw = nullptr;
+        if (sqlite3_prepare_v2(db_, insertSQL, -1, &iRaw, nullptr) == SQLITE_OK) {
+          auto iStmt = makeStatement(iRaw);
+          sqlite3_bind_text(iStmt.get(), 1, "admin", -1, SQLITE_TRANSIENT);
+          sqlite3_bind_text(iStmt.get(), 2, hash.c_str(), -1, SQLITE_TRANSIENT);
+          sqlite3_bind_text(iStmt.get(), 3, role.c_str(), -1, SQLITE_TRANSIENT);
+          sqlite3_bind_int64(iStmt.get(), 4, static_cast<sqlite3_int64>(now));
+          if (sqlite3_step(iStmt.get()) == SQLITE_DONE) {
+            std::cerr << "[WARNING] Default admin created (admin/admin). "
+                         "Change password immediately!\n";
+          }
+        }
+      }
+    }
+  }
+
   std::cerr << "Datenbankschema erfolgreich initialisiert" << std::endl;
   return true;
 }
