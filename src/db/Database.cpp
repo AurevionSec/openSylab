@@ -4516,12 +4516,8 @@ bool Database::updateUser(const core::User &user, const std::string &actor) {
     return false;
   }
 
-  auto existing = getUser(user.getId());
-  if (!existing) {
-    return false;
-  }
-
-  // Open transaction FIRST, then check last-admin guard atomically (prevents TOCTOU)
+  // Open transaction BEFORE reading existing state — prevents TOCTOU where
+  // concurrent writers could change role/active between the read and the write.
   char *errMsg = nullptr;
   int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
                         &errMsg);
@@ -4529,6 +4525,12 @@ bool Database::updateUser(const core::User &user, const std::string &actor) {
     setError("Fehler beim Starten der Transaktion: " +
              std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
     sqlite3_free(errMsg);
+    return false;
+  }
+
+  auto existing = getUser(user.getId());
+  if (!existing) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     return false;
   }
 
@@ -4663,18 +4665,8 @@ bool Database::deleteUser(int id, const std::string &actor) {
     return false;
   }
 
-  auto existing = getUser(id);
-  if (!existing) {
-    return false;
-  }
-
-  if (!existing->isActive()) {
-    setError("Benutzer mit ID " + std::to_string(id) +
-             " ist bereits deaktiviert");
-    return false;
-  }
-
-  // Open transaction FIRST, then check last-admin guard atomically (prevents TOCTOU)
+  // Open transaction BEFORE reading existing state — prevents TOCTOU where
+  // a concurrent writer could change role/active between read and write.
   char *errMsg = nullptr;
   int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
                         &errMsg);
@@ -4682,6 +4674,19 @@ bool Database::deleteUser(int id, const std::string &actor) {
     setError("Fehler beim Starten der Transaktion: " +
              std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
     sqlite3_free(errMsg);
+    return false;
+  }
+
+  auto existing = getUser(id);
+  if (!existing) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
+
+  if (!existing->isActive()) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    setError("Benutzer mit ID " + std::to_string(id) +
+             " ist bereits deaktiviert");
     return false;
   }
 

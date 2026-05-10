@@ -2349,6 +2349,71 @@ bool test_database_ExportSamples_CsvOutput() {
   return true;
 }
 
+bool test_database_UpdateUser_HappyPath() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  User user("update_user", User::hashPassword("secret"), User::Role::OPERATOR);
+  ASSERT_TRUE(db.createUser(user));
+
+  auto stored = db.getUserByUsername("update_user");
+  ASSERT_NOT_NULL(stored);
+  stored->setFullName("Jane Doe");
+  stored->setEmail("jane@example.com");
+  ASSERT_TRUE(db.updateUser(*stored, "admin"));
+
+  auto updated = db.getUserByUsername("update_user");
+  ASSERT_NOT_NULL(updated);
+  ASSERT_EQ(updated->getFullName(), std::string("Jane Doe"));
+  ASSERT_EQ(updated->getEmail(), std::string("jane@example.com"));
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_database_UpdateUser_LastAdminProtected() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  auto admin = db.getUserByUsername("admin");
+  ASSERT_NOT_NULL(admin);
+  admin->setRole(User::Role::OPERATOR);
+  ASSERT_FALSE(db.updateUser(*admin, "admin"));
+  ASSERT_FALSE(db.getLastError().empty());
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_database_UpdateUser_TwoAdmins_DemotionAllowed() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  User admin2("admin2", User::hashPassword("secret"), User::Role::ADMIN);
+  ASSERT_TRUE(db.createUser(admin2));
+
+  auto stored = db.getUserByUsername("admin2");
+  ASSERT_NOT_NULL(stored);
+  stored->setRole(User::Role::OPERATOR);
+  ASSERT_TRUE(db.updateUser(*stored, "admin"));
+
+  auto updated = db.getUserByUsername("admin2");
+  ASSERT_NOT_NULL(updated);
+  ASSERT_EQ(updated->getRole(), User::Role::OPERATOR);
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
 void registerDatabaseTests() {
   registerTest("Database::OpenAndClose", test_database_OpenAndClose);
   registerTest("Database::InitializeSchema", test_database_InitializeSchema);
@@ -2466,4 +2531,10 @@ void registerDatabaseTests() {
                test_database_DeleteTestResult_LogsAudit);
   registerTest("Database::DeleteUserDeactivates",
                test_database_DeleteUserDeactivates);
+  registerTest("Database::UpdateUser_HappyPath",
+               test_database_UpdateUser_HappyPath);
+  registerTest("Database::UpdateUser_LastAdminProtected",
+               test_database_UpdateUser_LastAdminProtected);
+  registerTest("Database::UpdateUser_TwoAdmins_DemotionAllowed",
+               test_database_UpdateUser_TwoAdmins_DemotionAllowed);
 }
