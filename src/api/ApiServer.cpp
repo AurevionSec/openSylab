@@ -1961,11 +1961,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
     std::string flagFilter;
     auto statusResultIt = query.find("status");
     if (statusResultIt != query.end() && !statusResultIt->second.empty()) {
-      // Translate frontend status tokens to backend equivalents
-      const std::string &s = statusResultIt->second;
-      if (s == "REVIEWED")  statusFilter = "ENTERED";
-      else if (s == "AMENDED") statusFilter = "REPEATED";
-      else statusFilter = s;
+      statusFilter = statusResultIt->second;
     }
 
     auto flagResultIt = query.find("flag");
@@ -1975,16 +1971,21 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
 
     std::optional<int> resultsOrderIdFilter;
     auto orderIt = query.find("order_id");
+    // When in-memory filters are active, fetch all records to get accurate total
+    // then apply pagination after filtering
+    bool hasMemFilter = !statusFilter.empty() || !flagFilter.empty();
+    std::optional<int> dbLimit  = hasMemFilter ? std::nullopt : limit;
+    std::optional<int> dbOffset = hasMemFilter ? std::nullopt : offset;
     if (orderIt != query.end()) {
       int orderId = 0;
       if (!parseIntValue(orderIt->second, orderId) || orderId <= 0) {
         return makeError(400, "validation_error", "Invalid order_id",
                          "Provide numeric order_id.");
       }
-      results = database_->getTestResultsByOrderId(orderId, limit, offset);
+      results = database_->getTestResultsByOrderId(orderId, dbLimit, dbOffset);
       resultsOrderIdFilter = orderId;
     } else {
-      results = database_->getAllTestResults(limit, offset);
+      results = database_->getAllTestResults(dbLimit, dbOffset);
     }
 
     // Apply status filter in-memory if provided
@@ -2021,10 +2022,26 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       }
       out << resultToJson(*results[i]);
     }
-    // When in-memory filters are applied, use actual result count for total
-    int resultsTotal = (!statusFilter.empty() || !flagFilter.empty())
+    // Total is now accurate: either filtered count (hasMem) or DB count (no filter)
+    int resultsTotal = hasMemFilter
         ? static_cast<int>(results.size())
         : database_->getTestResultsCount(resultsOrderIdFilter);
+    // When in-memory filters ran (no DB limit/offset), apply pagination now
+    if (hasMemFilter && (limit.has_value() || offset.has_value())) {
+      int startIdx = offset.value_or(0);
+      int endIdx   = limit.has_value()
+                   ? std::min(startIdx + *limit, static_cast<int>(results.size()))
+                   : static_cast<int>(results.size());
+      if (startIdx < static_cast<int>(results.size())) {
+        std::vector<std::unique_ptr<core::TestResult>> paged;
+        for (int pi = startIdx; pi < endIdx; ++pi) {
+          paged.push_back(std::move(results[static_cast<size_t>(pi)]));
+        }
+        results = std::move(paged);
+      } else {
+        results.clear();
+      }
+    }
     if (resultsTotal < 0) resultsTotal = static_cast<int>(results.size());
     out << "],\"total\":" << resultsTotal << "}";
 
@@ -2213,7 +2230,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
   if (isPut && path.rfind("/api/v1/users/", 0) == 0) {
     const std::string userIdStr =
         path.substr(std::string("/api/v1/users/").size());
-    if (userIdStr.empty() || userIdStr == "me") {
+    if (userIdStr.empty() || userIdStr == "me" || userIdStr.rfind("me/", 0) == 0) {
       // Handle "me" endpoint separately or fall through
       goto after_user_update;
     }

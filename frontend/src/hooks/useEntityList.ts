@@ -29,7 +29,6 @@ export function useEntityList<T>(
   const cancelledRef = useRef(false);
 
   const load = useCallback(async () => {
-    cancelledRef.current = false;
     setLoading(true);
     setError('');
     try {
