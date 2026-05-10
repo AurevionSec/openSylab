@@ -131,8 +131,8 @@ export const createResult = async (result: Omit<TestResult, 'id' | 'reviewed_dat
     reference_high: result.reference_max,
     flag: result.flag,
     status: mapStatusToBackend(result.status || 'PENDING'),
-    reviewed_by: result.reviewed_by,
-    notes: result.notes,
+    measured_by: result.reviewed_by,
+    comment: result.notes,
   });
   return transformResult(response.data.data);
 };
@@ -149,8 +149,8 @@ export const updateResult = async (id: string, result: Partial<TestResult>): Pro
   if (result.reference_max !== undefined) updateData.reference_high = result.reference_max;
   if (result.flag !== undefined) updateData.flag = result.flag;
   if (result.status !== undefined) updateData.status = mapStatusToBackend(result.status);
-  if (result.reviewed_by !== undefined) updateData.reviewed_by = result.reviewed_by;
-  if (result.notes !== undefined) updateData.notes = result.notes;
+  if (result.reviewed_by !== undefined) updateData.measured_by = result.reviewed_by;
+  if (result.notes !== undefined) updateData.comment = result.notes;
 
   const response = await api.put<{ data: BackendResult }>(`/results/${id}`, updateData);
   return transformResult(response.data.data);

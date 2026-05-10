@@ -16,59 +16,40 @@ export const AuditLog = () => {
   const [filter, setFilter] = useState<AuditLogFilter>({
     limit: 50,
   });
-  const cancelledRef = useRef(false);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  const extractMsg = (err: unknown): string => {
+    if (err && typeof err === 'object' && 'response' in err)
+      return (err as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message || 'Failed to load audit log';
+    return err instanceof Error ? err.message : 'Failed to load audit log';
+  };
+
+  const runFetch = (f: AuditLogFilter) => {
+    let cancelled = false;
+    setLoading(true);
+    setError('');
+    getAuditLog(f)
+      .then(data => { if (!cancelled && mountedRef.current) setEntries(data); })
+      .catch(err => { if (!cancelled && mountedRef.current) setError(extractMsg(err)); })
+      .finally(() => { if (!cancelled && mountedRef.current) setLoading(false); });
+    return () => { cancelled = true; };
+  };
 
   useEffect(() => {
-    cancelledRef.current = false;
-    fetchAuditLog();
-    return () => { cancelledRef.current = true; };
+    const cancel = runFetch(filter);
+    return cancel;
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const fetchAuditLog = async () => {
-    try {
-      setLoading(true);
-      const data = await getAuditLog(filter);
-      if (!cancelledRef.current) {
-        setEntries(data);
-        setError('');
-      }
-    } catch (err: unknown) {
-      if (cancelledRef.current) return;
-      const msg = (err && typeof err === 'object' && 'response' in err)
-        ? (err as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message
-        : err instanceof Error ? err.message : undefined;
-      setError(msg || 'Failed to load audit log');
-    } finally {
-      if (!cancelledRef.current) setLoading(false);
-    }
-  };
-
-  const handleApplyFilter = () => {
-    cancelledRef.current = false;
-    setLoading(true);
-    setError('');
-    getAuditLog(filter)
-      .then(data => { if (!cancelledRef.current) { setEntries(data); } })
-      .catch(err => {
-        if (cancelledRef.current) return;
-        const msg = (err && typeof err === 'object' && 'response' in err)
-          ? (err as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message
-          : err instanceof Error ? err.message : undefined;
-        setError(msg || 'Failed to load audit log');
-      })
-      .finally(() => { if (!cancelledRef.current) setLoading(false); });
-  };
+  const handleApplyFilter = () => runFetch(filter);
 
   const handleResetFilter = () => {
-    cancelledRef.current = false;
     const resetFilter = { limit: 50 };
     setFilter(resetFilter);
-    setError('');
-    setLoading(true);
-    getAuditLog(resetFilter)
-      .then(data => { if (!cancelledRef.current) setEntries(data); })
-      .catch(() => { if (!cancelledRef.current) setError('Failed to load audit log'); })
-      .finally(() => { if (!cancelledRef.current) setLoading(false); });
+    runFetch(resetFilter);
   };
 
   if (loading) {
