@@ -213,6 +213,8 @@ public:
   [[nodiscard]] EntityStats getOrderStats(const StatsFilter &filter = StatsFilter{});
   [[nodiscard]] EntityStats
   getResultStats(const StatsFilter &filter = StatsFilter{});
+  [[nodiscard]] std::vector<StatusCount> getOrderPriorityStats();
+  [[nodiscard]] int getCriticalResultCount();
   [[nodiscard]] bool exportStatsReportToCsv(
       const std::string &filePath, const StatsFilter &sampleFilter,
       const StatsFilter &orderFilter, const StatsFilter &resultFilter,

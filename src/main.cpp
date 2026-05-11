@@ -52,6 +52,17 @@ int main(int argc, char *argv[]) {
   std::string dbPath;
   bool runApi = false;
   int apiPort = 8080;
+  bool forceHttps = false;
+  std::string tlsCert;
+  std::string tlsKey;
+
+  // Check env vars for TLS
+  {
+    const char *envCert = std::getenv("OPENSYLAB_TLS_CERT");
+    const char *envKey  = std::getenv("OPENSYLAB_TLS_KEY");
+    if (envCert && *envCert) tlsCert = envCert;
+    if (envKey  && *envKey)  tlsKey  = envKey;
+  }
 
   for (int i = 1; i < argc; ++i) {
     std::string arg = argv[i];
@@ -69,6 +80,18 @@ int main(int argc, char *argv[]) {
     }
     if (arg == "--db" && i + 1 < argc) {
       dbPath = argv[++i];
+      continue;
+    }
+    if (arg == "--tls-cert" && i + 1 < argc) {
+      tlsCert = argv[++i];
+      continue;
+    }
+    if (arg == "--tls-key" && i + 1 < argc) {
+      tlsKey = argv[++i];
+      continue;
+    }
+    if (arg == "--force-https") {
+      forceHttps = true;
       continue;
     }
     if (dbPath.empty()) {
@@ -102,9 +125,33 @@ int main(int argc, char *argv[]) {
   std::cout << "Datenbank erfolgreich initialisiert.\n" << std::endl;
 
   if (runApi) {
+    // Validate --force-https: requires TLS configuration
+    if (forceHttps && (tlsCert.empty() || tlsKey.empty())) {
+      std::cerr << "FEHLER: --force-https requires TLS configuration.\n"
+                << "  Provide --tls-cert and --tls-key or set\n"
+                << "  OPENSYLAB_TLS_CERT and OPENSYLAB_TLS_KEY.\n";
+      database->close();
+      return 1;
+    }
+
     std::cout << "API-Server wird auf Port " << apiPort << " gestartet...\n"
               << std::endl;
     opensylab::api::ApiServer server(database, apiPort);
+
+    // Enable TLS if cert/key provided
+    if (!tlsCert.empty() && !tlsKey.empty()) {
+      if (!server.enableTls(tlsCert, tlsKey)) {
+        std::cerr << "WARNUNG: TLS konnte nicht aktiviert werden. Starte ohne TLS.\n";
+        if (forceHttps) {
+          std::cerr << "FEHLER: --force-https erfordert funktionierendes TLS.\n";
+          database->close();
+          return 1;
+        }
+      } else {
+        std::cout << "TLS aktiviert.\n" << std::endl;
+      }
+    }
+
     if (!server.run()) {
       std::cerr << "FEHLER: API-Server konnte nicht gestartet werden.\n";
       database->close();

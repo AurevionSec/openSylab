@@ -3485,6 +3485,42 @@ Database::EntityStats Database::getResultStats(const StatsFilter &filter) {
   return stats;
 }
 
+std::vector<Database::StatusCount> Database::getOrderPriorityStats() {
+  std::vector<StatusCount> result;
+  if (!isOpen_) return result;
+  const char *sql =
+      "SELECT priority, COUNT(*) as cnt FROM orders "
+      "WHERE status != 'CANCELLED' GROUP BY priority ORDER BY cnt DESC";
+  sqlite3_stmt *rawStmt = nullptr;
+  if (sqlite3_prepare_v2(db_, sql, -1, &rawStmt, nullptr) != SQLITE_OK) {
+    return result;
+  }
+  auto stmt = makeStatement(rawStmt);
+  while (sqlite3_step(stmt.get()) == SQLITE_ROW) {
+    StatusCount sc;
+    sc.status = columnText(stmt.get(), 0);
+    sc.count = sqlite3_column_int(stmt.get(), 1);
+    result.push_back(sc);
+  }
+  return result;
+}
+
+int Database::getCriticalResultCount() {
+  if (!isOpen_) return 0;
+  const char *sql =
+      "SELECT COUNT(*) FROM test_results "
+      "WHERE flag = 'CRITICAL' AND status != 'REJECTED'";
+  sqlite3_stmt *rawStmt = nullptr;
+  if (sqlite3_prepare_v2(db_, sql, -1, &rawStmt, nullptr) != SQLITE_OK) {
+    return 0;
+  }
+  auto stmt = makeStatement(rawStmt);
+  if (sqlite3_step(stmt.get()) == SQLITE_ROW) {
+    return sqlite3_column_int(stmt.get(), 0);
+  }
+  return 0;
+}
+
 bool Database::exportStatsReportToCsv(
     const std::string &filePath, const StatsFilter &sampleFilter,
     const StatsFilter &orderFilter, const StatsFilter &resultFilter,

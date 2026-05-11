@@ -14,6 +14,8 @@ export interface DashboardStats {
   samples: EntityStats;
   orders: EntityStats;
   results: EntityStats;
+  order_priority?: StatusCount[];
+  critical_count?: number;
 }
 
 export interface StatsFilter {

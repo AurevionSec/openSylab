@@ -5,8 +5,6 @@ import { getSamples } from '../services/samples';
 import { getOrders } from '../services/orders';
 import { getResults } from '../services/results';
 import type { Sample } from '../types/sample';
-import type { Order } from '../types/order';
-import type { TestResult } from '../types/result';
 import type { DashboardStats } from '../types/stats';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { ErrorBanner } from '../components/common/ErrorBanner';
@@ -33,8 +31,6 @@ export const Dashboard = () => {
   useDocumentTitle({ module: 'Dashboard' });
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [samples, setSamples] = useState<Sample[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [results, setResults] = useState<TestResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -77,8 +73,6 @@ export const Dashboard = () => {
 
         setStats(statsData);
         setSamples(samplesData.samples);
-        setOrders(ordersData.orders);
-        setResults(resultsData.results);
       } catch (err) {
         console.error('Dashboard error:', err);
         setError('Failed to load dashboard data');
@@ -107,17 +101,15 @@ export const Dashboard = () => {
   }));
 
   // Priority distribution from loaded orders
-  const priorityCounts = new Map<string, number>();
-  orders.forEach(o => priorityCounts.set(o.priority, (priorityCounts.get(o.priority) || 0) + 1));
   const priorityColors: Record<string, string> = { NORMAL: '#9CA3AF', URGENT: '#F97316', EMERGENCY: '#EF4444' };
-  const orderPriorityChart = Array.from(priorityCounts.entries()).map(([name, count]) => ({
-    name,
-    count,
-    fill: priorityColors[name] ?? '#6B7280',
+  const orderPriorityChart = (stats?.order_priority ?? []).map(s => ({
+    name: s.status,
+    count: s.count,
+    fill: priorityColors[s.status] ?? '#6B7280',
   }));
 
   // Critical results
-  const criticalCount = results.filter(r => r.flag === 'CRITICAL').length;
+  const criticalCount = stats?.critical_count ?? 0;
 
   const getStatusColor = (status: string) => {
     const statusMap: Record<string, string> = {

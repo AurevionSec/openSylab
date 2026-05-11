@@ -2653,11 +2653,22 @@ after_user_update:
       return makeDbErrorResponse(database_->getLastError());
     }
 
+    auto orderPriorityStats = database_->getOrderPriorityStats();
+    const int criticalCount = database_->getCriticalResultCount();
+
     std::ostringstream out;
     out << "{"
         << "\"samples\":" << statsToJson(sampleStats, "samples") << ","
         << "\"orders\":" << statsToJson(orderStats, "orders") << ","
-        << "\"results\":" << statsToJson(resultStats, "results")
+        << "\"results\":" << statsToJson(resultStats, "results") << ","
+        << "\"order_priority\":[";
+    for (size_t i = 0; i < orderPriorityStats.size(); ++i) {
+      if (i > 0) out << ",";
+      out << "{" << "\"status\":" << jsonString(orderPriorityStats[i].status)
+          << ",\"count\":" << orderPriorityStats[i].count << "}";
+    }
+    out << "],"
+        << "\"critical_count\":" << criticalCount
         << "}";
 
     return ApiResponse{200, out.str(), "application/json"};
