@@ -4,8 +4,42 @@ Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert
 
 ## [0.7.0] - 2026-05-11
 
-### Änderungen
-- Version Bump auf 0.7.0
+### Sicherheit
+- **JWT-Authentifizierung** vollständig implementiert (ersetzt API-Key-Only-Modus)
+- **PBKDF2-HMAC-SHA256** Passwort-Hashing (210.000 Iterationen, OWASP 2023)
+- **RBAC** (Role-Based Access Control): ADMIN / OPERATOR / VIEWER / CUSTOM — auf allen Schreib-Endpoints durchgesetzt
+- **Last-Admin-Schutz**: updateUser, deleteUser, assignUserRole blockieren Demotierung/Deaktivierung des letzten aktiven Admins innerhalb einer Transaktion (kein TOCTOU-Fenster)
+- **MFA (TOTP RFC 6238)**: Zwei-Schritt-Login-Flow, ±1 Zeitfenster-Toleranz
+- **LDAP-Authentifizierung** mit lokaler Shadow-Account-Verwaltung
+- **Self-Delete-Guard**: Admin kann sich nicht selbst deaktivieren
+
+### Neue Features
+- **Soft-Delete** für Proben (ARCHIVED), Aufträge (CANCELLED), Ergebnisse (REJECTED) — physische Zeilen bleiben für Audit-Trail erhalten
+- **Auto-Flag-Berechnung** bei Ergebnissen: NORMAL / LOW / HIGH / CRITICAL (margins-basiert: 50 % des Referenzintervalls)
+- **Batch-CSV-Import** für Proben und Ergebnisse mit Fehler-Tracking pro Zeile
+- **HL7 v2.5.1 Import/Export** (ORU^R01) mit korrektem Feld-Escaping (`\F\`, `\S\`, …)
+- **FHIR R4 Bundle** Import/Export
+- **Audit-Log-Export** als CSV mit Retention-Policy
+- **Dashboard-Statistiken** mit Status-Breakdown (Echtzeitdaten)
+- **Single Source of Truth** für Versionsnummer: `CMakeLists.txt` → `include/version.h` (C++); `package.json` → `import.meta.env.VITE_APP_VERSION` (Frontend)
+
+### Fehlerbehebungen (Bughunt-Iterationen 25–56)
+- 60+ Bugs behoben, darunter:
+  - TOCTOU-Race in updateUser/deleteUser/assignUserRole → Transaktion öffnet vor dem Lesen
+  - `sqlite3_errmsg()` nach `ROLLBACK` → Fehlermeldung jetzt vor dem Rollback gesichert (43 Stellen)
+  - DELETE `/api/v1/users/:id` war durch Routing-Block unerreichbar
+  - `exportValidatedResultsToCsv` TOCTOU: Datei und Audit-Log jetzt atomar
+  - Alle Export-Funktionen entfernen Teildateien auf jedem Fehlerpfad
+  - `makeDbErrorResponse` sanitisiert SQLite-Internals aus HTTP-Antworten
+  - MFA-403-Interceptor blockierte Login-Flow im Frontend
+  - `ResultEditModal` nutzte numerische PK statt `result_id` für PUT-Requests
+  - `updateResult` sendete falsche Feldnamen (`reviewed_by`/`notes` statt `measured_by`/`comment`)
+
+### Qualität
+- **181 Unit-Tests** (von 62 auf 181 ausgebaut)
+- TypeScript Strict-Mode — keine `any`-Typen im Produktionscode
+- Vollständige RBAC-Durchsetzung im Frontend (canWrite-Guards, Sidebar-Links)
+- `useEntityList`-Hook mit korrekter Abbruch-Mechanik (kein State-Update nach Unmount)
 
 ## [0.6.0-polish] - 2026-02-11
 

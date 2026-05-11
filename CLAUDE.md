@@ -196,6 +196,9 @@ Aktive Bugs werden ausschließlich in `TODO.md` dokumentiert.
 | Datenbank | `src/db/Database.{cpp,h}` |
 | Domain-Entities | `include/core/*.h` |
 | CMake Source-Registrierung | `CMakeLists.txt` (CORE_SOURCES, API_SOURCES, …) |
+| **Versionsnummer (C++ SSOT)** | **`CMakeLists.txt` → `project(VERSION x.y.z)` → generiert `include/version.h`** |
+| **Versionsnummer (Frontend SSOT)** | **`frontend/package.json` → `"version"` → `import.meta.env.VITE_APP_VERSION`** |
+| Versionsdoku | `docs/VERSIONING.md` |
 | Test-Registrierung | `test/CMakeLists.txt` |
 | Unit-Tests | `test/unit/` |
 | Docker-Config | `docker-compose.yml` |
