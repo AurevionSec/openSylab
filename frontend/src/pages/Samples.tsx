@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Layout } from '../components/Layout/Layout';
 import { Card } from '../components/common/Card';
 import { Button } from '../components/common/Button';
@@ -17,8 +18,18 @@ export const Samples = () => {
   useDocumentTitle({ module: 'Samples' });
   const { user } = useAuth();
   const canWrite = user?.role === 'ADMIN' || user?.role === 'OPERATOR';
+  const location = useLocation();
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedStatus, setSelectedStatus] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
+
+  // Read ?q= from URL on mount and when URL changes
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const q = params.get('q') || '';
+    setSearchQuery(q);
+    setCurrentPage(1);
+  }, [location.search]);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedSampleId, setSelectedSampleId] = useState<string | null>(null);
@@ -29,11 +40,12 @@ export const Samples = () => {
   const { data: samples, total: totalSamples, loading, error, refetch } = useEntityList(
     () =>
       getSamples({
+        q: searchQuery || undefined,
         status: selectedStatus || undefined,
         limit: itemsPerPage,
         offset: (currentPage - 1) * itemsPerPage,
       }).then((r) => ({ data: r.samples, total: r.total })),
-    [selectedStatus, currentPage]
+    [searchQuery, selectedStatus, currentPage]
   );
 
   const totalPages = Math.ceil(totalSamples / itemsPerPage);
@@ -104,6 +116,13 @@ export const Samples = () => {
         </div>
 
         <Card>
+          {searchQuery && (
+            <div className="mb-4 flex items-center gap-2 text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded px-3 py-2">
+              <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+              <span>Suche: <strong>{searchQuery}</strong></span>
+              <button className="ml-auto text-blue-500 hover:text-blue-700" onClick={() => { setSearchQuery(''); setCurrentPage(1); }}>✕</button>
+            </div>
+          )}
           <div className="mb-6">
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Filter by Status

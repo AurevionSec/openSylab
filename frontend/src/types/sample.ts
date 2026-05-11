@@ -10,6 +10,7 @@ export interface Sample {
 }
 
 export interface SampleFilter {
+  q?: string;
   status?: string;
   from?: string;
   to?: string;

@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Layout } from '../components/Layout/Layout';
 import { Card } from '../components/common/Card';
 import { Button } from '../components/common/Button';
@@ -17,9 +18,18 @@ export const Orders = () => {
   useDocumentTitle({ module: 'Orders' });
   const { user } = useAuth();
   const canWrite = user?.role === 'ADMIN' || user?.role === 'OPERATOR';
+  const location = useLocation();
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedStatus, setSelectedStatus] = useState<string>('');
   const [selectedPriority, setSelectedPriority] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const q = params.get('q') || '';
+    setSearchQuery(q);
+    setCurrentPage(1);
+  }, [location.search]);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
@@ -30,12 +40,13 @@ export const Orders = () => {
   const { data: orders, total: totalOrders, loading, error, refetch } = useEntityList(
     () =>
       getOrders({
+        q: searchQuery || undefined,
         status: selectedStatus || undefined,
         priority: selectedPriority || undefined,
         limit: itemsPerPage,
         offset: (currentPage - 1) * itemsPerPage,
       }).then((r) => ({ data: r.orders, total: r.total })),
-    [selectedStatus, selectedPriority, currentPage]
+    [searchQuery, selectedStatus, selectedPriority, currentPage]
   );
 
   const totalPages = Math.ceil(totalOrders / itemsPerPage);

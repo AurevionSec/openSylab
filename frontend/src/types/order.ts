@@ -24,6 +24,7 @@ export type OrderPriority =
   | 'EMERGENCY';
 
 export interface OrderFilter {
+  q?: string;
   status?: string;
   sample_id?: string;
   priority?: string;

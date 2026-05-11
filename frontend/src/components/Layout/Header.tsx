@@ -1,9 +1,27 @@
+import { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { useLocation, Link } from 'react-router-dom';
+import { useLocation, Link, useNavigate } from 'react-router-dom';
 
 export const Header = () => {
   const { logout } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const handleSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Enter') return;
+    const q = searchQuery.trim();
+    if (!q) return;
+    // Route by prefix: S- → samples, O- → orders, R- → results, otherwise samples
+    if (q.toUpperCase().startsWith('O-') || q.toUpperCase().startsWith('O')) {
+      navigate(`/orders?q=${encodeURIComponent(q)}`);
+    } else if (q.toUpperCase().startsWith('R-')) {
+      navigate(`/results?q=${encodeURIComponent(q)}`);
+    } else {
+      navigate(`/samples?q=${encodeURIComponent(q)}`);
+    }
+    setSearchQuery('');
+  };
 
   const handleLogout = () => {
     logout();
@@ -52,7 +70,10 @@ export const Header = () => {
           <input
             type="text"
             className="flex-1 text-sm outline-none placeholder-gray-400 bg-transparent min-w-0"
-            placeholder="ID suchen…"
+            placeholder="ID suchen… (Enter)"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={handleSearch}
           />
         </div>
 
