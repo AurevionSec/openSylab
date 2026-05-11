@@ -48,30 +48,59 @@ Es verwaltet Proben, Aufträge und Testergebnisse mit vollständigem Audit-Trail
 
 ---
 
-## Features
+## Features — v0.7.0
 
-### Kernfunktionen
+### Labordaten-Verwaltung
 | Feature | Beschreibung |
 |---------|-------------|
-| **Probenverwaltung** | CRUD, Barcode-Scan, Status-Workflow (REGISTERED → ARCHIVED) |
-| **Auftragsverwaltung** | Verknüpfung mit Proben, Prioritäten (NORMAL/URGENT/EMERGENCY) |
-| **Ergebniseingabe** | Auto-Flag (NORMAL/LOW/HIGH/CRITICAL) mit Referenzbereich |
-| **Batch-Import** | CSV-Import für Proben und Ergebnisse mit Fehlerreporting |
-| **HL7 v2.5.1** | ORU^R01 Import/Export mit korrektem Feld-Escaping |
-| **FHIR R4** | Bundle Import/Export |
-| **Audit-Trail** | Vollständig nach ISO 15189, CSV-Export mit Retention-Policy |
-| **Statistiken** | Dashboard-Kacheln, Statusverteilung, kritische Ergebnisse |
+| **Probenverwaltung** | CRUD, Barcode-Scan (BarcodeDetector API), Status-Workflow: REGISTERED → IN_ANALYSIS → ANALYZED → VALIDATED → ARCHIVED |
+| **Auftragsverwaltung** | Verknüpfung mit Proben, Prioritäten (NORMAL / URGENT / EMERGENCY), Status-Workflow |
+| **Ergebniseingabe** | Auto-Flag bei Eingabe: NORMAL / LOW / HIGH / **CRITICAL** (margin-basiert: 50 % des Referenzintervalls) |
+| **Soft-Delete** | Proben → ARCHIVED, Aufträge → CANCELLED, Ergebnisse → REJECTED — Zeilen bleiben für Audit-Trail erhalten |
+| **Referenzbereiche** | Pro Ergebnis `reference_low` / `reference_high`, Flag wird bei jedem Update neu berechnet |
+| **Paginierung** | Server-seitige Paginierung auf allen Listen-Endpoints (limit / offset) |
+| **Globale Suche** | Header-Suchleiste navigiert per `?q=` zu Samples oder Orders |
+
+### Datenimport / -export
+| Feature | Beschreibung |
+|---------|-------------|
+| **Batch-CSV-Import (Proben)** | RFC 4180, BOM-tolerant, Fehler-Tracking pro Zeile, Retry-CSV für fehlgeschlagene Zeilen |
+| **Batch-CSV-Import (Ergebnisse)** | Multiline-Felder mit korrektem Escape-State-Machine |
+| **HL7 v2.5.1** | ORU^R01 Import + Export mit vollständigem Feld-Escaping (`\F\`, `\S\`, `\R\`, `\T\`, `\E\`) |
+| **FHIR R4** | Bundle-Import (Patient, Specimen, ServiceRequest, Observation) + Export |
+| **Audit-Log-Export** | CSV-Export mit konfigurierbarer Retention-Policy |
+| **Statistiken** | Dashboard-Kacheln, Statusverteilung, kritische Ergebnisse (Echtzeit) |
 
 ### Sicherheit
 | Feature | Beschreibung |
 |---------|-------------|
-| **JWT-Authentifizierung** | HMAC-SHA256, konfigurierbare Ablaufzeit |
-| **PBKDF2-Passwort-Hashing** | 210.000 Iterationen (OWASP 2023) |
-| **RBAC** | 4 Rollen: ADMIN / OPERATOR / VIEWER / CUSTOM |
-| **MFA (TOTP)** | RFC 6238, ±1 Zeitfenster, Google Authenticator kompatibel |
-| **LDAP** | Optionale LDAP-Authentifizierung mit lokalem Shadow-Account |
-| **Letzter-Admin-Schutz** | Transaktional gesichert gegen Race Conditions |
-| **Audit bei allen Writes** | CREATE / UPDATE / DELETE immer mit AuditEntry |
+| **JWT-Authentifizierung** | HMAC-SHA256, Ablaufzeit konfigurierbar via `OPENSYLAB_JWT_SECRET` |
+| **PBKDF2-Passwort-Hashing** | 210.000 Iterationen, Random-Salt, konstanter Zeitvergleich (OWASP 2023) |
+| **RBAC** | 4 Rollen: ADMIN / OPERATOR / VIEWER / CUSTOM — auf allen Schreib-Endpoints erzwungen |
+| **MFA (TOTP)** | RFC 6238 HMAC-SHA1, ±1 Zeitfenster (90 s), Google Authenticator kompatibel |
+| **LDAP** | Optionale LDAP-Authentifizierung mit lokalem Shadow-Account und Rollen-Mapping |
+| **Letzter-Admin-Schutz** | `updateUser`, `deleteUser`, `assignUserRole` blockieren Demotierung des letzten Admins — transaktional, kein TOCTOU |
+| **Self-Delete-Guard** | Admin kann sich nicht selbst deaktivieren |
+| **Audit bei allen Writes** | Jedes CREATE / UPDATE / DELETE erzeugt AuditEntry mit `user_id`, `action`, `entity`, `timestamp` |
+| **Fehler-Sanitisierung** | HTTP-Antworten enthalten keine SQLite-Internals (Tabellennamen, Constraints) |
+
+### Frontend / UX
+| Feature | Beschreibung |
+|---------|-------------|
+| **React 18 + TypeScript strict** | Keine `any`-Typen im Produktionscode |
+| **RBAC im UI** | `canWrite`-Guards auf allen Create/Edit/Delete-Buttons; Sidebar-Links rollenabhängig |
+| **Responsive Tabellen** | Sekundäre Spalten auf Tablet ausgeblendet (`md:hidden`) |
+| **useEntityList-Hook** | Universeller paginierter Listen-Hook mit Abbruch-Mechanik (kein State-Update nach Unmount) |
+| **MFA-Login-Flow** | Zweistufiger Login: Credentials → TOTP-Code (vollständig durchverdrahtet) |
+| **Version-SSOT** | `CMakeLists.txt` → `include/version.h` (C++); `package.json` → `import.meta.env.VITE_APP_VERSION` (Frontend) |
+
+### Qualität
+| Metrik | Wert |
+|--------|------|
+| **Unit-Tests** | 181 (Backend C++) |
+| **TypeScript** | strict mode, 0 Errors |
+| **npm audit** | 0 Vulnerabilities |
+| **Bughunts** | 56 Iterationen, 60+ Bugs behoben |
 
 ---
 
