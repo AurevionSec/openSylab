@@ -15,6 +15,8 @@
 #include <sstream>
 #include <sys/socket.h>
 #include <unistd.h>
+#include "utils/Hl7.h"
+#include "utils/Fhir.h"
 
 namespace opensylab {
 namespace api {
@@ -2695,6 +2697,146 @@ after_user_update:
     return ApiResponse{200, buf.str(), "text/csv; charset=utf-8"};
   }
 
+  // POST /api/v1/hl7/import - HL7 v2.5.1 Import
+  if (method == "post" && path == "/api/v1/hl7/import") {
+    if (effectiveRole == "VIEWER" || effectiveRole == "CUSTOM") {
+      return makeError(403, "forbidden", "Insufficient permissions",
+                       "OPERATOR or ADMIN role required.");
+    }
+    utils::Hl7Exchange exchange(database_);
+    utils::Hl7Exchange::ImportSummary summary;
+    if (!exchange.importOruR01Message(request.body, actor, summary)) {
+      return makeError(422, "import_error", "HL7 import failed",
+                       summary.lastError);
+    }
+    std::ostringstream jsonBody;
+    jsonBody << "{\"imported\":{"
+             << "\"samples\":" << summary.samplesCreated << ","
+             << "\"orders\":" << summary.ordersCreated << ","
+             << "\"results\":" << summary.resultsCreated
+             << "}}";
+    return ApiResponse{200, jsonBody.str(), "application/json"};
+  }
+
+  // GET /api/v1/hl7/export/{id} - HL7 v2.5.1 Export
+  if (method == "get" && path.rfind("/api/v1/hl7/export/", 0) == 0) {
+    if (effectiveRole == "VIEWER" || effectiveRole == "CUSTOM") {
+      return makeError(403, "forbidden", "Insufficient permissions",
+                       "OPERATOR or ADMIN role required.");
+    }
+    const std::string pathSegment = path.substr(path.rfind('/') + 1);
+    if (pathSegment.empty()) {
+      return makeError(400, "validation_error", "Missing sample id",
+                       "Provide sample id in URL path.");
+    }
+    int sampleId = 0;
+    if (!parseIntValue(pathSegment, sampleId) || sampleId <= 0) {
+      return makeError(400, "validation_error", "Invalid sample id",
+                       "Provide numeric sample id.");
+    }
+    auto sample = database_->getSample(sampleId);
+    if (database_->hasError()) {
+      return makeDbErrorResponse(database_->getLastError());
+    }
+    if (!sample) {
+      return makeError(404, "not_found", "Sample not found",
+                       "Verify the sample id.");
+    }
+    auto orders = database_->getOrdersBySampleId(sample->getSampleId());
+    if (database_->hasError()) {
+      return makeDbErrorResponse(database_->getLastError());
+    }
+    if (orders.empty()) {
+      return makeError(404, "not_found", "No orders found",
+                       "Sample has no associated orders.");
+    }
+    const core::Order &order = *orders[0];
+    auto resultPtrs = database_->getTestResultsByOrderId(order.getId(), 1000, 0);
+    if (database_->hasError()) {
+      return makeDbErrorResponse(database_->getLastError());
+    }
+
+    std::vector<core::TestResult> resultCopies;
+    resultCopies.reserve(resultPtrs.size());
+    for (const auto &r : resultPtrs) {
+      resultCopies.push_back(*r);
+    }
+
+    utils::Hl7Exchange exchange(database_);
+    std::string hl7Body = exchange.exportOruR01Message(*sample, order, resultCopies);
+    return ApiResponse{200, hl7Body, "application/hl7-v2"};
+  }
+
+  // POST /api/v1/fhir/import - FHIR R4 Import
+  if (method == "post" && path == "/api/v1/fhir/import") {
+    if (effectiveRole == "VIEWER" || effectiveRole == "CUSTOM") {
+      return makeError(403, "forbidden", "Insufficient permissions",
+                       "OPERATOR or ADMIN role required.");
+    }
+    utils::FhirExchange exchange(database_);
+    utils::FhirExchange::ImportSummary summary;
+    if (!exchange.importBundle(request.body, actor, summary)) {
+      return makeError(422, "import_error", "FHIR import failed",
+                       summary.lastError);
+    }
+    std::ostringstream jsonBody;
+    jsonBody << "{\"imported\":{"
+             << "\"samples\":" << summary.samplesCreated << ","
+             << "\"orders\":" << summary.ordersCreated << ","
+             << "\"results\":" << summary.resultsCreated
+             << "}}";
+    return ApiResponse{200, jsonBody.str(), "application/json"};
+  }
+
+  // GET /api/v1/fhir/export/{id} - FHIR R4 Export
+  if (method == "get" && path.rfind("/api/v1/fhir/export/", 0) == 0) {
+    if (effectiveRole == "VIEWER" || effectiveRole == "CUSTOM") {
+      return makeError(403, "forbidden", "Insufficient permissions",
+                       "OPERATOR or ADMIN role required.");
+    }
+    const std::string pathSegment = path.substr(path.rfind('/') + 1);
+    if (pathSegment.empty()) {
+      return makeError(400, "validation_error", "Missing sample id",
+                       "Provide sample id in URL path.");
+    }
+    int sampleId = 0;
+    if (!parseIntValue(pathSegment, sampleId) || sampleId <= 0) {
+      return makeError(400, "validation_error", "Invalid sample id",
+                       "Provide numeric sample id.");
+    }
+    auto sample = database_->getSample(sampleId);
+    if (database_->hasError()) {
+      return makeDbErrorResponse(database_->getLastError());
+    }
+    if (!sample) {
+      return makeError(404, "not_found", "Sample not found",
+                       "Verify the sample id.");
+    }
+    auto orders = database_->getOrdersBySampleId(sample->getSampleId());
+    if (database_->hasError()) {
+      return makeDbErrorResponse(database_->getLastError());
+    }
+    if (orders.empty()) {
+      return makeError(404, "not_found", "No orders found",
+                       "Sample has no associated orders.");
+    }
+    const core::Order &order = *orders[0];
+    auto resultPtrs = database_->getTestResultsByOrderId(order.getId(), 1000, 0);
+    if (database_->hasError()) {
+      return makeDbErrorResponse(database_->getLastError());
+    }
+
+    std::vector<core::TestResult> resultCopies;
+    resultCopies.reserve(resultPtrs.size());
+    for (const auto &r : resultPtrs) {
+      resultCopies.push_back(*r);
+    }
+
+    utils::FhirExchange exchange(database_);
+    std::string fhirBody = exchange.exportBundle(*sample, order, resultCopies);
+    return ApiResponse{200, fhirBody, "application/fhir+json"};
+  }
+
   return makeError(404, "not_found", "Endpoint not found",
                    "Check the requested path.");
 }
@@ -2947,9 +3089,7 @@ void ApiServer::handleClientTls(int clientFd) {
       << "\r\n";
   out << "Content-Type: " << response.contentType << "\r\n";
   out << "Content-Length: " << response.body.size() << "\r\n";
-  const char* _rawCors = std::getenv("OPENSYLAB_CORS_ORIGIN");
-        const std::string _corsOrigin = (_rawCors && *_rawCors) ? trim(std::string(_rawCors)) : "http://localhost:5173";
-        out << "Access-Control-Allow-Origin: " << _corsOrigin << "\r\n";
+  out << "Access-Control-Allow-Origin: " << corsOrigin_ << "\r\n";
   out << "Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\n";
   out << "Access-Control-Allow-Headers: Content-Type, X-API-Key, Authorization\r\n";
   out << "Access-Control-Max-Age: 3600\r\n";
@@ -3048,9 +3188,7 @@ void ApiServer::handleClientPlain(int clientFd) {
       << "\r\n";
   out << "Content-Type: " << response.contentType << "\r\n";
   out << "Content-Length: " << response.body.size() << "\r\n";
-  const char* _rawCors = std::getenv("OPENSYLAB_CORS_ORIGIN");
-        const std::string _corsOrigin = (_rawCors && *_rawCors) ? trim(std::string(_rawCors)) : "http://localhost:5173";
-        out << "Access-Control-Allow-Origin: " << _corsOrigin << "\r\n";
+  out << "Access-Control-Allow-Origin: " << corsOrigin_ << "\r\n";
   out << "Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\n";
   out << "Access-Control-Allow-Headers: Content-Type, X-API-Key, Authorization\r\n";
   out << "Access-Control-Max-Age: 3600\r\n";
