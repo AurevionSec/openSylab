@@ -41,6 +41,7 @@ public:
   const std::string &getDescription() const { return description_; }
   Status getStatus() const { return status_; }
   std::time_t getRegistrationDate() const { return registrationDate_; }
+  std::time_t getUpdatedAt() const { return updatedAt_; }
 
   // Setter
   void setId(int id) { id_ = id; }
@@ -50,6 +51,7 @@ public:
   void setDescription(const std::string &desc) { description_ = desc; }
   void setStatus(Status status) { status_ = status; }
   void setRegistrationDate(std::time_t date) { registrationDate_ = date; }
+  void setUpdatedAt(std::time_t t) { updatedAt_ = t; }
 
   // Hilfsfunktionen
   std::string getStatusString() const;
@@ -64,6 +66,7 @@ private:
   std::string description_;      // Beschreibung der Probe
   Status status_;                // Aktueller Status
   std::time_t registrationDate_; // Registrierungsdatum
+  std::time_t updatedAt_ = 0;    // Zuletzt geändert
 };
 
 } // namespace core

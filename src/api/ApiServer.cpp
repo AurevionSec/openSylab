@@ -633,7 +633,7 @@ std::string ApiRouter::orderToJson(const core::Order &order) {
   return out.str();
 }
 
-std::string ApiRouter::resultToJson(const core::TestResult &result) {
+std::string ApiRouter::resultToJson(const core::TestResult &result, const std::string &orderIdStr) {
   std::ostringstream out;
   out << "{"
       << "\"id\":" << result.getId() << ","
@@ -2127,13 +2127,23 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
         results.clear();
       }
     }
+    std::unordered_map<int, std::string> orderIdCache;
+    for (const auto &r : results) {
+      const int oid = r->getOrderId();
+      if (orderIdCache.find(oid) == orderIdCache.end()) {
+        auto ord = database_->getOrder(oid);
+        if (ord) { orderIdCache[oid] = ord->getOrderId(); }
+      }
+    }
     std::ostringstream out;
     out << "{\"data\":[";
     for (size_t i = 0; i < results.size(); ++i) {
       if (i > 0) {
         out << ",";
       }
-      out << resultToJson(*results[i]);
+      const auto cit = orderIdCache.find(results[i]->getOrderId());
+      const std::string &oidStr = (cit != orderIdCache.end()) ? cit->second : "";
+      out << resultToJson(*results[i], oidStr);
     }
     if (resultsTotal < 0) resultsTotal = static_cast<int>(results.size());
     out << "],\"total\":" << resultsTotal << "}";

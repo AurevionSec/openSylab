@@ -45,7 +45,7 @@ public:
 
   static std::string sampleToJson(const core::Sample &sample);
   static std::string orderToJson(const core::Order &order);
-  static std::string resultToJson(const core::TestResult &result);
+  static std::string resultToJson(const core::TestResult &result, const std::string &orderIdStr = "");
 
 private:
   // Authentication handlers

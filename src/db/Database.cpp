@@ -241,6 +241,8 @@ std::unique_ptr<opensylab::core::Sample> sampleFromRow(sqlite3_stmt *stmt) {
       opensylab::core::Sample::stringToStatus(columnText(stmt, 5)));
   sample->setRegistrationDate(
       static_cast<std::time_t>(sqlite3_column_int64(stmt, 6)));
+  sample->setUpdatedAt(
+      static_cast<std::time_t>(sqlite3_column_int64(stmt, 7)));
   return sample;
 }
 
@@ -393,7 +395,8 @@ bool Database::initializeSchema() {
             patient_name TEXT,
             description TEXT,
             status TEXT NOT NULL,
-            registration_date INTEGER NOT NULL
+            registration_date INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL DEFAULT 0
         );
 
         CREATE INDEX IF NOT EXISTS idx_sample_id ON samples(sample_id);
@@ -899,7 +902,7 @@ std::unique_ptr<core::Sample> Database::getSample(int id) {
   }
 
   const char *selectSQL = R"(
-        SELECT id, sample_id, patient_id, patient_name, description, status, registration_date
+        SELECT id, sample_id, patient_id, patient_name, description, status, registration_date, updated_at
         FROM samples WHERE id = ?;
     )";
 
@@ -946,7 +949,7 @@ Database::getSampleByBarcode(const std::string &barcode) {
   }
 
   const char *selectSQL = R"(
-        SELECT id, sample_id, patient_id, patient_name, description, status, registration_date
+        SELECT id, sample_id, patient_id, patient_name, description, status, registration_date, updated_at
         FROM samples WHERE sample_id = ?;
     )";
 
@@ -994,7 +997,7 @@ std::vector<std::unique_ptr<core::Sample>> Database::getAllSamples() {
   }
 
   const char *selectSQL = R"(
-        SELECT id, sample_id, patient_id, patient_name, description, status, registration_date
+        SELECT id, sample_id, patient_id, patient_name, description, status, registration_date, updated_at
         FROM samples ORDER BY registration_date DESC;
     )";
 
@@ -1290,7 +1293,8 @@ bool Database::updateSample(const core::Sample &sample,
             patient_name = ?,
             description = ?,
             status = ?,
-            registration_date = ?
+            registration_date = ?,
+            updated_at = strftime('%s','now')
         WHERE id = ?;
     )";
 
