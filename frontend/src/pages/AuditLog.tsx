@@ -69,7 +69,28 @@ export const AuditLog = () => {
     <Layout>
       <div className="space-y-6">
         <div>
-          <h2 className="text-3xl font-bold text-gray-900">Audit Log</h2>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-2xl md:text-3xl font-bold text-gray-900">Audit Log</h2>
+            <button
+              onClick={() => {
+                const token = localStorage.getItem('opensylab_jwt_token');
+                fetch(`${import.meta.env.VITE_API_URL}/audit/export`, {
+                  headers: token ? { Authorization: `Bearer ${token}` } : {}
+                }).then(r => r.blob()).then(blob => {
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url; a.download = 'audit-log.csv'; a.click();
+                  URL.revokeObjectURL(url);
+                });
+              }}
+              className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+              </svg>
+              Export CSV
+            </button>
+          </div>
           <p className="text-gray-600 mt-1">System activity audit trail for compliance and monitoring</p>
         </div>
 

@@ -8,7 +8,9 @@
 #include "api/TlsContext.h"
 #include "auth/JwtAuth.h"
 #include <atomic>
+#include <chrono>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <optional>
@@ -106,6 +108,12 @@ private:
   std::atomic<bool> running_;
   std::unique_ptr<TlsContext> tlsContext_;
   bool tlsEnabled_;
+  std::string corsOrigin_;
+
+  // Rate limiting: IP → (attempts, window_start)
+  std::unordered_map<std::string, std::pair<int, std::chrono::steady_clock::time_point>> loginAttempts_;
+  std::mutex loginMutex_;
+  bool isRateLimited(const std::string &ip);
 };
 
 } // namespace api

@@ -1,4 +1,5 @@
 #include "api/ApiServer.h"
+#include "version.h"
 #include <algorithm>
 #include <arpa/inet.h>
 #include <cctype>
@@ -7,8 +8,10 @@
 #include <ctime>
 #include <iomanip>
 #include <iostream>
+#include <mutex>
 #include <unordered_set>
 #include <netinet/in.h>
+#include <fstream>
 #include <sstream>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -824,6 +827,17 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
     path = path.substr(0, qpos);
   }
 
+  // Route: GET /api/v1/health (unauthenticated)
+  if (method == "get" && path == "/api/v1/health") {
+    std::ostringstream h;
+    h << "{"
+      << "\"status\":\"ok\","
+      << "\"version\":" << jsonString(OPENSYLAB_VERSION) << ","
+      << "\"service\":\"opensylab-lims\""
+      << "}";
+    return ApiResponse{200, h.str(), "application/json"};
+  }
+
   // Route: POST /api/v1/auth/login (no authentication required)
   if (method == "post" && path == "/api/v1/auth/login") {
     return handleLogin(request);
@@ -1375,6 +1389,26 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       updated.setTestType(testIt->second);
       auto statusIt = payload.find("status");
       if (statusIt != payload.end() && !statusIt->second.empty()) {
+        // Order Status-Transition-Validierung (ISO 15189)
+        {
+          static const std::unordered_map<std::string,std::vector<std::string>> kTrans = {
+              {"REQUESTED",   {"IN_PROGRESS", "CANCELLED"}},
+              {"IN_PROGRESS", {"COMPLETED",   "CANCELLED"}},
+              {"COMPLETED",   {"VALIDATED"}},
+              {"VALIDATED",   {}},
+              {"CANCELLED",   {}},
+          };
+          const std::string &ns = statusIt->second;
+          const std::string &cs = existing->getStatusString();
+          auto ti = kTrans.find(cs);
+          if (ti != kTrans.end()) {
+            const auto &allowed = ti->second;
+            if (std::find(allowed.begin(), allowed.end(), ns) == allowed.end() && ns != cs) {
+              return makeError(409, "conflict", "Invalid status transition",
+                  "Transition " + cs + " -> " + ns + " is not allowed.");
+            }
+          }
+        }
         try {
           updated.setStatus(core::Order::stringToStatus(statusIt->second));
         } catch (const std::exception &e) {
@@ -2615,6 +2649,50 @@ after_user_update:
     return ApiResponse{200, out.str(), "application/json"};
   }
 
+  // GET /api/v1/audit/export — Audit-Log als CSV herunterladen (ADMIN only)
+  if (isGet && path == "/api/v1/audit/export") {
+    if (!jwtPayload.has_value() || (jwtPayload->role != "ADMIN" && jwtPayload->role != "Administrator")) {
+      return makeError(403, "forbidden", "Admin access required",
+                       "Only administrators can export the audit log.");
+    }
+
+    db::Database::AuditLogFilter filter;
+    auto fromIt = query.find("from");
+    if (fromIt != query.end()) {
+      std::time_t ts{};
+      if (parseTimeValue(fromIt->second, ts)) filter.fromTime = ts;
+    }
+    auto toIt = query.find("to");
+    if (toIt != query.end()) {
+      std::time_t ts{};
+      if (parseTimeValue(toIt->second, ts)) filter.toTime = ts;
+    }
+    auto limitIt = query.find("limit");
+    if (limitIt != query.end()) {
+      int lim = 0;
+      if (parseIntValue(limitIt->second, lim) && lim > 0) filter.limit = lim;
+    }
+
+    const std::string tmpPath = "/tmp/opensylab_audit_export_"
+        + std::to_string(std::time(nullptr)) + ".csv";
+    int exportedCount = 0;
+    if (!database_->exportAuditLogToCsv(tmpPath, filter, actor, exportedCount)) {
+      return makeDbErrorResponse(database_->getLastError());
+    }
+
+    // Read file into response body
+    std::ifstream f(tmpPath, std::ios::binary);
+    if (!f.is_open()) {
+      return makeError(500, "internal_error", "Export failed",
+                       "Could not read export file.");
+    }
+    std::ostringstream buf;
+    buf << f.rdbuf();
+    std::remove(tmpPath.c_str());
+
+    return ApiResponse{200, buf.str(), "text/csv; charset=utf-8"};
+  }
+
   return makeError(404, "not_found", "Endpoint not found",
                    "Check the requested path.");
 }
@@ -2626,7 +2704,35 @@ ApiServer::ApiServer(std::shared_ptr<db::Database> database, int port)
       serverFd_(-1),
       running_(false),
       tlsContext_(nullptr),
-      tlsEnabled_(false) {}
+      tlsEnabled_(false) {
+  // CORS-Origin einmalig lesen (verhindert doppeltes getenv in TLS + Plain)
+  const char* cors = std::getenv("OPENSYLAB_CORS_ORIGIN");
+  corsOrigin_ = (cors && *cors) ? std::string(cors) : "http://localhost:5173";
+  const std::string trim_cors = corsOrigin_.substr(corsOrigin_.find_first_not_of(" \t"));
+  corsOrigin_ = trim_cors.substr(0, trim_cors.find_last_not_of(" \t") + 1);
+
+  // JWT-Secret-Validierung
+  const char* jwtSecret = std::getenv("OPENSYLAB_JWT_SECRET");
+  if (!jwtSecret || std::string(jwtSecret).find("dev") != std::string::npos ||
+      std::string(jwtSecret).find("change") != std::string::npos ||
+      std::string(jwtSecret).length() < 32) {
+    std::cerr << "[SECURITY WARNING] Unsicheres oder fehlendes JWT-Secret. "
+                 "Setze OPENSYLAB_JWT_SECRET (min. 32 Zeichen) fuer Produktion!\n";
+  }
+}
+
+bool ApiServer::isRateLimited(const std::string &ip) {
+  std::lock_guard<std::mutex> lock(loginMutex_);
+  auto now = std::chrono::steady_clock::now();
+  auto &entry = loginAttempts_[ip];
+  // Fenster: 60 Sekunden, max. 10 Versuche
+  if (now - entry.second > std::chrono::seconds(60)) {
+    entry = {1, now};
+    return false;
+  }
+  entry.first++;
+  return entry.first > 10;
+}
 
 bool ApiServer::bindAndListen() {
   serverFd_ = socket(AF_INET, SOCK_STREAM, 0);
@@ -2812,6 +2918,26 @@ void ApiServer::handleClientTls(int clientFd) {
   }
   request.body = body;
 
+  // Rate-Limiting fuer Login
+  if (request.method == "post" && request.path == "/api/v1/auth/login") {
+    const auto fwdIt = request.headers.find("x-forwarded-for");
+    const std::string clientIp = (fwdIt != request.headers.end())
+        ? fwdIt->second : "conn:" + std::to_string(clientFd);
+    if (isRateLimited(clientIp)) {
+      const std::string rlBody =
+          R"({"error":{"code":"rate_limit","message":"Zu viele Login-Versuche","hint":"Bitte 60 Sekunden warten."}})";
+      std::ostringstream rlOut;
+      rlOut << "HTTP/1.1 429 Too Many Requests\r\n"
+            << "Content-Type: application/json\r\n"
+            << "Access-Control-Allow-Origin: " << corsOrigin_ << "\r\n"
+            << "Content-Length: " << rlBody.size() << "\r\n\r\n"
+            << rlBody;
+      const std::string rlStr = rlOut.str();
+      write(clientFd, rlStr.c_str(), rlStr.size());
+      return;
+    }
+  }
+
   ApiResponse response = router_.handleRequest(request);
 
   std::ostringstream out;
@@ -2892,6 +3018,26 @@ void ApiServer::handleClientPlain(int clientFd) {
     }
   }
   request.body = body;
+
+  // Rate-Limiting fuer Login
+  if (request.method == "post" && request.path == "/api/v1/auth/login") {
+    const auto fwdIt = request.headers.find("x-forwarded-for");
+    const std::string clientIp = (fwdIt != request.headers.end())
+        ? fwdIt->second : "conn:" + std::to_string(clientFd);
+    if (isRateLimited(clientIp)) {
+      const std::string rlBody =
+          R"({"error":{"code":"rate_limit","message":"Zu viele Login-Versuche","hint":"Bitte 60 Sekunden warten."}})";
+      std::ostringstream rlOut;
+      rlOut << "HTTP/1.1 429 Too Many Requests\r\n"
+            << "Content-Type: application/json\r\n"
+            << "Access-Control-Allow-Origin: " << corsOrigin_ << "\r\n"
+            << "Content-Length: " << rlBody.size() << "\r\n\r\n"
+            << rlBody;
+      const std::string rlStr = rlOut.str();
+      write(clientFd, rlStr.c_str(), rlStr.size());
+      return;
+    }
+  }
 
   ApiResponse response = router_.handleRequest(request);
 

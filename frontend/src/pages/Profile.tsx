@@ -286,6 +286,20 @@ const ChangePasswordForm = ({ onSuccess, onCancel }: ChangePasswordFormProps) =>
         disabled={loading || success}
         placeholder="Minimum 8 characters"
       />
+      {formData.new_password && (() => {
+        const pw = formData.new_password;
+        const score = [pw.length >= 8, /[A-Z]/.test(pw), /[a-z]/.test(pw), /[0-9]/.test(pw), /[^A-Za-z0-9]/.test(pw)].filter(Boolean).length;
+        const colors = ['bg-red-500','bg-orange-400','bg-yellow-400','bg-blue-500','bg-green-500'];
+        const labels = ['Sehr schwach','Schwach','Mittel','Gut','Stark'];
+        return (
+          <div className="-mt-1 mb-1">
+            <div className="flex gap-1 mb-0.5">
+              {[0,1,2,3,4].map(i => <div key={i} className={`h-1 flex-1 rounded-full ${i < score ? colors[score-1] : 'bg-gray-200'}`} />)}
+            </div>
+            <p className="text-xs text-gray-500">{labels[score-1] || 'Sehr schwach'}</p>
+          </div>
+        );
+      })()}
 
       <Input
         type="password"

@@ -13,7 +13,7 @@ export const Header = () => {
     const q = searchQuery.trim();
     if (!q) return;
     // Route by prefix: S- → samples, O- → orders, R- → results, otherwise samples
-    if (q.toUpperCase().startsWith('O-') || q.toUpperCase().startsWith('O')) {
+    if (q.toUpperCase().startsWith('O-')) {
       navigate(`/orders?q=${encodeURIComponent(q)}`);
     } else if (q.toUpperCase().startsWith('R-')) {
       navigate(`/results?q=${encodeURIComponent(q)}`);
@@ -38,7 +38,7 @@ export const Header = () => {
       '/samples': 'Samples',
       '/orders': 'Orders',
       '/results': 'Results',
-      '/audit': 'Audit Log',
+      '/audit-log': 'Audit Log',
       '/users': 'Users',
       '/profile': 'Profile',
     };
