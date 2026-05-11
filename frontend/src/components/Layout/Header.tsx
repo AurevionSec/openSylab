@@ -45,16 +45,14 @@ export const Header = () => {
       {/* Right Side: Search + Logout */}
       <div className="flex items-center space-x-4">
         {/* Search Bar */}
-        <div className="relative">
-          <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-          </span>
+        <div className="flex items-center border border-gray-300 rounded-sm px-3 py-1.5 w-64 gap-2 focus-within:border-[#2563EB] focus-within:ring-1 focus-within:ring-[#2563EB] bg-white">
+          <svg className="h-4 w-4 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
           <input
             type="text"
-            className="pl-10 pr-4 py-1.5 border border-gray-300 rounded-sm text-sm focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] w-64 placeholder-gray-400 font-mono"
-            placeholder="Search ID (e.g. S001)..."
+            className="flex-1 text-sm outline-none placeholder-gray-400 bg-transparent min-w-0"
+            placeholder="ID suchen…"
           />
         </div>
 

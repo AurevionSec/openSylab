@@ -72,8 +72,8 @@ export const Orders = () => {
   return (
     <Layout>
       <div className="space-y-6">
-        <div className="flex justify-between items-center">
-          <h2 className="text-3xl font-bold text-gray-900">Orders</h2>
+        <div className="flex flex-wrap justify-between items-center gap-3">
+          <h2 className="text-2xl md:text-3xl font-bold text-gray-900">Orders</h2>
           {canWrite && (
           <Button onClick={() => setIsCreateModalOpen(true)}>
             <span className="flex items-center gap-2">
@@ -159,28 +159,28 @@ export const Orders = () => {
                 <table className="min-w-full">
                   <thead className="bg-[#F4F5F7]">
                     <tr>
-                      <th className="px-6 py-3 text-left text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">
+                      <th className="px-3 md:px-6 py-3 text-left text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">
                         Order ID
                       </th>
-                      <th className="px-6 py-3 text-left text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">
+                      <th className="px-3 md:px-6 py-3 text-left text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">
                         Sample ID
                       </th>
-                      <th className="px-6 py-3 text-left text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">
+                      <th className="px-3 md:px-6 py-3 text-left text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">
                         Test Type
                       </th>
-                      <th className="px-6 py-3 text-left text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">
+                      <th className="px-3 md:px-6 py-3 text-left text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">
                         Status
                       </th>
-                      <th className="px-6 py-3 text-left text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">
+                      <th className="px-3 md:px-6 py-3 text-left text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">
                         Priority
                       </th>
-                      <th className="px-6 py-3 text-left text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">
+                      <th className="hidden md:table-cell px-3 md:px-6 py-3 text-left text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">
                         Requested By
                       </th>
-                      <th className="px-6 py-3 text-left text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">
+                      <th className="px-3 md:px-6 py-3 text-left text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">
                         Requested Date
                       </th>
-                      <th className="px-6 py-3 text-right text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">
+                      <th className="px-3 md:px-6 py-3 text-right text-[10px] font-bold text-[#5E6C84] uppercase tracking-wider border-b border-[#E2E8F0]">
                         Actions
                       </th>
                     </tr>
@@ -188,16 +188,16 @@ export const Orders = () => {
                   <tbody className="bg-white">
                     {orders.map((order, idx) => (
                       <tr key={order.id} className={`hover:bg-[#F4F5F7] transition-colors duration-100 ${idx % 2 === 1 ? 'bg-[#FAFBFC]' : ''}`}>
-                        <td className="px-6 py-2.5 whitespace-nowrap text-sm font-mono font-bold text-[#1A1C20] border-b border-[#E2E8F0]">
+                        <td className="px-3 md:px-6 py-2 md:py-2.5 whitespace-nowrap text-sm font-mono font-bold text-[#1A1C20] border-b border-[#E2E8F0]">
                           {order.order_id}
                         </td>
-                        <td className="px-6 py-2.5 whitespace-nowrap text-sm font-mono text-[#5E6C84] border-b border-[#E2E8F0]">
+                        <td className="px-3 md:px-6 py-2 md:py-2.5 whitespace-nowrap text-sm font-mono text-[#5E6C84] border-b border-[#E2E8F0]">
                           {order.sample_id}
                         </td>
-                        <td className="px-6 py-2.5 whitespace-nowrap text-sm font-medium text-[#1A1C20] border-b border-[#E2E8F0]">
+                        <td className="px-3 md:px-6 py-2 md:py-2.5 whitespace-nowrap text-sm font-medium text-[#1A1C20] border-b border-[#E2E8F0]">
                           {order.test_type}
                         </td>
-                        <td className="px-6 py-2.5 whitespace-nowrap border-b border-[#E2E8F0]">
+                        <td className="px-3 md:px-6 py-2 md:py-2.5 whitespace-nowrap border-b border-[#E2E8F0]">
                           <span className={`px-2 py-1 text-[10px] font-bold uppercase tracking-wider border inline-block ${
                             order.status === 'REQUESTED' ? 'bg-blue-50 text-blue-700 border-blue-200' :
                             order.status === 'IN_PROGRESS' ? 'bg-yellow-50 text-yellow-800 border-yellow-200' :
@@ -209,7 +209,7 @@ export const Orders = () => {
                             {order.status.replace('_', ' ')}
                           </span>
                         </td>
-                        <td className="px-6 py-2.5 whitespace-nowrap border-b border-[#E2E8F0]">
+                        <td className="px-3 md:px-6 py-2 md:py-2.5 whitespace-nowrap border-b border-[#E2E8F0]">
                           <span className={`px-2 py-1 text-[10px] font-bold uppercase tracking-wider border inline-block ${
                             order.priority === 'EMERGENCY' ? 'bg-red-50 text-red-700 border-red-200' :
                             order.priority === 'URGENT' ? 'bg-orange-50 text-orange-700 border-orange-200' :
@@ -218,13 +218,13 @@ export const Orders = () => {
                             {order.priority}
                           </span>
                         </td>
-                        <td className="px-6 py-2.5 whitespace-nowrap text-sm text-[#5E6C84] border-b border-[#E2E8F0]">
+                        <td className="px-3 md:px-6 py-2 md:py-2.5 whitespace-nowrap text-sm text-[#5E6C84] border-b border-[#E2E8F0]">
                           {order.requested_by}
                         </td>
-                        <td className="px-6 py-2.5 whitespace-nowrap text-sm font-mono text-[#5E6C84] border-b border-[#E2E8F0]">
+                        <td className="px-3 md:px-6 py-2 md:py-2.5 whitespace-nowrap text-sm font-mono text-[#5E6C84] border-b border-[#E2E8F0]">
                           {new Date(order.requested_date).toLocaleDateString('de-DE')}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <td className="px-3 md:px-6 py-2 md:py-4 whitespace-nowrap text-right text-sm font-medium">
                           {canWrite && <div className="flex items-center justify-end gap-2">
                             <Button
                               variant="secondary"

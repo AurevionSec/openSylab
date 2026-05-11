@@ -79,16 +79,17 @@ export const Sidebar = () => {
         </svg>
       ),
     },
-    {
-      name: 'Profile',
-      path: '/profile',
-      icon: (
-        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-        </svg>
-      ),
-    },
-  ] : []
+  ] : [];
+
+  const profileItem = [{
+    name: 'Profile',
+    path: '/profile',
+    icon: (
+      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+      </svg>
+    ),
+  }]
 
   const getUserInitials = () => {
     if (!user?.username) return 'U';
@@ -113,10 +114,10 @@ export const Sidebar = () => {
           />
         </div>
 
-        <div className="font-['Inter'] font-bold text-xl tracking-tight text-white flex items-center">
-          OpenSylab
+        <div className="font-['Inter'] font-bold text-xl tracking-tight text-white flex items-center min-w-0">
+          <span className="truncate">OpenSylab</span>
           {/* Version Badge */}
-          <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-[#2563EB]/20 text-[#3B82F6] border border-[#2563EB]/30 uppercase tracking-widest">
+          <span className="ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-[#2563EB]/20 text-[#3B82F6] border border-[#2563EB]/30 uppercase tracking-wide shrink-0">
             v{import.meta.env.VITE_APP_VERSION}
           </span>
         </div>
@@ -148,14 +149,16 @@ export const Sidebar = () => {
           </Link>
         ))}
 
-        {/* System Section */}
-        <div className="pt-4 pb-2">
-          <div className="px-5 text-xs font-semibold text-gray-600 uppercase tracking-wider">
-            System
+        {/* System Section — nur sichtbar wenn Einträge vorhanden */}
+        {systemItems.length > 0 && (
+          <div className="pt-4 pb-2">
+            <div className="px-5 text-xs font-semibold text-gray-600 uppercase tracking-wider">
+              System
+            </div>
           </div>
-        </div>
+        )}
 
-        {systemItems.map((item) => (
+        {[...systemItems, ...profileItem].map((item) => (
           <Link
             key={item.path}
             to={item.path}
