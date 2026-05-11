@@ -1,12 +1,13 @@
 /**
  * @file test_runner.cpp
- * @brief Einfacher Test-Runner für OpenSylab v0.7
+ * @brief Einfacher Test-Runner für OpenSylab (Version: siehe version.h)
  *
  * Dieser Test-Runner läuft alle Unit-Tests und gibt das Ergebnis aus.
  * Wir verwenden ein minimalistisches Test-Framework ohne externe
  * Abhängigkeiten.
  */
 
+#include "version.h"
 #include <functional>
 #include <iostream>
 #include <string>
@@ -76,7 +77,7 @@ int main() {
   std::cout
       << "╔═══════════════════════════════════════════════════════════╗\n";
   std::cout
-      << "║          OpenSylab v0.7 - Unit Test Suite                 ║\n";
+      << "║          " OPENSYLAB_VERSION_STRING " - Unit Test Suite        ║\n";
   std::cout
       << "╚═══════════════════════════════════════════════════════════╝\n";
   std::cout << "\n";

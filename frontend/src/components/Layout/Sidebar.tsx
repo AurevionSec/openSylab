@@ -117,7 +117,7 @@ export const Sidebar = () => {
           OpenSylab
           {/* Version Badge */}
           <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-[#2563EB]/20 text-[#3B82F6] border border-[#2563EB]/30 uppercase tracking-widest">
-            v0.7
+            v{import.meta.env.VITE_APP_VERSION}
           </span>
         </div>
       </div>

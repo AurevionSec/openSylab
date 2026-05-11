@@ -1,4 +1,5 @@
 #include "utils/CliInterface.h"
+#include "version.h"
 #include "utils/CsvImport.h"
 #include "utils/CsvResultImport.h"
 #include <algorithm>
@@ -128,7 +129,7 @@ void CliInterface::showWelcome() {
                "╚══════╝╚═╝  ╚═╝╚═════╝ \n";
   std::cout << "\n";
   std::cout << "                     Labor Information Management System\n";
-  std::cout << "                              Version 0.7.0\n";
+  std::cout << "                              Version " OPENSYLAB_VERSION "\n";
   std::cout << "\n";
   printSeparator();
   std::cout << "\nWillkommen bei OpenSylab - Ihr Open Source LIMS\n";

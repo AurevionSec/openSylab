@@ -7,6 +7,13 @@ project(OpenSylab
     LANGUAGES CXX
 )
 
+# Version-Header aus Template generieren (SSOT: VERSION in project() oben)
+configure_file(
+    "${CMAKE_SOURCE_DIR}/include/version.h.in"
+    "${CMAKE_SOURCE_DIR}/include/version.h"
+    @ONLY
+)
+
 # C++ Standard festlegen
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
