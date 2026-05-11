@@ -104,23 +104,21 @@ export const Sidebar = () => {
   return (
     <aside className="fixed inset-y-0 left-0 w-64 bg-[#1A1C20] border-r border-gray-800 flex flex-col z-50 transition-all duration-300">
       {/* Header */}
-      <div className="h-16 flex items-center px-6 border-b border-gray-800 bg-[#15171a]">
-        {/* Helix Engine Emblem */}
-        <div className="flex-shrink-0 mr-3 mt-1">
-          <img
-            src="/assets/brand-helix-core.png"
-            alt="OpenSylab Helix Engine"
-            className="h-9 w-auto object-contain animate-reactor"
-          />
-        </div>
-
-        <div className="font-['Inter'] font-bold text-xl tracking-tight text-white flex items-center min-w-0">
-          <span className="truncate">OpenSylab</span>
-          {/* Version Badge */}
-          <span className="ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-[#2563EB]/20 text-[#3B82F6] border border-[#2563EB]/30 uppercase tracking-wide shrink-0">
-            v{import.meta.env.VITE_APP_VERSION}
-          </span>
-        </div>
+      <div className="flex flex-col items-center py-5 px-4 border-b border-gray-800 bg-[#15171a]">
+        {/* Logo */}
+        <img
+          src="/assets/brand-helix-core.png"
+          alt="OpenSylab"
+          className="h-12 w-auto object-contain animate-reactor mb-2"
+        />
+        {/* Name */}
+        <span className="font-['Inter'] font-bold text-lg tracking-tight text-white leading-tight">
+          OpenSylab
+        </span>
+        {/* Version */}
+        <span className="mt-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-[#2563EB]/20 text-[#3B82F6] border border-[#2563EB]/30 uppercase tracking-wide">
+          v{import.meta.env.VITE_APP_VERSION}
+        </span>
       </div>
 
       {/* Main Navigation */}
