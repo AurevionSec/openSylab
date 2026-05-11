@@ -1,4 +1,4 @@
-# Tests für OpenSylab v0.2
+# Tests für OpenSylab v0.7
 
 # Sammle alle Test-Quellen
 set(TEST_SOURCES

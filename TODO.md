@@ -1,8 +1,8 @@
-# TODO - OpenSylab v0.6 → v0.8 Roadmap
+# TODO - OpenSylab v0.7 Roadmap
 
-**Current Version:** v0.6.0 + Security Fixes (2026-02-03)
+**Current Version:** v0.7.0 (2026-05-11)
 **Branch:** main
-**Target:** v0.6.1 or v0.8.0 Alpha
+**Target:** v0.8.0 Alpha
 **Status:** ✅ P0 Security Complete - Planning remaining v0.8
 **Generated:** 2026-02-03
 **Last Updated:** 2026-02-03 (Security fixes documented)

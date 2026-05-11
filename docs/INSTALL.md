@@ -1,4 +1,4 @@
-# OpenSylab v0.6.0 - Installation und Deployment
+# OpenSylab v0.7.0 - Installation und Deployment
 
 ## Überblick
 
@@ -27,7 +27,7 @@ OpenSylab kann auf verschiedene Arten installiert werden:
 
 ## 🐳 Installation mit Docker (Empfohlen)
 
-Docker ist die **empfohlene Installationsmethode** für OpenSylab v0.6.0. Sie bietet:
+Docker ist die **empfohlene Installationsmethode** für OpenSylab v0.7.0. Sie bietet:
 
 - ✅ Keine manuelle Abhängigkeiten-Installation
 - ✅ Konsistente Umgebung auf allen Betriebssystemen
@@ -154,7 +154,7 @@ Für Produktionsumgebungen:
 ```yaml
 services:
   backend:
-    image: opensylab/backend:0.6.0
+    image: opensylab/backend:0.7.0
     restart: unless-stopped
     environment:
       - OPENSYLAB_DB_PATH=/app/data/opensylab.db
@@ -168,7 +168,7 @@ services:
       - opensylab-net
 
   frontend:
-    image: opensylab/frontend:0.6.0
+    image: opensylab/frontend:0.7.0
     restart: unless-stopped
     environment:
       - VITE_API_URL=https://api.yourdomain.com
@@ -417,8 +417,7 @@ npm run test:coverage
 - [ ] **Security Hardening** durchführen
 - [ ] **Updates planen** (Security Patches)
 
-⚠️ **WICHTIG**: OpenSylab v0.6.0 verwendet DJB2 Password Hashing (NICHT production-ready!).
-Upgrade auf v0.8.0 mit bcrypt/argon2 wird DRINGEND empfohlen!
+✅ **Passwort-Sicherheit**: OpenSylab v0.7.0+ verwendet PBKDF2-HMAC-SHA256 (210.000 Iterationen) — production-ready.
 
 ### Systemd Service (Linux)
 
@@ -565,7 +564,7 @@ curl http://localhost:8080/api/v1/stats
 
 **"Invalid credentials":**
 - Default: admin / admin
-- Password-Hash-Algorithmus prüfen (siehe Troubleshooting in UI_EXTENSIONS_V06.md)
+- Datenbank prüfen: `sqlite3 opensylab.db "SELECT username, password_hash FROM users;"`
 - Datenbank-Inhalt prüfen: `sqlite3 opensylab.db "SELECT * FROM users;"`
 
 ---
@@ -625,6 +624,6 @@ npm run build
 
 ---
 
-**Version:** 0.6.0
-**Letzte Aktualisierung:** 2026-02-03
+**Version:** 0.7.0
+**Letzte Aktualisierung:** 2026-05-11
 **Nächste Version:** 0.8.0 (Production Security & Docker Improvements)

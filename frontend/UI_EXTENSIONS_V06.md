@@ -264,5 +264,5 @@ For issues or questions:
 Generated with [Claude Code](https://claude.ai/code)
 via [Happy](https://happy.engineering)
 
-Last Updated: 2026-02-02
-Version: 0.6
+Last Updated: 2026-05-11
+Version: 0.7

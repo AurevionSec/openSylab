@@ -1,9 +1,9 @@
 /**
  * @file main.cpp
- * @brief Haupteinstiegspunkt für OpenSylab LIMS v0.2
+ * @brief Haupteinstiegspunkt für OpenSylab LIMS v0.7
  *
  * OpenSylab - Open Source Laboratory Information Management System
- * Version 0.2.0
+ * Version 0.7.0
  *
  * Dieses Programm bietet LIMS-Funktionalität für kleine
  * medizinische Diagnostiklabore:
@@ -45,7 +45,7 @@ std::string loadConfiguration() {
  * @brief Hauptfunktion
  */
 int main(int argc, char *argv[]) {
-  std::cout << "OpenSylab v0.2.0 wird gestartet...\n" << std::endl;
+  std::cout << "OpenSylab v0.7.0 wird gestartet...\n" << std::endl;
 
   // Datenbankpfad ermitteln
   std::string dbPath;

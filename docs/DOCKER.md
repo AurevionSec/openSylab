@@ -1,7 +1,7 @@
 # OpenSylab Docker Deployment Guide
 
-**Version:** 0.6.0 + Polish Phase
-**Date:** 2026-02-11
+**Version:** 0.7.0
+**Date:** 2026-05-11
 **Status:** Production-Ready
 
 ---
@@ -22,7 +22,7 @@
 
 ## Overview
 
-OpenSylab v0.6+ provides full Docker support for easy deployment and scalability. The Docker setup includes:
+OpenSylab v0.7+ provides full Docker support for easy deployment and scalability. The Docker setup includes:
 
 - **Backend Container**: C++17 REST API server with SQLite
 - **Frontend Container**: React SPA served by nginx
@@ -61,7 +61,7 @@ OpenSylab v0.6+ provides full Docker support for easy deployment and scalability
 ```bash
 git clone https://github.com/AurevionSec/openSylab.git
 cd openSylab
-git checkout v0.6
+git checkout v0.7
 ```
 
 ### 2. Start the Stack
@@ -426,7 +426,7 @@ docker compose run --rm frontend npm test
 
 ```bash
 # Pull latest code
-git pull origin v0.6
+git pull origin v0.7
 
 # Rebuild containers
 docker compose build --no-cache
@@ -599,5 +599,5 @@ See `docs/KUBERNETES.md` (planned for v1.0+).
 ---
 
 **Last Updated:** 2026-02-11
-**OpenSylab Version:** v0.6.0 + Polish Phase
-**Document Version:** 1.1
+**OpenSylab Version:** v0.7.0
+**Document Version:** 1.2

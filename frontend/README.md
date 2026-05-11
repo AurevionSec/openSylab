@@ -2,8 +2,8 @@
 
 Modern React TypeScript frontend for the OpenSylab Laboratory Information Management System.
 
-**Version:** 0.6.0
-**Last Updated:** 2026-02-03
+**Version:** 0.7.0
+**Last Updated:** 2026-05-11
 **Status:** Production-Ready
 
 ## Tech Stack
@@ -454,6 +454,6 @@ See [../LICENSE.txt](../LICENSE.txt) for license information.
 
 ---
 
-**Frontend Version:** 0.6.0
-**Backend Compatibility:** OpenSylab v0.6.0+
-**Last Updated:** 2026-02-03
+**Frontend Version:** 0.7.0
+**Backend Compatibility:** OpenSylab v0.7.0+
+**Last Updated:** 2026-05-11

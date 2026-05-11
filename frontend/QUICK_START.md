@@ -54,30 +54,38 @@ VITE_API_URL=https://localhost:8443/api/v1
 
 ## Login
 
-Default authentication uses API key:
+OpenSylab uses JWT-based authentication:
 1. Start backend on http://localhost:8080
 2. Start frontend: `npm run dev`
 3. Visit http://localhost:5173
-4. Enter your API key
-5. Click "Sign In"
+4. Enter username and password (default: `admin` / `admin`)
+5. Click "Sign In" — the JWT token is stored automatically in localStorage
 
 ## Testing Backend Integration
 
 ### Check if backend is running:
 ```bash
-curl http://localhost:8080/api/v1/samples?limit=1
+curl http://localhost:8080/api/v1/health
 ```
 
-### Test with API key:
+### Login and get JWT token:
 ```bash
-curl -H "X-API-Key: your-key-here" http://localhost:8080/api/v1/samples?limit=1
+TOKEN=$(curl -s -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin"}' | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+echo $TOKEN
+```
+
+### Test authenticated request:
+```bash
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v1/samples?limit=1
 ```
 
 ### Test CORS:
 ```bash
 curl -H "Origin: http://localhost:5173" \
      -H "Access-Control-Request-Method: GET" \
-     -H "Access-Control-Request-Headers: X-API-Key" \
+     -H "Access-Control-Request-Headers: Authorization" \
      -X OPTIONS \
      http://localhost:8080/api/v1/samples
 ```
@@ -127,10 +135,11 @@ npm run dev -- --port 3000
 ### CORS errors
 Check backend CORS configuration (see INTEGRATION.md)
 
-### API key not working
-1. Verify backend is running
+### Login not working
+1. Verify backend is running: `curl http://localhost:8080/api/v1/health`
 2. Check browser console for errors
-3. Verify API key in localStorage: `localStorage.getItem('opensylab_api_key')`
+3. Verify JWT token in localStorage: `localStorage.getItem('opensylab_token')`
+4. Default credentials: `admin` / `admin`
 
 ### Build fails
 ```bash
@@ -158,7 +167,7 @@ npm run build
 
 1. Ensure backend implements CORS (see INTEGRATION.md)
 2. Ensure backend implements API endpoints (see INTEGRATION.md)
-3. Test login flow with valid API key
+3. Test login flow with default credentials (admin/admin)
 4. Verify dashboard loads sample data
 5. Test sample filtering and pagination
 

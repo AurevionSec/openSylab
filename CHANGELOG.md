@@ -2,6 +2,11 @@
 
 Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert.
 
+## [0.7.0] - 2026-05-11
+
+### Änderungen
+- Version Bump auf 0.7.0
+
 ## [0.6.0-polish] - 2026-02-11
 
 ### Neue Features

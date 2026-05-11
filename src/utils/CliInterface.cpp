@@ -128,7 +128,7 @@ void CliInterface::showWelcome() {
                "╚══════╝╚═╝  ╚═╝╚═════╝ \n";
   std::cout << "\n";
   std::cout << "                     Labor Information Management System\n";
-  std::cout << "                              Version 0.2.0\n";
+  std::cout << "                              Version 0.7.0\n";
   std::cout << "\n";
   printSeparator();
   std::cout << "\nWillkommen bei OpenSylab - Ihr Open Source LIMS\n";

@@ -2,10 +2,10 @@
 
 ## Übersicht
 
-OpenSylab v0.6.0 enthält ein einfaches, selbst implementiertes Test-Framework ohne externe Abhängigkeiten. Dies ermöglicht schnelles Testen ohne komplexe Setup-Prozesse. Die Test-Suite umfasst 62 automatisierte Backend Unit-Tests.
+OpenSylab v0.7.0 enthält ein einfaches, selbst implementiertes Test-Framework ohne externe Abhängigkeiten. Dies ermöglicht schnelles Testen ohne komplexe Setup-Prozesse. Die Test-Suite umfasst 62 automatisierte Backend Unit-Tests.
 
-**Version:** 0.6.0
-**Last Updated:** 2026-02-03
+**Version:** 0.7.0
+**Last Updated:** 2026-05-11
 **Backend Tests:** 62 Unit-Tests
 **Frontend Tests:** Geplant für v0.8.0
 
@@ -143,7 +143,7 @@ ctest --output-on-failure
 
 ```
 ╔═══════════════════════════════════════════════════════════╗
-║          OpenSylab v0.6.0 - Unit Test Suite               ║
+║          OpenSylab v0.7.0 - Unit Test Suite               ║
 ╚═══════════════════════════════════════════════════════════╝
 
 Running 62 tests...
