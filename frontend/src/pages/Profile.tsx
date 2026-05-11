@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Layout } from '../components/Layout/Layout';
 import { Card } from '../components/common/Card';
 import { Input } from '../components/common/Input';
@@ -12,14 +13,19 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle';
 export const Profile = () => {
   useDocumentTitle({ action: 'My Profile' });
   const { isDarkMode, toggleDarkMode } = useTheme();
+  const [searchParams] = useSearchParams();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const isForceChange = searchParams.get('force_change') === '1';
 
   useEffect(() => {
+    if (isForceChange) {
+      setIsChangingPassword(true);
+    }
     fetchProfile();
-  }, []);
+  }, [isForceChange]);
 
   const fetchProfile = async () => {
     try {
@@ -64,6 +70,14 @@ export const Profile = () => {
           <h2 className="text-3xl font-bold text-gray-900">My Profile</h2>
           <p className="text-gray-600 mt-1">View and manage your account settings</p>
         </div>
+
+        {isForceChange && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <p className="text-yellow-800 font-medium">
+              Sie verwenden noch das Standard-Passwort. Bitte ändern Sie es jetzt.
+            </p>
+          </div>
+        )}
 
         {/* Profile Information */}
         <Card title="Profile Information">
@@ -200,6 +214,7 @@ export const Profile = () => {
                   setIsChangingPassword(false);
                 }}
                 onCancel={() => setIsChangingPassword(false)}
+                forceChange={isForceChange}
               />
             )}
           </div>
@@ -212,9 +227,10 @@ export const Profile = () => {
 interface ChangePasswordFormProps {
   onSuccess: () => void;
   onCancel: () => void;
+  forceChange?: boolean;
 }
 
-const ChangePasswordForm = ({ onSuccess, onCancel }: ChangePasswordFormProps) => {
+const ChangePasswordForm = ({ onSuccess, onCancel, forceChange }: ChangePasswordFormProps) => {
   const [formData, setFormData] = useState<ChangePasswordPayload>({
     current_password: '',
     new_password: '',
@@ -311,14 +327,16 @@ const ChangePasswordForm = ({ onSuccess, onCancel }: ChangePasswordFormProps) =>
       />
 
       <div className="flex justify-end gap-3">
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={onCancel}
-          disabled={loading || success}
-        >
-          Cancel
-        </Button>
+        {!forceChange && (
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={onCancel}
+            disabled={loading || success}
+          >
+            Cancel
+          </Button>
+        )}
         <Button
           type="submit"
           variant="primary"

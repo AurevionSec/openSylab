@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+
 import { Input } from '../components/common/Input';
 import { Button } from '../components/common/Button';
 import { Card } from '../components/common/Card';
@@ -15,9 +16,8 @@ export const Login = () => {
   const [mfaRequired, setMfaRequired] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { login, mustChangePassword } = useAuth();
   const navigate = useNavigate();
-
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
@@ -26,7 +26,11 @@ export const Login = () => {
     try {
       const result = await login(username, password, mfaRequired ? mfaCode : undefined);
       if (result.success) {
-        navigate('/');
+        if (mustChangePassword) {
+          navigate('/profile?force_change=1');
+        } else {
+          navigate('/');
+        }
       } else if (result.mfaRequired) {
         setMfaRequired(true);
         setError('');

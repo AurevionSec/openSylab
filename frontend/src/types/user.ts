@@ -12,6 +12,7 @@ export interface User {
   username: string;
   role: UserRole;
   active: boolean;
+  must_change_password: boolean;
   created_at: number;
   last_login: number;
   full_name?: string;

@@ -40,6 +40,7 @@ public:
   Role getRole() const { return role_; }
   const std::string &getRoleName() const { return roleName_; }
   bool isActive() const { return active_; }
+  bool mustChangePassword() const { return mustChangePassword_; }
   std::time_t getLastLogin() const { return lastLogin_; }
   std::time_t getCreatedDate() const { return createdDate_; }
   const std::string &getFullName() const { return fullName_; }
@@ -55,6 +56,7 @@ public:
   }
   void setRoleName(const std::string &roleName);
   void setActive(bool active) { active_ = active; }
+  void setMustChangePassword(bool v) { mustChangePassword_ = v; }
   void setLastLogin(std::time_t lastLogin) { lastLogin_ = lastLogin; }
   void setCreatedDate(std::time_t created) { createdDate_ = created; }
   void setFullName(const std::string &name) { fullName_ = name; }
@@ -80,6 +82,7 @@ private:
   Role role_;
   std::string roleName_;
   bool active_;
+  bool mustChangePassword_ = false;
   std::time_t lastLogin_;
   std::time_t createdDate_;
   std::string fullName_;

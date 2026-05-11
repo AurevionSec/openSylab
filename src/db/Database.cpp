@@ -307,10 +307,11 @@ std::unique_ptr<opensylab::core::User> userFromRow(sqlite3_stmt *stmt) {
   user->setPasswordHash(columnText(stmt, 2));
   user->setRoleName(columnText(stmt, 3));
   user->setActive(sqlite3_column_int(stmt, 4) != 0);
-  user->setLastLogin(static_cast<std::time_t>(sqlite3_column_int64(stmt, 5)));
-  user->setCreatedDate(static_cast<std::time_t>(sqlite3_column_int64(stmt, 6)));
-  user->setFullName(columnText(stmt, 7));
-  user->setEmail(columnText(stmt, 8));
+  user->setMustChangePassword(sqlite3_column_int(stmt, 5) != 0);
+  user->setLastLogin(static_cast<std::time_t>(sqlite3_column_int64(stmt, 6)));
+  user->setCreatedDate(static_cast<std::time_t>(sqlite3_column_int64(stmt, 7)));
+  user->setFullName(columnText(stmt, 8));
+  user->setEmail(columnText(stmt, 9));
   return user;
 }
 } // namespace
@@ -470,6 +471,7 @@ bool Database::initializeSchema() {
             password_hash TEXT NOT NULL,
             role TEXT NOT NULL,
             active INTEGER NOT NULL DEFAULT 1,
+            must_change_password INTEGER NOT NULL DEFAULT 0,
             last_login INTEGER,
             created_date INTEGER NOT NULL,
             full_name TEXT,
@@ -552,6 +554,15 @@ bool Database::initializeSchema() {
     return false;
   }
 
+  // Migration: add must_change_password column to existing databases
+  {
+    const char *alterSQL = "ALTER TABLE users ADD COLUMN must_change_password "
+                           "INTEGER NOT NULL DEFAULT 0;";
+    char *alterErr = nullptr;
+    (void)sqlite3_exec(db_, alterSQL, nullptr, nullptr, &alterErr);
+    sqlite3_free(alterErr);
+  }
+
   const char *seedRolesSQL = R"(
         INSERT OR IGNORE INTO roles (name, description)
         VALUES ('Administrator', 'Vollzugriff'),
@@ -611,8 +622,8 @@ bool Database::initializeSchema() {
         const std::time_t now = std::time(nullptr);
         const char *insertSQL = R"(
             INSERT OR IGNORE INTO users
-                (username, password_hash, role, active, created_date, last_login, full_name, email)
-            VALUES (?, ?, ?, 1, ?, 0, '', '');
+                (username, password_hash, role, active, created_date, last_login, full_name, email, must_change_password)
+            VALUES (?, ?, ?, 1, ?, 0, '', '', 1);
         )";
         sqlite3_stmt *iRaw = nullptr;
         if (sqlite3_prepare_v2(db_, insertSQL, -1, &iRaw, nullptr) != SQLITE_OK) {
@@ -4323,8 +4334,8 @@ bool Database::createUser(const core::User &user, const std::string &actor) {
 
   const char *insertSQL = R"(
         INSERT INTO users (username, password_hash, role, active, last_login,
-                          created_date, full_name, email)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+                          created_date, full_name, email, must_change_password)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
     )";
 
   sqlite3_stmt *rawStmt = nullptr;
@@ -4353,6 +4364,7 @@ bool Database::createUser(const core::User &user, const std::string &actor) {
                     SQLITE_TRANSIENT);
   sqlite3_bind_text(stmt.get(), 8, user.getEmail().c_str(), -1,
                     SQLITE_TRANSIENT);
+  sqlite3_bind_int(stmt.get(), 9, user.mustChangePassword() ? 1 : 0);
 
   rc = sqlite3_step(stmt.get());
 
@@ -4403,8 +4415,8 @@ std::unique_ptr<core::User> Database::getUser(int id) {
   }
 
   const char *selectSQL = R"(
-        SELECT id, username, password_hash, role, active, last_login,
-               created_date, full_name, email
+        SELECT id, username, password_hash, role, active,
+               must_change_password, last_login, created_date, full_name, email
         FROM users WHERE id = ?;
     )";
 
@@ -4449,8 +4461,8 @@ Database::getUserByUsername(const std::string &username) {
   }
 
   const char *selectSQL = R"(
-        SELECT id, username, password_hash, role, active, last_login,
-               created_date, full_name, email
+        SELECT id, username, password_hash, role, active,
+               must_change_password, last_login, created_date, full_name, email
         FROM users WHERE username = ?;
     )";
 
@@ -4496,8 +4508,8 @@ std::vector<std::unique_ptr<core::User>> Database::getAllUsers() {
   }
 
   const char *selectSQL = R"(
-        SELECT id, username, password_hash, role, active, last_login,
-               created_date, full_name, email
+        SELECT id, username, password_hash, role, active,
+               must_change_password, last_login, created_date, full_name, email
         FROM users ORDER BY username;
     )";
 
@@ -4588,6 +4600,10 @@ bool Database::updateUser(const core::User &user, const std::string &actor) {
     }
   }
 
+  // Auto-clear must_change_password when password is being changed
+  const bool passwordChanged =
+      (user.getPasswordHash() != existing->getPasswordHash());
+
   const char *updateSQL = R"(
         UPDATE users SET
             username = ?,
@@ -4597,7 +4613,8 @@ bool Database::updateUser(const core::User &user, const std::string &actor) {
             last_login = ?,
             created_date = ?,
             full_name = ?,
-            email = ?
+            email = ?,
+            must_change_password = ?
         WHERE id = ?;
     )";
 
@@ -4629,7 +4646,8 @@ bool Database::updateUser(const core::User &user, const std::string &actor) {
                     SQLITE_TRANSIENT);
   sqlite3_bind_text(stmt.get(), 8, user.getEmail().c_str(), -1,
                     SQLITE_TRANSIENT);
-  sqlite3_bind_int(stmt.get(), 9, user.getId());
+  sqlite3_bind_int(stmt.get(), 9, passwordChanged ? 0 : (user.mustChangePassword() ? 1 : 0));
+  sqlite3_bind_int(stmt.get(), 10, user.getId());
 
   rc = sqlite3_step(stmt.get());
 

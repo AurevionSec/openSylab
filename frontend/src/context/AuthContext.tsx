@@ -11,6 +11,7 @@ import {
 interface AuthContextType {
   isAuthenticated: boolean;
   user: User | null;
+  mustChangePassword: boolean;
   login: (username: string, password: string, mfaCode?: string) => Promise<{ success: boolean; error?: string; mfaRequired?: boolean }>;
   logout: () => void;
   loading: boolean;
@@ -21,6 +22,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [user, setUser] = useState<User | null>(null);
+  const [mustChangePassword, setMustChangePassword] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
@@ -32,6 +34,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       // Load user info from storage
       const storedUser = getStoredUser();
       setUser(storedUser);
+      setMustChangePassword(localStorage.getItem('opensylab_must_change_pw') === 'true');
     }
 
     setLoading(false);
@@ -43,6 +46,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (result.success && result.user) {
       setIsAuthenticated(true);
       setUser(result.user);
+      const mcp = result.user.must_change_password === true;
+      setMustChangePassword(mcp);
+      localStorage.setItem('opensylab_must_change_pw', mcp ? 'true' : 'false');
       return { success: true };
     }
 
@@ -53,10 +59,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     logoutService();
     setIsAuthenticated(false);
     setUser(null);
+    setMustChangePassword(false);
+    localStorage.removeItem('opensylab_must_change_pw');
   };
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, user, login, logout, loading }}>
+    <AuthContext.Provider value={{ isAuthenticated, user, mustChangePassword, login, logout, loading }}>
       {children}
     </AuthContext.Provider>
   );

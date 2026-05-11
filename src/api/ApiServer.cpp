@@ -659,6 +659,7 @@ std::string userToJson(const core::User &user) {
       << "\"username\":" << jsonString(user.getUsername()) << ","
       << "\"role\":" << jsonString(user.getRoleString()) << ","
       << "\"active\":" << (user.isActive() ? "true" : "false") << ","
+      << "\"must_change_password\":" << (user.mustChangePassword() ? "true" : "false") << ","
       << "\"created_at\":" << static_cast<long long>(user.getCreatedDate()) << ","
       << "\"last_login\":" << static_cast<long long>(user.getLastLogin()) << ","
       << "\"full_name\":" << jsonString(user.getFullName()) << ","
@@ -771,7 +772,8 @@ ApiResponse ApiRouter::handleLogin(const ApiRequest &request) {
            << "\"user\":{"
            << "\"id\":" << user->getId() << ","
            << "\"username\":" << jsonString(user->getUsername()) << ","
-           << "\"role\":" << jsonString(user->getRoleString())
+           << "\"role\":" << jsonString(user->getRoleString()) << ","
+           << "\"must_change_password\":" << (user->mustChangePassword() ? "true" : "false")
            << "},"
            << "\"expiresIn\":" << expiresIn
            << "}";

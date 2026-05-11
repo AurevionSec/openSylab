@@ -5,6 +5,7 @@ export interface User {
   id: number;
   username: string;
   role: string;
+  must_change_password?: boolean;
 }
 
 export interface LoginResponse {
