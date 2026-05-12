@@ -2952,6 +2952,12 @@ void CliInterface::handleValidateResult() {
       std::cout << "  " << database_->getLastError() << "\n";
     }
   } else {
+    // Enforce terminal-state: REJECTED results cannot be re-transitioned
+    if (result->getStatus() == core::TestResult::Status::REJECTED) {
+      std::cout << "\n✗ Abgelehnte Ergebnisse koennen nicht mehr geaendert werden (Terminalzustand).\n";
+      waitForEnter();
+      return;
+    }
     result->setStatus(newStatus);
     if (database_->updateTestResult(*result, getCurrentUsername())) {
       std::cout << "\n✓ Status erfolgreich geändert auf: "

@@ -3140,6 +3140,16 @@ bool Database::validateTestResult(const std::string &resultId,
     return false;
   }
 
+  // Terminal-state guard: REJECTED results cannot be promoted to VALIDATED
+  if (result->getStatus() == core::TestResult::Status::REJECTED) {
+    setError("REJECTED-Ergebnisse koennen nicht validiert werden (Terminalzustand).");
+    return false;
+  }
+  if (result->getStatus() == core::TestResult::Status::VALIDATED) {
+    setError("Ergebnis ist bereits validiert.");
+    return false;
+  }
+
   char *errMsg = nullptr;
   int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
                         &errMsg);
