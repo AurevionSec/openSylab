@@ -1528,6 +1528,16 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                          "Verify the result_id.");
       }
 
+      // Immutability guard: VALIDATED and REJECTED results cannot be edited
+      {
+        const auto s = existing->getStatus();
+        if (s == core::TestResult::Status::VALIDATED ||
+            s == core::TestResult::Status::REJECTED) {
+          return makeError(409, "conflict", "Result is immutable",
+                           "VALIDATED and REJECTED results cannot be edited (ISO 15189).");
+        }
+      }
+
       auto idIt = payload.find("result_id");
       if (idIt != payload.end() && idIt->second != resultId) {
         return makeError(409, "conflict", "result_id mismatch",
