@@ -261,6 +261,13 @@ export const Orders = () => {
                               variant="ghost"
                               size="sm"
                               onClick={() => handleDeleteClick(order)}
+                              disabled={order.status === 'CANCELLED' || order.status === 'VALIDATED' || order.status === 'COMPLETED'}
+                              title={
+                                order.status === 'CANCELLED' ? 'Order is already cancelled' :
+                                order.status === 'VALIDATED' ? 'Validated orders cannot be cancelled' :
+                                order.status === 'COMPLETED' ? 'Completed orders cannot be cancelled directly' :
+                                'Cancel order'
+                              }
                             >
                               <span className="flex items-center gap-1">
                                 <svg

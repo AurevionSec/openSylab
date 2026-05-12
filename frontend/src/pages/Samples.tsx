@@ -247,6 +247,14 @@ export const Samples = () => {
                               variant="ghost"
                               size="sm"
                               onClick={() => handleDeleteClick(sample)}
+                              disabled={sample.status === 'ARCHIVED' || sample.status === 'VALIDATED' || sample.status === 'IN_ANALYSIS' || sample.status === 'ANALYZED'}
+                              title={
+                                sample.status === 'ARCHIVED' ? 'Archived samples cannot be deleted' :
+                                sample.status === 'VALIDATED' ? 'Validated samples are immutable (ISO 15189)' :
+                                sample.status === 'IN_ANALYSIS' ? 'Sample is currently in analysis' :
+                                sample.status === 'ANALYZED' ? 'Analyzed samples must be validated or archived first' :
+                                'Delete sample'
+                              }
                             >
                               <span className="flex items-center gap-1">
                                 <svg
