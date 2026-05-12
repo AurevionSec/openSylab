@@ -16,11 +16,17 @@ export const Profile = () => {
   const { isDarkMode, toggleDarkMode } = useTheme();
   const { clearMustChangePassword } = useAuth();
   const [searchParams] = useSearchParams();
+  const mountedRef = useRef(true);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const isForceChange = searchParams.get('force_change') === '1';
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   useEffect(() => {
     if (isForceChange) {
@@ -33,13 +39,13 @@ export const Profile = () => {
     try {
       setLoading(true);
       const data = await getCurrentUser();
-      setUser(data);
-      if (data.must_change_password) setIsChangingPassword(true);
+      if (mountedRef.current) setUser(data);
+      if (mountedRef.current && data.must_change_password) setIsChangingPassword(true);
     } catch (err: unknown) {
-      setError((err && typeof err === 'object' && 'response' in err ? (err as {response?: {data?: {error?: {message?: string}}}}).response?.data?.error?.message : undefined) || 'Failed to load profile');
+      if (mountedRef.current) setError((err && typeof err === 'object' && 'response' in err ? (err as {response?: {data?: {error?: {message?: string}}}}).response?.data?.error?.message : undefined) || 'Failed to load profile');
       console.error(err);
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   };
 

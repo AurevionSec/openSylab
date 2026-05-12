@@ -18,7 +18,21 @@ export const Users = () => {
   const [editingUser, setEditingUser] = useState<User | null>(null);
 
   useEffect(() => {
-    fetchUsers();
+    let cancelled = false;
+    const load = async () => {
+      try {
+        setLoading(true);
+        const data = await getUsers();
+        if (!cancelled) setUsers(data);
+      } catch (err: unknown) {
+        if (!cancelled) setError((err && typeof err === 'object' && 'response' in err ? (err as {response?: {data?: {error?: {message?: string}}}}).response?.data?.error?.message : undefined) || 'Failed to load users');
+        console.error(err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
   }, []);
 
   const fetchUsers = async () => {

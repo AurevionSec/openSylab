@@ -35,6 +35,7 @@ export const Dashboard = () => {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    let cancelled = false;
     const fetchData = async () => {
       try {
         let statsData: DashboardStats | null = null;
@@ -62,16 +63,17 @@ export const Dashboard = () => {
           statsData.results.total = resultsData.total;
         }
 
-        setStats(statsData);
-        setSamples(samplesData.samples);
+        if (!cancelled) setStats(statsData);
+        if (!cancelled) setSamples(samplesData.samples);
       } catch (err) {
         console.error('Dashboard error:', err);
-        setError('Failed to load dashboard data');
+        if (!cancelled) setError('Failed to load dashboard data');
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
     fetchData();
+    return () => { cancelled = true; };
   }, []);
 
   const recentSamples = [...samples]
