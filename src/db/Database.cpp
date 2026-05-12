@@ -2120,6 +2120,20 @@ bool Database::deleteOrder(int id, const std::string &actor) {
     return false;
   }
 
+  // Check for active results before cancelling order — prevents orphaned results
+  {
+    auto results = getTestResultsByOrderId(existing->getId());
+    for (const auto &res : results) {
+      const auto s = res->getStatus();
+      if (s != core::TestResult::Status::VALIDATED &&
+          s != core::TestResult::Status::REJECTED) {
+        setError("Auftrag hat aktive Ergebnisse (ID: " + res->getResultId() +
+                 "); Ergebnisse zuerst abschliessen oder ablehnen.");
+        return false;
+      }
+    }
+  }
+
   char *errMsg = nullptr;
   int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
                         &errMsg);
