@@ -3069,6 +3069,8 @@ void ApiServer::handleClientTls(int clientFd) {
   std::istringstream lineStream(requestLine);
   ApiRequest request;
   lineStream >> request.method;
+  // Normalize method to uppercase for consistent comparisons
+  for (char &ch : request.method) { ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch))); }
   lineStream >> request.path;
 
   std::string headerLine;
@@ -3110,11 +3112,16 @@ void ApiServer::handleClientTls(int clientFd) {
   }
   request.body = body;
 
-  // Rate-Limiting fuer Login
+  // Rate-Limiting fuer Login — keyed by real TCP peer address (not spoofable)
   if (request.method == "POST" && request.path == "/api/v1/auth/login") {
-    const auto fwdIt = request.headers.find("x-forwarded-for");
-    const std::string clientIp = (fwdIt != request.headers.end())
-        ? fwdIt->second : "conn:" + std::to_string(clientFd);
+    sockaddr_in peerAddrTls{};
+    socklen_t peerLenTls = sizeof(peerAddrTls);
+    std::string clientIp;
+    if (getpeername(clientFd, reinterpret_cast<sockaddr *>(&peerAddrTls), &peerLenTls) == 0) {
+      clientIp = inet_ntoa(peerAddrTls.sin_addr);
+    } else {
+      clientIp = "conn:" + std::to_string(clientFd);
+    }
     if (isRateLimited(clientIp)) {
       const std::string rlBody =
           R"({"error":{"code":"rate_limit","message":"Zu viele Login-Versuche","hint":"Bitte 60 Sekunden warten."}})";
@@ -3169,6 +3176,8 @@ void ApiServer::handleClientPlain(int clientFd) {
   std::istringstream lineStream(requestLine);
   ApiRequest request;
   lineStream >> request.method;
+  // Normalize method to uppercase for consistent comparisons
+  for (char &ch : request.method) { ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch))); }
   lineStream >> request.path;
 
   std::string headerLine;
@@ -3210,11 +3219,16 @@ void ApiServer::handleClientPlain(int clientFd) {
   }
   request.body = body;
 
-  // Rate-Limiting fuer Login
+  // Rate-Limiting fuer Login — keyed by real TCP peer address (not spoofable)
   if (request.method == "POST" && request.path == "/api/v1/auth/login") {
-    const auto fwdIt = request.headers.find("x-forwarded-for");
-    const std::string clientIp = (fwdIt != request.headers.end())
-        ? fwdIt->second : "conn:" + std::to_string(clientFd);
+    sockaddr_in peerAddrPlain{};
+    socklen_t peerLenPlain = sizeof(peerAddrPlain);
+    std::string clientIp;
+    if (getpeername(clientFd, reinterpret_cast<sockaddr *>(&peerAddrPlain), &peerLenPlain) == 0) {
+      clientIp = inet_ntoa(peerAddrPlain.sin_addr);
+    } else {
+      clientIp = "conn:" + std::to_string(clientFd);
+    }
     if (isRateLimited(clientIp)) {
       const std::string rlBody =
           R"({"error":{"code":"rate_limit","message":"Zu viele Login-Versuche","hint":"Bitte 60 Sekunden warten."}})";
