@@ -56,7 +56,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return { success: false, error: result.error, mfaRequired: result.mfaRequired };
   };
 
-  const clearMustChangePassword = () => setMustChangePassword(false);
+  const clearMustChangePassword = () => {
+    setMustChangePassword(false);
+    localStorage.setItem('opensylab_must_change_pw', 'false');
+  };
 
   const logout = () => {
     logoutService();

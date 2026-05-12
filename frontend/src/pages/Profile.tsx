@@ -264,9 +264,7 @@ const ChangePasswordForm = ({ onSuccess, onCancel, forceChange }: ChangePassword
     try {
       await changePassword(formData);
       setSuccess(true);
-      setTimeout(() => {
-        onSuccess();
-      }, 2000);
+      onSuccess();
     } catch (err: unknown) {
       setError((err && typeof err === 'object' && 'response' in err ? (err as {response?: {data?: {error?: {message?: string}}}}).response?.data?.error?.message : undefined) || 'Failed to change password');
     } finally {

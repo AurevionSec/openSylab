@@ -53,19 +53,19 @@ export const Dashboard = () => {
         const resultsData = await getResults({ limit: 100 });
 
         if (statsData && statsData.samples.total === 0 && samplesData.samples.length > 0) {
-          statsData.samples.total = samplesData.samples.length;
+          statsData.samples.total = samplesData.total;
           const counts = new Map<string, number>();
           samplesData.samples.forEach(s => counts.set(s.status, (counts.get(s.status) || 0) + 1));
           statsData.samples.by_status = Array.from(counts.entries()).map(([status, count]) => ({ status, count }));
         }
         if (statsData && statsData.orders.total === 0 && ordersData.orders.length > 0) {
-          statsData.orders.total = ordersData.orders.length;
+          statsData.orders.total = ordersData.total;
           const counts = new Map<string, number>();
           ordersData.orders.forEach(o => counts.set(o.status, (counts.get(o.status) || 0) + 1));
           statsData.orders.by_status = Array.from(counts.entries()).map(([status, count]) => ({ status, count }));
         }
         if (statsData && statsData.results.total === 0 && resultsData.results.length > 0) {
-          statsData.results.total = resultsData.results.length;
+          statsData.results.total = resultsData.total;
           const counts = new Map<string, number>();
           resultsData.results.forEach(r => counts.set(r.status, (counts.get(r.status) || 0) + 1));
           statsData.results.by_status = Array.from(counts.entries()).map(([status, count]) => ({ status, count }));

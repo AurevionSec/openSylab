@@ -611,7 +611,8 @@ std::string ApiRouter::sampleToJson(const core::Sample &sample) {
       << "\"patient_name\":" << jsonString(sample.getPatientName()) << ","
       << "\"description\":" << jsonString(sample.getDescription()) << ","
       << "\"status\":" << jsonString(sample.getStatusString()) << ","
-      << "\"registration_date\":" << static_cast<long long>(sample.getRegistrationDate())
+      << "\"registration_date\":" << static_cast<long long>(sample.getRegistrationDate()) << ","
+      << "\"updated_at\":" << static_cast<long long>(sample.getUpdatedAt())
       << "}";
   return out.str();
 }
@@ -638,7 +639,7 @@ std::string ApiRouter::resultToJson(const core::TestResult &result, const std::s
   out << "{"
       << "\"id\":" << result.getId() << ","
       << "\"result_id\":" << jsonString(result.getResultId()) << ","
-      << "\"order_id\":" << result.getOrderId() << ","
+      << "\"order_id\":" << jsonString(orderIdStr.empty() ? std::to_string(result.getOrderId()) : orderIdStr) << ","
       << "\"test_parameter\":" << jsonString(result.getTestParameter()) << ","
       << "\"value\":" << jsonString(result.getValue()) << ","
       << "\"unit\":" << jsonString(result.getUnit()) << ","
@@ -2907,8 +2908,7 @@ bool ApiServer::isRateLimited(const std::string &ip) {
     entry = {1, now};
     return false;
   }
-  entry.first++;
-  return entry.first > 10;
+  return ++entry.first > 10;
 }
 
 bool ApiServer::bindAndListen() {
@@ -3210,7 +3210,7 @@ void ApiServer::handleClientPlain(int clientFd) {
             << "Content-Length: " << rlBody.size() << "\r\n\r\n"
             << rlBody;
       const std::string rlStr = rlOut.str();
-      write(clientFd, rlStr.c_str(), rlStr.size());
+      send(clientFd, rlStr.c_str(), rlStr.size(), MSG_NOSIGNAL);
       return;
     }
   }

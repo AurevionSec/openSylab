@@ -567,6 +567,32 @@ bool Database::initializeSchema() {
     sqlite3_free(alterErr);
   }
 
+  // Migration: add updated_at column to samples (v0.8)
+  {
+    const char *alterSQL = "ALTER TABLE samples ADD COLUMN "
+                           "updated_at INTEGER NOT NULL DEFAULT 0;";
+    char *alterErr = nullptr;
+    (void)sqlite3_exec(db_, alterSQL, nullptr, nullptr, &alterErr);
+    sqlite3_free(alterErr);
+  }
+  // Back-fill: use registration_date for rows created before v0.8
+  {
+    const char *backfillSQL =
+        "UPDATE samples SET updated_at = registration_date WHERE updated_at = 0;";
+    char *bfErr = nullptr;
+    (void)sqlite3_exec(db_, backfillSQL, nullptr, nullptr, &bfErr);
+    sqlite3_free(bfErr);
+  }
+
+  // Migration: add role column to api_keys (v0.8)
+  {
+    const char *alterSQL = "ALTER TABLE api_keys ADD COLUMN "
+                           "role TEXT NOT NULL DEFAULT 'OPERATOR';";
+    char *alterErr = nullptr;
+    (void)sqlite3_exec(db_, alterSQL, nullptr, nullptr, &alterErr);
+    sqlite3_free(alterErr);
+  }
+
   const char *seedRolesSQL = R"(
         INSERT OR IGNORE INTO roles (name, description)
         VALUES ('Administrator', 'Vollzugriff'),

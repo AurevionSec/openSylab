@@ -60,7 +60,7 @@ export const ResultCreateModal = ({ isOpen, onClose, onSuccess }: ResultCreateMo
     getOrders({ limit: 200 })
       .then((r) =>
         setAvailableOrders(
-          r.orders.filter((o) => o.status === 'IN_PROGRESS' || o.status === 'COMPLETED')
+          r.orders.filter((o) => o.status === 'IN_PROGRESS' || o.status === 'COMPLETED' || o.status === 'REQUESTED')
         )
       )
       .catch(() => setAvailableOrders([]))
