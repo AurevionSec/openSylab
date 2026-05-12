@@ -77,7 +77,7 @@ export const Orders = () => {
   const handleDeleteConfirm = async () => {
     if (!orderToDelete) return;
     await deleteOrder(orderToDelete.order_id);
-    refetch();
+    try { refetch(); } catch { /* list refresh failed, delete succeeded */ }
   };
 
   return (

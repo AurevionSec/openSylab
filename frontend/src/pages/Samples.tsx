@@ -81,7 +81,7 @@ export const Samples = () => {
   const handleDeleteConfirm = async () => {
     if (!sampleToDelete) return;
     await deleteSample(sampleToDelete.sample_id);
-    refetch();
+    try { refetch(); } catch { /* list refresh failed, delete succeeded */ }
   };
 
   return (

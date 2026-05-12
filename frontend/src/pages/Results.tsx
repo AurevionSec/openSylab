@@ -66,7 +66,7 @@ export const Results = () => {
   const handleDeleteConfirm = async () => {
     if (!resultToDelete) return;
     await deleteResult(resultToDelete.result_id);
-    refetch();
+    try { refetch(); } catch { /* list refresh failed, delete succeeded */ }
   };
 
   return (

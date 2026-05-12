@@ -131,24 +131,19 @@ std::string jsonString(const std::string &value) {
 
 std::string statusMessage(int status) {
   switch (status) {
-  case 200:
-    return "OK";
-  case 400:
-    return "Bad Request";
-  case 401:
-    return "Unauthorized";
-  case 403:
-    return "Forbidden";
-  case 404:
-    return "Not Found";
-  case 405:
-    return "Method Not Allowed";
-  case 409:
-    return "Conflict";
-  case 500:
-    return "Internal Server Error";
-  default:
-    return "Error";
+  case 200: return "OK";
+  case 201: return "Created";
+  case 204: return "No Content";
+  case 400: return "Bad Request";
+  case 401: return "Unauthorized";
+  case 403: return "Forbidden";
+  case 404: return "Not Found";
+  case 405: return "Method Not Allowed";
+  case 409: return "Conflict";
+  case 422: return "Unprocessable Entity";
+  case 429: return "Too Many Requests";
+  case 500: return "Internal Server Error";
+  default:  return "Unknown";
   }
 }
 
