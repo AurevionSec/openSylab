@@ -814,13 +814,16 @@ void CliInterface::handleUpdateSample() {
     };
     const std::string ns = core::Sample::statusToString(newStatus);
     auto it = kT.find(oldStatus);
-    if (it != kT.end()) {
-      const auto &allowed = it->second;
-      if (std::find(allowed.begin(), allowed.end(), ns) == allowed.end()) {
-        std::cout << "\n✗ Ungültiger Statuswechsel: " << oldStatus << " → " << ns << " nicht erlaubt.\n";
-        waitForEnter();
-        return;
-      }
+    if (it == kT.end()) {
+      std::cout << "\n✗ Unbekannter aktueller Status: " << oldStatus << " – Übergang abgelehnt.\n";
+      waitForEnter();
+      return;
+    }
+    const auto &allowed = it->second;
+    if (std::find(allowed.begin(), allowed.end(), ns) == allowed.end() && oldStatus != ns) {
+      std::cout << "\n✗ Ungültiger Statuswechsel: " << oldStatus << " → " << ns << " nicht erlaubt.\n";
+      waitForEnter();
+      return;
     }
   }
   sample->setStatus(newStatus);
@@ -2280,20 +2283,23 @@ void CliInterface::handleUpdateOrder() {
     static const std::unordered_map<std::string, std::vector<std::string>> kT = {
       {"REQUESTED",    {"IN_PROGRESS", "CANCELLED"}},
       {"IN_PROGRESS",  {"COMPLETED",   "CANCELLED"}},
-      {"COMPLETED",    {"VALIDATED",   "CANCELLED"}},
-      {"VALIDATED",    {"CANCELLED"}},
-      {"CANCELLED",    {}},
+      {"COMPLETED",    {"VALIDATED"}},   // no CANCELLED from COMPLETED (matches API)
+      {"VALIDATED",    {}},              // terminal (matches API)
+      {"CANCELLED",    {}},              // terminal
     };
     const std::string cs = order->getStatusString();
     const std::string ns = core::Order::statusToString(newStatus);
     auto it = kT.find(cs);
-    if (it != kT.end()) {
-      const auto &allowed = it->second;
-      if (std::find(allowed.begin(), allowed.end(), ns) == allowed.end() && cs != ns) {
-        std::cout << "\n✗ Ungültiger Statuswechsel: " << cs << " → " << ns << " nicht erlaubt.\n";
-        waitForEnter();
-        return;
-      }
+    if (it == kT.end()) {
+      std::cout << "\n✗ Unbekannter aktueller Status: " << cs << " – Übergang abgelehnt.\n";
+      waitForEnter();
+      return;
+    }
+    const auto &allowed = it->second;
+    if (std::find(allowed.begin(), allowed.end(), ns) == allowed.end() && cs != ns) {
+      std::cout << "\n✗ Ungültiger Statuswechsel: " << cs << " → " << ns << " nicht erlaubt.\n";
+      waitForEnter();
+      return;
     }
   }
 
@@ -2355,6 +2361,13 @@ void CliInterface::handleDeleteOrder() {
 
   if (confirmLower == "ja" || confirmLower == "j" || confirmLower == "yes" ||
       confirmLower == "y") {
+    // Cancellation guard: only REQUESTED and IN_PROGRESS can be cancelled
+    const std::string cs = order->getStatusString();
+    if (cs != "REQUESTED" && cs != "IN_PROGRESS") {
+      std::cout << "\n✗ Auftrag im Status " << cs << " kann nicht storniert werden.\n";
+      waitForEnter();
+      return;
+    }
     order->setStatus(core::Order::Status::CANCELLED);
     order->setCompletedDate(0);
     if (database_->updateOrder(*order, getCurrentUsername())) {
