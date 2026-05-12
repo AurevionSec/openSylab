@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
 interface ProtectedRouteProps {
@@ -9,6 +9,7 @@ interface ProtectedRouteProps {
 
 export const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {
   const { isAuthenticated, user, loading, mustChangePassword } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -31,11 +32,8 @@ export const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) 
   }
 
   // Force password change: redirect non-profile routes to change password
-  if (mustChangePassword) {
-    const currentPath = window.location.pathname;
-    if (currentPath !== '/profile') {
-      return <Navigate to="/profile?force_change=1" replace />;
-    }
+  if (mustChangePassword && location.pathname !== '/profile') {
+    return <Navigate to="/profile?force_change=1" replace />;
   }
 
   // Check role-based access if required

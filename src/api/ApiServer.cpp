@@ -2528,15 +2528,16 @@ after_user_update:
                        "Provide user_id in URL path.");
     }
 
+    // RBAC check before ID parsing — non-admins always get 403
+    if (!jwtPayload.has_value() || (jwtPayload->role != "ADMIN" && jwtPayload->role != "Administrator")) {
+      return makeError(403, "forbidden", "Admin access required",
+                       "Only administrators can delete users.");
+    }
+
     int userId = 0;
     if (!parseIntValue(userIdStr, userId) || userId <= 0) {
       return makeError(400, "validation_error", "Invalid user_id",
                        "Provide numeric user_id.");
-    }
-
-    if (!jwtPayload.has_value() || (jwtPayload->role != "ADMIN" && jwtPayload->role != "Administrator")) {
-      return makeError(403, "forbidden", "Admin access required",
-                       "Only administrators can delete users.");
     }
 
     if (jwtPayload.has_value() && jwtPayload->userId == userId) {
