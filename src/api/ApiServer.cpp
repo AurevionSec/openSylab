@@ -1710,6 +1710,10 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
           return makeError(409, "conflict", "Sample cannot be deleted",
                            "Sample is currently IN_ANALYSIS; complete or archive it first.");
         }
+        if (s == core::Sample::Status::VALIDATED) {
+          return makeError(409, "conflict", "Sample cannot be deleted",
+                           "VALIDATED samples are immutable (ISO 15189).");
+        }
       }
 
       if (!database_->deleteSample(existing->getId(), actor)) {
