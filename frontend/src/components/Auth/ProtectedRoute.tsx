@@ -8,7 +8,7 @@ interface ProtectedRouteProps {
 }
 
 export const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {
-  const { isAuthenticated, user, loading } = useAuth();
+  const { isAuthenticated, user, loading, mustChangePassword } = useAuth();
 
   if (loading) {
     return (
@@ -28,6 +28,14 @@ export const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) 
   // isAuthenticated but user not loaded (localStorage corruption) — force re-login
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+
+  // Force password change: redirect non-profile routes to change password
+  if (mustChangePassword) {
+    const currentPath = window.location.pathname;
+    if (currentPath !== '/profile') {
+      return <Navigate to="/profile?force_change=1" replace />;
+    }
   }
 
   // Check role-based access if required

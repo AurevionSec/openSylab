@@ -2355,15 +2355,16 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       goto after_user_update;
     }
 
+    // RBAC check before ID parsing — non-admins always get 403
+    if (!jwtPayload.has_value() || (jwtPayload->role != "ADMIN" && jwtPayload->role != "Administrator")) {
+      return makeError(403, "forbidden", "Admin access required",
+                       "Only administrators can update users.");
+    }
+
     int userId = 0;
     if (!parseIntValue(userIdStr, userId) || userId <= 0) {
       return makeError(400, "validation_error", "Invalid user_id",
                        "Provide numeric user_id.");
-    }
-
-    if (!jwtPayload.has_value() || (jwtPayload->role != "ADMIN" && jwtPayload->role != "Administrator")) {
-      return makeError(403, "forbidden", "Admin access required",
-                       "Only administrators can update users.");
     }
 
     auto existing = database_->getUser(userId);
@@ -2711,7 +2712,9 @@ after_user_update:
     auto limitIt = query.find("limit");
     if (limitIt != query.end()) {
       int lim = 0;
-      if (parseIntValue(limitIt->second, lim) && lim > 0) filter.limit = lim;
+      if (parseIntValue(limitIt->second, lim) && lim > 0) {
+        filter.limit = std::min(lim, MAX_PAGINATION_LIMIT);
+      }
     }
 
     const std::string tmpPath = "/tmp/opensylab_audit_export_"
