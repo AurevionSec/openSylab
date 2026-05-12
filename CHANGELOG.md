@@ -2,6 +2,41 @@
 
 Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert.
 
+## [0.8.0] - 2026-05-12
+
+### Sicherheit (P0)
+- **Rate Limiting** auf `/api/v1/auth/login` (10 Requests / 60 Sekunden pro IP, HTTP 429)
+- **Erzwungener Passwort-Wechsel** bei erstem Login mit Standard-Credentials (`admin/admin`)
+- **CORS dedup**: `OPENSYLAB_CORS_ORIGIN` wird einmalig im Konstruktor gelesen, nicht mehr doppelt pro Request
+- **API-Key-RBAC gehärtet**: Rollenspalte in `api_keys`-Tabelle, Keys erhalten zugewiesene Rolle statt hartcodiertem OPERATOR
+- **TLS-Flags**: `--tls-cert`, `--tls-key` CLI-Flags + `OPENSYLAB_TLS_CERT/KEY` Env-Vars
+- **`--force-https`**: Startabbruch wenn TLS nicht konfiguriert — verhindert versehentlichen HTTP-Betrieb in Prod
+
+### Neue Features
+- **`GET /api/v1/health`**: Unauthentifizierter Health-Endpoint mit Version (`{"status":"ok","version":"0.8.0"}`)
+- **HL7 v2.5.1 HTTP-Endpoints**: `POST /api/v1/hl7/import`, `GET /api/v1/hl7/export/{id}` — Hl7Exchange jetzt über HTTP erreichbar
+- **FHIR R4 HTTP-Endpoints**: `POST /api/v1/fhir/import`, `GET /api/v1/fhir/export/{id}` — FhirExchange jetzt über HTTP erreichbar
+- **Audit-Log-Export UI**: Export-Button auf der Audit-Log-Seite (CSV, ADMIN only)
+- **Status-Transition-Validierung im Backend**: Sample PUT und Order PUT lehnen ungültige Statusübergänge mit 422 ab
+- **Import-Seite erweiterert**: Tabs für CSV-Samples / HL7 v2.5.1 / FHIR R4 Import
+- **Dashboard-Statistiken präzise**: Priority-Verteilung und Critical-Count kommen vom Backend (nicht mehr client-seitige Aggregation mit limit:100)
+- **Docker-Healthcheck** aktiviert: Backend-Container nutzt `/api/v1/health`, Frontend wartet auf `service_healthy`
+- **CI/CD Pipeline** (`.github/workflows/ci.yml`): Backend-Build+Tests und Frontend-TypeCheck+Build auf Push/PR
+
+### Fehlerbehebungen
+- Breadcrumb-Bug: `/audit-log` zeigte "Dashboard" → auf "Audit Log" korrigiert
+- Suche: Präfix `O-` statt `O` für Order-Routing (verhindert Fehlrouting bei Wörtern beginnend mit 'O')
+- Create-Button auf Results-Seite nicht mehr sichtbar für VIEWER
+- `order_id` in Ergebnis-Antworten zeigt jetzt String (`O-2024-001`) statt numerischem FK
+- `updated_at` in Sample-Antworten hinzugefügt
+- Sidebar-Badge `'24'` (hardcoded, nie gerendert) entfernt
+- TESTING.md: 62 Tests → 181 Tests korrigiert
+
+### Qualität
+- TypeScript Strict: 0 Fehler nach allen Änderungen
+- 181 Unit-Tests bleiben grün
+- Frontend-Build: 0 Errors, clean
+
 ## [0.7.0] - 2026-05-11
 
 ### Sicherheit

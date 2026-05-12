@@ -2,7 +2,7 @@
 
 **Open Source Laboratory Information Management System**
 
-[![Version](https://img.shields.io/badge/version-0.7.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.8.0-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-green)](#lizenz)
 [![Tests](https://img.shields.io/badge/tests-181%20passing-brightgreen)](#tests)
 [![C++](https://img.shields.io/badge/C%2B%2B-17-orange)](src/)
@@ -273,4 +273,4 @@ MIT — siehe [LICENSE](LICENSE) *(TODO: anlegen)*
 
 Siehe [CHANGELOG.md](CHANGELOG.md) für die vollständige Versionshistorie.
 
-**Aktuelle Version: [0.7.0](CHANGELOG.md#070---2026-05-11)** — JWT-Auth, RBAC, MFA, Auto-Flag, 181 Tests, 60+ Bugfixes.
+**Aktuelle Version: [0.8.0](CHANGELOG.md#080---2026-05-12)** — Health-Endpoint, HL7/FHIR HTTP-Routen, Rate-Limiting, Force-HTTPS, Import-Tabs, Dashboard-Fix, CI/CD.

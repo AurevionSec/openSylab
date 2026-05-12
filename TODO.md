@@ -20,28 +20,28 @@ Auto-Flag · Batch-CSV-Import · HL7 · FHIR · Audit-Trail · 181 Unit-Tests ·
 
 ### P0 — Sicherheit (Blocker für Production)
 
-- [ ] **Kein Standard-JWT-Secret in VCS** — `docker-compose.yml` enthält
+- [x] **Kein Standard-JWT-Secret in VCS** — `docker-compose.yml` enthält
       `change-this-secret-key-in-production` als Klartextsecret.
       Fix: Secret aus Datei/Vault lesen, Startup-Fehler wenn dev-secret in Prod.
-- [ ] **Erzwungener Passwort-Wechsel** bei erstem Login mit `admin/admin`
+- [x] **Erzwungener Passwort-Wechsel** bei erstem Login mit `admin/admin`
       (kein first-run guard vorhanden — Prod-Deployments laufen mit Standardcreds)
-- [ ] **HTTPS erzwingen** — `--force-https` Flag für Prod, HTTP→HTTPS Redirect
+- [x] **HTTPS erzwingen** — `--force-https` Flag für Prod, HTTP→HTTPS Redirect
       (`--tls` Flag existiert in main.cpp, aber kein Enforcement)
-- [ ] **Rate Limiting** auf `/api/v1/auth/login` — aktuell 0 Schutz gegen
+- [x] **Rate Limiting** auf `/api/v1/auth/login` — aktuell 0 Schutz gegen
       Credential Stuffing (single-threaded, kein Login-Counter)
-- [ ] **API-Key-Fallback entfernen oder härten** — X-API-Key-Auth bypassed RBAC
+- [x] **API-Key-Fallback entfernen oder härten** — X-API-Key-Auth bypassed RBAC
       vollständig (wird als OPERATOR behandelt, keine Rollen-Prüfung möglich)
 
 ### P1 — Fehlende Kernfeatures
 
-- [ ] **Health-Endpoint** `GET /api/v1/health` — fehlt komplett;
+- [x] **Health-Endpoint** `GET /api/v1/health` — fehlt komplett;
       Docker-Healthcheck deaktiviert, Reverse-Proxy-Probes schlagen fehl
-- [ ] **HL7/FHIR API-Endpoints** — `Hl7Exchange` + `FhirExchange` sind
+- [x] **HL7/FHIR API-Endpoints** — `Hl7Exchange` + `FhirExchange` sind
       vollständig implementiert (Hl7.cpp, Fhir.cpp) aber in ApiServer.cpp
       nicht verdrahtet. Zero HTTP-Routes für `/api/v1/hl7/*` und `/api/v1/fhir/*`.
-- [ ] **Audit-Log-Export UI** — `Database::exportAuditLogToCsv()` existiert im
+- [x] **Audit-Log-Export UI** — `Database::exportAuditLogToCsv()` existiert im
       Backend, aber kein HTTP-Endpoint und kein Export-Button auf der Audit-Seite
-- [ ] **Status-Transition-Validierung im Backend** — nur im Frontend per
+- [x] **Status-Transition-Validierung im Backend** — nur im Frontend per
       `SAMPLE_TRANSITIONS`/`ORDER_TRANSITIONS` erzwungen; das Backend akzeptiert
       jeden Status-String auf PUT (ISO 15189 Compliance-Lücke)
 - [ ] **Konfigurationsdatei** `opensylab.conf` — aktuell alles via CLI-Flags /
@@ -55,32 +55,32 @@ Auto-Flag · Batch-CSV-Import · HL7 · FHIR · Audit-Trail · 181 Unit-Tests ·
 
 ### P2 — UI/UX-Verbesserungen
 
-- [ ] **Create-Button auf Results-Seite** ohne `canWrite`-Guard —
+- [x] **Create-Button auf Results-Seite** ohne `canWrite`-Guard —
       VIEWER sieht den Button (schlägt beim Submit fehl, aber verwirrend)
-- [ ] **Breadcrumb-Bug** — `/audit-log` wird als "Dashboard" angezeigt
+- [x] **Breadcrumb-Bug** — `/audit-log` wird als "Dashboard" angezeigt
       (`routeNames` hat `/audit` statt `/audit-log` in Header.tsx)
-- [ ] **Suche: inkonsistente Prefix-Logik** — `O` (ohne Bindestrich) → Orders,
+- [x] **Suche: inkonsistente Prefix-Logik** — `O` (ohne Bindestrich) → Orders,
       `R-` (mit Bindestrich) → Results; `RES-001` landet silently bei Samples
-- [ ] **Import-Seite: nur Samples** — UI ruft nur `createSample()` auf;
+- [x] **Import-Seite: nur Samples** — UI ruft nur `createSample()` auf;
       Ergebnis-Import (CsvResultImport.cpp), HL7, FHIR sind nicht erreichbar
-- [ ] **Dashboard Statistik-Fallback** — bei > 100 Einträgen werden Kacheln
+- [x] **Dashboard Statistik-Fallback** — bei > 100 Einträgen werden Kacheln
       und Diagramme unvollständig (client-seitige Aggregation mit limit:100)
-- [ ] **Order-ID in Ergebnissen** — `resultToJson()` sendet numerische PK,
+- [x] **Order-ID in Ergebnissen** — `resultToJson()` sendet numerische PK,
       nicht den lesbaren String wie `O-2024-001`; Tabelle zeigt Zahlen statt IDs
-- [ ] **`updated_at` bei Proben** — `sampleToJson()` hat kein `updated_at`-Feld;
+- [x] **`updated_at` bei Proben** — `sampleToJson()` hat kein `updated_at`-Feld;
       Frontend zeigt immer `registration_date` als "zuletzt geändert"
-- [ ] **Live-Zähler in Sidebar-Badges** — `badge: '24'` in Sidebar ist
+- [x] **Live-Zähler in Sidebar-Badges** — `badge: '24'` in Sidebar ist
       hardcoded und wird nie gerendert (toter Code)
-- [ ] **Passwort-Stärke-Indikator** auf der Profil-Seite
-- [ ] **TESTING.md stale** — zeigt "62 Tests" statt aktuell 181
+- [x] **Passwort-Stärke-Indikator** auf der Profil-Seite
+- [x] **TESTING.md stale** — zeigt "62 Tests" statt aktuell 181
 
 ### P3 — Infrastruktur / Operations
 
-- [ ] **CI/CD Pipeline** — kein `.github/workflows/`; kein automatischer
+- [x] **CI/CD Pipeline** — kein `.github/workflows/`; kein automatischer
       Build/Test/Push auf PR oder merge
-- [ ] **Backend-Healthcheck in docker-compose.yml** — aktuell auskommentiert;
+- [x] **Backend-Healthcheck in docker-compose.yml** — aktuell auskommentiert;
       Frontend-Container startet ggf. vor dem Backend
-- [ ] **CORS-Duplikation** — `getenv("OPENSYLAB_CORS_ORIGIN")` wird in
+- [x] **CORS-Duplikation** — `getenv("OPENSYLAB_CORS_ORIGIN")` wird in
       `handleClientTls()` und `handleClientPlain()` separat gelesen (2 Stellen)
 - [ ] **Single-threaded Server** — `serveLoop()` verarbeitet Verbindungen
       sequenziell; ein langsamer Client blockiert alle anderen
