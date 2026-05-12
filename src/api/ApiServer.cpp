@@ -1728,9 +1728,16 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                          "Verify the order_id.");
       }
 
-      if (existing->getStatus() == core::Order::Status::CANCELLED) {
-        return makeError(409, "conflict", "Order already cancelled",
-                         "Order is in terminal state.");
+      {
+        const auto s = existing->getStatus();
+        if (s == core::Order::Status::CANCELLED) {
+          return makeError(409, "conflict", "Order already cancelled",
+                           "Order is in terminal state.");
+        }
+        if (s == core::Order::Status::VALIDATED || s == core::Order::Status::COMPLETED) {
+          return makeError(409, "conflict", "Order cannot be cancelled",
+                           "Only REQUESTED or IN_PROGRESS orders can be cancelled.");
+        }
       }
 
       if (!database_->deleteOrder(existing->getId(), actor)) {

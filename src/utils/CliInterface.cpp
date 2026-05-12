@@ -903,6 +903,22 @@ void CliInterface::handleDeleteSample() {
   }
 
   if (actionChoice == 1) {
+    // Enforce transition guard: only defined transitions may lead to ARCHIVED
+    static const std::unordered_map<std::string, std::vector<std::string>> kT = {
+      {"REGISTERED",  {"IN_ANALYSIS", "ARCHIVED"}},
+      {"IN_ANALYSIS", {"ANALYZED",    "ARCHIVED"}},
+      {"ANALYZED",    {"VALIDATED",   "ARCHIVED"}},
+      {"VALIDATED",   {"ARCHIVED"}},
+      {"ARCHIVED",    {}},
+    };
+    const std::string cs = sample->getStatusString();
+    auto it = kT.find(cs);
+    if (it == kT.end() ||
+        std::find(it->second.begin(), it->second.end(), "ARCHIVED") == it->second.end()) {
+      std::cout << "\n✗ Probe im Status " << cs << " kann nicht direkt archiviert werden.\n";
+      waitForEnter();
+      return;
+    }
     sample->setStatus(core::Sample::Status::ARCHIVED);
     if (database_->updateSample(*sample, getCurrentUsername())) {
       std::cout << "\n✓ Probe erfolgreich archiviert!\n";
