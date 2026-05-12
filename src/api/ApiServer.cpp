@@ -1700,9 +1700,16 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                          "Verify the sample_id.");
       }
 
-      if (existing->getStatus() == core::Sample::Status::ARCHIVED) {
-        return makeError(409, "conflict", "Sample already archived",
-                         "Sample is in terminal state.");
+      {
+        const auto s = existing->getStatus();
+        if (s == core::Sample::Status::ARCHIVED) {
+          return makeError(409, "conflict", "Sample already archived",
+                           "Sample is in terminal state.");
+        }
+        if (s == core::Sample::Status::IN_ANALYSIS) {
+          return makeError(409, "conflict", "Sample cannot be deleted",
+                           "Sample is currently IN_ANALYSIS; complete or archive it first.");
+        }
       }
 
       if (!database_->deleteSample(existing->getId(), actor)) {
@@ -1763,9 +1770,16 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                          "Verify the result_id.");
       }
 
-      if (existing->getStatus() == core::TestResult::Status::REJECTED) {
-        return makeError(409, "conflict", "Result already rejected",
-                         "Result is in terminal state.");
+      {
+        const auto s = existing->getStatus();
+        if (s == core::TestResult::Status::REJECTED) {
+          return makeError(409, "conflict", "Result already rejected",
+                           "Result is in terminal state.");
+        }
+        if (s == core::TestResult::Status::VALIDATED) {
+          return makeError(409, "conflict", "Result cannot be deleted",
+                           "VALIDATED results are immutable (ISO 15189).");
+        }
       }
 
       if (!database_->deleteTestResult(existing->getId(), actor)) {

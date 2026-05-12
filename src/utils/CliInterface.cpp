@@ -927,6 +927,13 @@ void CliInterface::handleDeleteSample() {
                 << "\n";
     }
   } else if (actionChoice == 2) {
+    // Block hard-delete for active or validated samples (ISO 15189)
+    const std::string cs = sample->getStatusString();
+    if (cs == "IN_ANALYSIS" || cs == "VALIDATED") {
+      std::cout << "\n✗ Probe im Status " << cs << " kann nicht gelöscht werden.\n";
+      waitForEnter();
+      return;
+    }
     if (database_->deleteSample(id, getCurrentUsername())) {
       std::cout << "\n✓ Probe erfolgreich gelöscht!\n";
     } else {
