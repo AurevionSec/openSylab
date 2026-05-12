@@ -3111,7 +3111,7 @@ void ApiServer::handleClientTls(int clientFd) {
   request.body = body;
 
   // Rate-Limiting fuer Login
-  if (request.method == "post" && request.path == "/api/v1/auth/login") {
+  if (request.method == "POST" && request.path == "/api/v1/auth/login") {
     const auto fwdIt = request.headers.find("x-forwarded-for");
     const std::string clientIp = (fwdIt != request.headers.end())
         ? fwdIt->second : "conn:" + std::to_string(clientFd);
@@ -3211,7 +3211,7 @@ void ApiServer::handleClientPlain(int clientFd) {
   request.body = body;
 
   // Rate-Limiting fuer Login
-  if (request.method == "post" && request.path == "/api/v1/auth/login") {
+  if (request.method == "POST" && request.path == "/api/v1/auth/login") {
     const auto fwdIt = request.headers.find("x-forwarded-for");
     const std::string clientIp = (fwdIt != request.headers.end())
         ? fwdIt->second : "conn:" + std::to_string(clientFd);

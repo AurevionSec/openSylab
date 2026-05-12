@@ -76,7 +76,7 @@ export const Import = () => {
       const rawText = (evt.target?.result as string).replace(/^\uFEFF/, '');
       const allLines = rawText.split(/\r?\n/).filter(l => l.trim() !== '');
       const firstLower = allLines[0]?.toLowerCase() ?? '';
-      const lines = (firstLower.startsWith('sample_id') || firstLower.startsWith('id,'))
+      const lines = (firstLower.startsWith('sample_id') || firstLower === 'id,patient_id' || firstLower.startsWith('id,patient_id'))
         ? allLines.slice(1)
         : allLines;
       const parsed: ImportRow[] = lines.map((line, i) => ({

@@ -3517,7 +3517,7 @@ std::vector<Database::StatusCount> Database::getOrderPriorityStats() {
   if (!isOpen_) return result;
   const char *sql =
       "SELECT priority, COUNT(*) as cnt FROM orders "
-      "WHERE status NOT IN ('CANCELLED','Storniert') GROUP BY priority ORDER BY cnt DESC";
+      "WHERE status != 'CANCELLED' GROUP BY priority ORDER BY cnt DESC";
   sqlite3_stmt *rawStmt = nullptr;
   if (sqlite3_prepare_v2(db_, sql, -1, &rawStmt, nullptr) != SQLITE_OK) {
     return result;
@@ -3536,7 +3536,7 @@ int Database::getCriticalResultCount() {
   if (!isOpen_) return 0;
   const char *sql =
       "SELECT COUNT(*) FROM test_results "
-      "WHERE flag = 'CRITICAL' AND status NOT IN ('REJECTED','Abgelehnt')";
+      "WHERE flag = 'CRITICAL' AND status != 'REJECTED'";
   sqlite3_stmt *rawStmt = nullptr;
   if (sqlite3_prepare_v2(db_, sql, -1, &rawStmt, nullptr) != SQLITE_OK) {
     return 0;
