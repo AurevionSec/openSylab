@@ -1710,6 +1710,10 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
           return makeError(409, "conflict", "Sample cannot be deleted",
                            "Sample is currently IN_ANALYSIS; complete or archive it first.");
         }
+        if (s == core::Sample::Status::ANALYZED) {
+          return makeError(409, "conflict", "Sample cannot be deleted",
+                           "Sample has been ANALYZED; validate or archive it first.");
+        }
         if (s == core::Sample::Status::VALIDATED) {
           return makeError(409, "conflict", "Sample cannot be deleted",
                            "VALIDATED samples are immutable (ISO 15189).");
@@ -1777,8 +1781,8 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       {
         const auto s = existing->getStatus();
         if (s == core::TestResult::Status::REJECTED) {
-          return makeError(409, "conflict", "Result already rejected",
-                           "Result is in terminal state.");
+          return makeError(409, "conflict", "Result cannot be deleted",
+                           "REJECTED results are retained for audit trail integrity.");
         }
         if (s == core::TestResult::Status::VALIDATED) {
           return makeError(409, "conflict", "Result cannot be deleted",

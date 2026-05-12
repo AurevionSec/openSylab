@@ -929,7 +929,7 @@ void CliInterface::handleDeleteSample() {
   } else if (actionChoice == 2) {
     // Block hard-delete for active or validated samples (ISO 15189)
     const std::string cs = sample->getStatusString();
-    if (cs == "IN_ANALYSIS" || cs == "VALIDATED") {
+    if (cs == "IN_ANALYSIS" || cs == "ANALYZED" || cs == "VALIDATED" || cs == "ARCHIVED") {
       std::cout << "\n✗ Probe im Status " << cs << " kann nicht gelöscht werden.\n";
       waitForEnter();
       return;
