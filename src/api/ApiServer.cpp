@@ -2326,9 +2326,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
     }
 
     auto created = database_->getUserByUsername(newUser.getUsername());
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
+    database_->clearError(); // Read-back failure is non-fatal; fall back to in-memory object
     const core::User &responseUser = created ? *created : newUser;
     return ApiResponse{201,
                        "{\"data\":" + userToJson(responseUser) + "}",
