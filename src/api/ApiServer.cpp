@@ -1604,7 +1604,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
               kResultTrans = {
                 {"PENDING",   {"ENTERED", "REJECTED"}},
                 {"ENTERED",   {"VALIDATED", "REJECTED", "REPEATED"}},
-                {"VALIDATED", {"REJECTED"}},
+                {"VALIDATED", {}},
                 {"REPEATED",  {"ENTERED", "VALIDATED", "REJECTED"}},
                 {"REJECTED",  {}},  // terminal — no transitions allowed
               };
