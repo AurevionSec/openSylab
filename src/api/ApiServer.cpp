@@ -899,11 +899,11 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       parseQuery(queryString);
 
   // RBAC: VIEWER role cannot write lab data (applies to POST, PUT, DELETE)
-  // Exception: allow VIEWER to change their own password via PUT /users/me/password
-  if (!isGet && effectiveRole == "VIEWER" &&
+  // Exception: allow VIEWER/CUSTOM to change their own password
+  if (!isGet && (effectiveRole == "VIEWER" || effectiveRole == "CUSTOM") &&
       !(isPut && path == "/api/v1/users/me/password")) {
     return makeError(403, "forbidden", "Insufficient permissions",
-                     "VIEWER role cannot create, update, or delete records.");
+                     "VIEWER and CUSTOM roles cannot create, update, or delete records.");
   }
 
   if (isPost || isPut) {
