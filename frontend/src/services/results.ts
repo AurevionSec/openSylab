@@ -143,8 +143,9 @@ export const updateResult = async (id: string, result: Partial<TestResult>): Pro
   if (result.result_id !== undefined) updateData.result_id = result.result_id;
   if (result.order_id !== undefined) {
     const n = parseInt(result.order_id, 10);
-    if (isNaN(n)) throw new Error('Invalid order_id');
-    updateData.order_id = n;
+    // Only send order_id if it is a numeric string (DB foreign key)
+    // Human-readable strings like "ORD-2024-001" are omitted — backend keeps existing value
+    if (!isNaN(n)) updateData.order_id = n;
   }
   if (result.parameter !== undefined) updateData.test_parameter = result.parameter;
   if (result.value !== undefined) updateData.value = result.value;

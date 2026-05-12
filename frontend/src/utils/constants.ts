@@ -97,3 +97,11 @@ export const ORDER_TRANSITIONS: Record<string, string[]> = {
   VALIDATED: [],
   CANCELLED: [],
 };
+
+export const RESULT_TRANSITIONS: Record<string, string[]> = {
+  PENDING:   ['REVIEWED'],
+  REVIEWED:  ['VALIDATED', 'REJECTED', 'AMENDED'],
+  AMENDED:   ['REVIEWED', 'VALIDATED', 'REJECTED'],
+  VALIDATED: [],
+  REJECTED:  [],
+};

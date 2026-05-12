@@ -1314,7 +1314,26 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       auto statusIt = payload.find("status");
       if (statusIt != payload.end() && !statusIt->second.empty()) {
         try {
-          updated.setStatus(core::Sample::stringToStatus(statusIt->second));
+          const auto newStatus = core::Sample::stringToStatus(statusIt->second);
+          static const std::unordered_map<std::string,std::vector<std::string>>
+              kSampleTrans = {
+                {"REGISTERED",  {"IN_ANALYSIS", "ARCHIVED"}},
+                {"IN_ANALYSIS", {"ANALYZED",    "ARCHIVED"}},
+                {"ANALYZED",    {"VALIDATED",   "ARCHIVED"}},
+                {"VALIDATED",   {"ARCHIVED"}},
+                {"ARCHIVED",    {}},
+              };
+          const std::string cs = existing->getStatusString();
+          const std::string ns = core::Sample::statusToString(newStatus);
+          const auto ti = kSampleTrans.find(cs);
+          if (ti != kSampleTrans.end()) {
+            const auto &allowed = ti->second;
+            if (std::find(allowed.begin(), allowed.end(), ns) == allowed.end() && cs != ns) {
+              return makeError(409, "conflict", "Invalid status transition",
+                               "Transition from " + cs + " to " + ns + " is not allowed.");
+            }
+          }
+          updated.setStatus(newStatus);
         } catch (const std::exception &e) {
           return makeError(400, "validation_error", "Invalid status",
                            e.what());

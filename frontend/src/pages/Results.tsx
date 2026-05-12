@@ -237,6 +237,8 @@ export const Results = () => {
                               variant="ghost"
                               size="sm"
                               onClick={() => handleDeleteClick(result)}
+                              disabled={result.status === 'REJECTED'}
+                              title={result.status === 'REJECTED' ? 'Rejected results cannot be deleted' : 'Delete result'}
                             >
                               <span className="flex items-center gap-1">
                                 <svg

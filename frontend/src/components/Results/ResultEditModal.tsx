@@ -4,7 +4,7 @@ import { Input } from '../common/Input';
 import { Button } from '../common/Button';
 import { updateResult } from '../../services/results';
 import type { TestResult } from '../../types/result';
-import { RESULT_STATUSES, RESULT_FLAGS } from '../../utils/constants';
+import { RESULT_STATUSES, RESULT_FLAGS, RESULT_TRANSITIONS } from '../../utils/constants';
 
 interface ResultEditModalProps {
   isOpen: boolean;
@@ -173,7 +173,13 @@ export const ResultEditModal = ({ isOpen, onClose, result, onSuccess }: ResultEd
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Status *</label>
                   <select value={formData.status} onChange={(e) => handleChange('status', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#0055FF] focus:border-transparent" required>
-                    {Object.entries(RESULT_STATUSES).map(([key, label]) => (<option key={key} value={key}>{label}</option>))}
+                    {(() => {
+                      const allowed = RESULT_TRANSITIONS[result.status] ?? Object.keys(RESULT_STATUSES);
+                      const opts = [result.status, ...allowed.filter(s => s !== result.status)];
+                      return opts.map(key => (
+                        <option key={key} value={key}>{RESULT_STATUSES[key as keyof typeof RESULT_STATUSES] ?? key}</option>
+                      ));
+                    })()}
                   </select>
                 </div>
               </div>
