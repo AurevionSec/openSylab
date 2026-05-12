@@ -1755,6 +1755,19 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
         }
       }
 
+      // Pre-check: active results block cancellation (returns clean 409 vs DB-level error)
+      {
+        auto results = database_->getTestResultsByOrderId(existing->getId());
+        for (const auto &res : results) {
+          const auto rs = res->getStatus();
+          if (rs != core::TestResult::Status::VALIDATED &&
+              rs != core::TestResult::Status::REJECTED) {
+            return makeError(409, "conflict", "Order has active results",
+                             "Result " + res->getResultId() +
+                             " must be completed or rejected before cancelling the order.");
+          }
+        }
+      }
       if (!database_->deleteOrder(existing->getId(), actor)) {
         return makeDbErrorResponse(database_->getLastError());
       }

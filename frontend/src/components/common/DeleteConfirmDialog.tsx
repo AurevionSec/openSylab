@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from './Button';
 
 interface DeleteConfirmDialogProps {
@@ -37,6 +37,7 @@ export const DeleteConfirmDialog = ({
 }: DeleteConfirmDialogProps) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  useEffect(() => { if (!isOpen) setError(''); }, [isOpen]);
 
   const handleConfirm = async () => {
     setError('');
