@@ -3,10 +3,10 @@ import { Layout } from '../components/Layout/Layout';
 import { Card } from '../components/common/Card';
 import { Input } from '../components/common/Input';
 import { getAuditLog } from '../services/audit';
+import api from '../services/api';
 import type { AuditEntry, AuditLogFilter, AuditAction, AuditEntity } from '../types/audit';
 import { AUDIT_ACTIONS, AUDIT_ENTITIES, ACTION_COLORS } from '../types/audit';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import { JWT_TOKEN_STORAGE_KEY } from '../utils/constants';
 import { ErrorBanner } from '../components/common/ErrorBanner';
 
 export const AuditLog = () => {
@@ -76,16 +76,9 @@ export const AuditLog = () => {
             <button
               onClick={() => {
                 setExportError('');
-                const token = localStorage.getItem(JWT_TOKEN_STORAGE_KEY);
-                fetch(`${import.meta.env.VITE_API_URL}/audit/export`, {
-                  headers: token ? { Authorization: `Bearer ${token}` } : {}
-                })
-                  .then(r => {
-                    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-                    return r.blob();
-                  })
-                  .then(blob => {
-                    const url = URL.createObjectURL(blob);
+                api.get('/audit/export', { responseType: 'blob' })
+                  .then(response => {
+                    const url = URL.createObjectURL(response.data as Blob);
                     const a = document.createElement('a');
                     a.href = url;
                     a.download = 'audit-log.csv';
@@ -96,7 +89,7 @@ export const AuditLog = () => {
                   })
                   .catch(err => {
                     console.error('Export failed:', err);
-                    if (mountedRef.current) setExportError(`Export fehlgeschlagen: ${err instanceof Error ? err.message : 'Unbekannter Fehler'}`);
+                    if (mountedRef.current) setExportError(`Export fehlgeschlagen: ${err?.response?.status === 403 ? 'Keine Berechtigung' : 'Unbekannter Fehler'}`);
                   });
               }}
               className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 transition-colors"

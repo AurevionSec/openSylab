@@ -3262,7 +3262,7 @@ void ApiServer::handleClientPlain(int clientFd) {
   out << response.body;
 
   const std::string responseStr = out.str();
-  send(clientFd, responseStr.c_str(), responseStr.size(), 0);
+  send(clientFd, responseStr.c_str(), responseStr.size(), MSG_NOSIGNAL);
 }
 
 } // namespace api
