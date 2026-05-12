@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Layout } from '../components/Layout/Layout';
 import { Card } from '../components/common/Card';
@@ -244,6 +244,8 @@ const ChangePasswordForm = ({ onSuccess, onCancel, forceChange }: ChangePassword
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -265,7 +267,7 @@ const ChangePasswordForm = ({ onSuccess, onCancel, forceChange }: ChangePassword
     try {
       await changePassword(formData);
       setSuccess(true);
-      setTimeout(() => onSuccess(), 1500);
+      timerRef.current = setTimeout(() => onSuccess(), 1500);
     } catch (err: unknown) {
       setError((err && typeof err === 'object' && 'response' in err ? (err as {response?: {data?: {error?: {message?: string}}}}).response?.data?.error?.message : undefined) || 'Failed to change password');
     } finally {
