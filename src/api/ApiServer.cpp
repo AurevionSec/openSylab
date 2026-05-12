@@ -2739,9 +2739,14 @@ after_user_update:
       return makeError(403, "forbidden", "Insufficient permissions",
                        "OPERATOR or ADMIN role required.");
     }
+    const std::string hl7Body = trimLeadingNewlines(request.body);
+    if (hl7Body.empty()) {
+      return makeError(400, "validation_error", "Missing request body",
+                       "Provide HL7 v2.5.1 message in request body.");
+    }
     utils::Hl7Exchange exchange(database_);
     utils::Hl7Exchange::ImportSummary summary;
-    if (!exchange.importOruR01Message(request.body, actor, summary)) {
+    if (!exchange.importOruR01Message(hl7Body, actor, summary)) {
       return makeError(422, "import_error", "HL7 import failed",
                        summary.lastError);
     }
@@ -2809,9 +2814,14 @@ after_user_update:
       return makeError(403, "forbidden", "Insufficient permissions",
                        "OPERATOR or ADMIN role required.");
     }
+    const std::string fhirBody = trimLeadingNewlines(request.body);
+    if (fhirBody.empty()) {
+      return makeError(400, "validation_error", "Missing request body",
+                       "Provide FHIR R4 Bundle JSON in request body.");
+    }
     utils::FhirExchange exchange(database_);
     utils::FhirExchange::ImportSummary summary;
-    if (!exchange.importBundle(request.body, actor, summary)) {
+    if (!exchange.importBundle(fhirBody, actor, summary)) {
       return makeError(422, "import_error", "FHIR import failed",
                        summary.lastError);
     }
