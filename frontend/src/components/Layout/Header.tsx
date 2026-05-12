@@ -25,7 +25,7 @@ export const Header = () => {
 
   const handleLogout = () => {
     logout();
-    window.location.href = '/login';
+    navigate('/login', { replace: true });
   };
 
   // Generate breadcrumbs from current path
