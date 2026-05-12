@@ -978,9 +978,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       }
 
       auto created = database_->getSampleByBarcode(sample.getSampleId());
-      if (database_->hasError()) {
-        return makeDbErrorResponse(database_->getLastError());
-      }
+      database_->clearError(); // Read-back failure is non-fatal; fall back to in-memory object
       const core::Sample &responseSample = created ? *created : sample;
       return ApiResponse{201,
                          "{\"data\":" + sampleToJson(responseSample) + "}",
@@ -1084,9 +1082,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       }
 
       auto created = database_->getOrderByOrderId(order.getOrderId());
-      if (database_->hasError()) {
-        return makeDbErrorResponse(database_->getLastError());
-      }
+      database_->clearError(); // Read-back failure is non-fatal; fall back to in-memory object
       const core::Order &responseOrder = created ? *created : order;
       return ApiResponse{201,
                          "{\"data\":" + orderToJson(responseOrder) + "}",
@@ -1251,9 +1247,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       }
 
       auto created = database_->getTestResultByResultId(result.getResultId());
-      if (database_->hasError()) {
-        return makeDbErrorResponse(database_->getLastError());
-      }
+      database_->clearError(); // Read-back failure is non-fatal; fall back to in-memory object
       const core::TestResult &responseResult = created ? *created : result;
       {
         std::string oidStr;

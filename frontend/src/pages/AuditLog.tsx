@@ -6,6 +6,7 @@ import { getAuditLog } from '../services/audit';
 import type { AuditEntry, AuditLogFilter, AuditAction, AuditEntity } from '../types/audit';
 import { AUDIT_ACTIONS, AUDIT_ENTITIES, ACTION_COLORS } from '../types/audit';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { JWT_TOKEN_STORAGE_KEY } from '../utils/constants';
 import { ErrorBanner } from '../components/common/ErrorBanner';
 
 export const AuditLog = () => {
@@ -75,7 +76,7 @@ export const AuditLog = () => {
             <button
               onClick={() => {
                 setExportError('');
-                const token = localStorage.getItem('opensylab_jwt_token');
+                const token = localStorage.getItem(JWT_TOKEN_STORAGE_KEY);
                 fetch(`${import.meta.env.VITE_API_URL}/audit/export`, {
                   headers: token ? { Authorization: `Bearer ${token}` } : {}
                 })
