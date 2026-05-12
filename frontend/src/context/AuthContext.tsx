@@ -12,9 +12,10 @@ interface AuthContextType {
   isAuthenticated: boolean;
   user: User | null;
   mustChangePassword: boolean;
-  login: (username: string, password: string, mfaCode?: string) => Promise<{ success: boolean; error?: string; mfaRequired?: boolean }>;
+  login: (username: string, password: string, mfaCode?: string) => Promise<{ success: boolean; error?: string; mfaRequired?: boolean; mustChangePassword?: boolean }>;
   logout: () => void;
   loading: boolean;
+  clearMustChangePassword: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -40,7 +41,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setLoading(false);
   }, []);
 
-  const login = async (username: string, password: string, mfaCode?: string): Promise<{ success: boolean; error?: string; mfaRequired?: boolean }> => {
+  const login = async (username: string, password: string, mfaCode?: string): Promise<{ success: boolean; error?: string; mfaRequired?: boolean; mustChangePassword?: boolean }> => {
     const result = await loginService(username, password, mfaCode);
 
     if (result.success && result.user) {
@@ -49,11 +50,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const mcp = result.user.must_change_password === true;
       setMustChangePassword(mcp);
       localStorage.setItem('opensylab_must_change_pw', mcp ? 'true' : 'false');
-      return { success: true };
+      return { success: true, mustChangePassword: mcp };
     }
 
     return { success: false, error: result.error, mfaRequired: result.mfaRequired };
   };
+
+  const clearMustChangePassword = () => setMustChangePassword(false);
 
   const logout = () => {
     logoutService();
@@ -64,7 +67,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, user, mustChangePassword, login, logout, loading }}>
+    <AuthContext.Provider value={{ isAuthenticated, user, mustChangePassword, login, logout, loading, clearMustChangePassword }}>
       {children}
     </AuthContext.Provider>
   );

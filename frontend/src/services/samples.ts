@@ -40,7 +40,7 @@ const transformSample = (backendSample: BackendSample): Sample => {
     description: backendSample.description || '',
     status: mapStatus(backendSample.status),
     created_at: new Date(backendSample.registration_date * 1000).toISOString(),
-    updated_at: new Date((backendSample.updated_at ?? backendSample.registration_date) * 1000).toISOString(),
+    updated_at: new Date(((backendSample.updated_at || backendSample.registration_date) * 1000)).toISOString(),
   };
 };
 

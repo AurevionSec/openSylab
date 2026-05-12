@@ -173,8 +173,9 @@ export const Import = () => {
         msg = err.message;
       }
       setHl7Error(msg);
+    } finally {
+      setHl7Importing(false);
     }
-    setHl7Importing(false);
   };
 
   const handleFhirFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -208,8 +209,9 @@ export const Import = () => {
         msg = err.message;
       }
       setFhirError(msg);
+    } finally {
+      setFhirImporting(false);
     }
-    setFhirImporting(false);
   };
 
   const successCount = rows.filter(r => r.status === 'success').length;
@@ -273,11 +275,9 @@ export const Import = () => {
                 onDrop={e => {
                   e.preventDefault();
                   const file = e.dataTransfer.files?.[0];
-                  if (file && fileInputRef.current) {
-                    const dt = new DataTransfer();
-                    dt.items.add(file);
-                    fileInputRef.current.files = dt.files;
-                    fileInputRef.current.dispatchEvent(new Event('change', { bubbles: true }));
+                  if (file) {
+                    const fakeEvt = { target: { files: e.dataTransfer.files } } as React.ChangeEvent<HTMLInputElement>;
+                    handleFileChange(fakeEvt);
                   }
                 }}
               >
@@ -371,11 +371,9 @@ export const Import = () => {
                 onDrop={e => {
                   e.preventDefault();
                   const file = e.dataTransfer.files?.[0];
-                  if (file && hl7FileInputRef.current) {
-                    const dt = new DataTransfer();
-                    dt.items.add(file);
-                    hl7FileInputRef.current.files = dt.files;
-                    hl7FileInputRef.current.dispatchEvent(new Event('change', { bubbles: true }));
+                  if (file) {
+                    const fakeEvt = { target: { files: e.dataTransfer.files } } as React.ChangeEvent<HTMLInputElement>;
+                    handleHl7FileChange(fakeEvt);
                   }
                 }}
               >
@@ -434,11 +432,9 @@ export const Import = () => {
                 onDrop={e => {
                   e.preventDefault();
                   const file = e.dataTransfer.files?.[0];
-                  if (file && fhirFileInputRef.current) {
-                    const dt = new DataTransfer();
-                    dt.items.add(file);
-                    fhirFileInputRef.current.files = dt.files;
-                    fhirFileInputRef.current.dispatchEvent(new Event('change', { bubbles: true }));
+                  if (file) {
+                    const fakeEvt = { target: { files: e.dataTransfer.files } } as React.ChangeEvent<HTMLInputElement>;
+                    handleFhirFileChange(fakeEvt);
                   }
                 }}
               >

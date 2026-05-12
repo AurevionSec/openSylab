@@ -1074,7 +1074,7 @@ Database::getSamplesByFilter(const SampleFilter &filter) {
 
   std::ostringstream sql;
   sql << "SELECT id, sample_id, patient_id, patient_name, description, status, "
-         "registration_date FROM samples";
+         "registration_date, updated_at FROM samples";
 
   if (!conditions.empty()) {
     sql << " WHERE ";
@@ -3491,7 +3491,7 @@ std::vector<Database::StatusCount> Database::getOrderPriorityStats() {
   if (!isOpen_) return result;
   const char *sql =
       "SELECT priority, COUNT(*) as cnt FROM orders "
-      "WHERE status != 'CANCELLED' GROUP BY priority ORDER BY cnt DESC";
+      "WHERE status NOT IN ('CANCELLED','Storniert') GROUP BY priority ORDER BY cnt DESC";
   sqlite3_stmt *rawStmt = nullptr;
   if (sqlite3_prepare_v2(db_, sql, -1, &rawStmt, nullptr) != SQLITE_OK) {
     return result;
@@ -3510,7 +3510,7 @@ int Database::getCriticalResultCount() {
   if (!isOpen_) return 0;
   const char *sql =
       "SELECT COUNT(*) FROM test_results "
-      "WHERE flag = 'CRITICAL' AND status != 'REJECTED'";
+      "WHERE flag = 'CRITICAL' AND status NOT IN ('REJECTED','Abgelehnt')";
   sqlite3_stmt *rawStmt = nullptr;
   if (sqlite3_prepare_v2(db_, sql, -1, &rawStmt, nullptr) != SQLITE_OK) {
     return 0;

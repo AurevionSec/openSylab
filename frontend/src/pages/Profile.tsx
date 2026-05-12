@@ -8,11 +8,13 @@ import { getCurrentUser, changePassword } from '../services/users';
 import type { User, ChangePasswordPayload } from '../types/user';
 import { USER_ROLES, ROLE_COLORS } from '../types/user';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 
 export const Profile = () => {
   useDocumentTitle({ action: 'My Profile' });
   const { isDarkMode, toggleDarkMode } = useTheme();
+  const { clearMustChangePassword } = useAuth();
   const [searchParams] = useSearchParams();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -32,6 +34,7 @@ export const Profile = () => {
       setLoading(true);
       const data = await getCurrentUser();
       setUser(data);
+      if (data.must_change_password) setIsChangingPassword(true);
     } catch (err: unknown) {
       setError((err && typeof err === 'object' && 'response' in err ? (err as {response?: {data?: {error?: {message?: string}}}}).response?.data?.error?.message : undefined) || 'Failed to load profile');
       console.error(err);
@@ -212,6 +215,7 @@ export const Profile = () => {
               <ChangePasswordForm
                 onSuccess={() => {
                   setIsChangingPassword(false);
+                  clearMustChangePassword();
                 }}
                 onCancel={() => setIsChangingPassword(false)}
                 forceChange={isForceChange}

@@ -76,12 +76,22 @@ export const AuditLog = () => {
                 const token = localStorage.getItem('opensylab_jwt_token');
                 fetch(`${import.meta.env.VITE_API_URL}/audit/export`, {
                   headers: token ? { Authorization: `Bearer ${token}` } : {}
-                }).then(r => r.blob()).then(blob => {
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url; a.download = 'audit-log.csv'; a.click();
-                  URL.revokeObjectURL(url);
-                });
+                })
+                  .then(r => {
+                    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                    return r.blob();
+                  })
+                  .then(blob => {
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'audit-log.csv';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    setTimeout(() => URL.revokeObjectURL(url), 100);
+                  })
+                  .catch(err => console.error('Export failed:', err));
               }}
               className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 transition-colors"
             >

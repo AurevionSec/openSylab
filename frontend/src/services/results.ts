@@ -123,7 +123,7 @@ export const getResultById = async (id: string): Promise<TestResult> => {
 export const createResult = async (result: Omit<TestResult, 'id' | 'reviewed_date'>): Promise<TestResult> => {
   const response = await api.post<{ data: BackendResult }>('/results', {
     result_id: result.result_id,
-    order_id: result.order_id,
+    order_id: parseInt(result.order_id, 10) || result.order_id,
     test_parameter: result.parameter,
     value: result.value,
     unit: result.unit,
@@ -141,7 +141,7 @@ export const updateResult = async (id: string, result: Partial<TestResult>): Pro
   const updateData: Record<string, unknown> = {};
 
   if (result.result_id !== undefined) updateData.result_id = result.result_id;
-  if (result.order_id !== undefined) updateData.order_id = result.order_id;
+  if (result.order_id !== undefined) updateData.order_id = parseInt(result.order_id, 10) || result.order_id;
   if (result.parameter !== undefined) updateData.test_parameter = result.parameter;
   if (result.value !== undefined) updateData.value = result.value;
   if (result.unit !== undefined) updateData.unit = result.unit;

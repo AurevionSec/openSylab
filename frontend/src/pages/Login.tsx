@@ -16,7 +16,7 @@ export const Login = () => {
   const [mfaRequired, setMfaRequired] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login, mustChangePassword } = useAuth();
+  const { login } = useAuth();
   const navigate = useNavigate();
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -26,11 +26,7 @@ export const Login = () => {
     try {
       const result = await login(username, password, mfaRequired ? mfaCode : undefined);
       if (result.success) {
-        if (mustChangePassword) {
-          navigate('/profile?force_change=1');
-        } else {
-          navigate('/');
-        }
+        navigate(result.mustChangePassword ? '/profile?force_change=1' : '/');
       } else if (result.mfaRequired) {
         setMfaRequired(true);
         setError('');

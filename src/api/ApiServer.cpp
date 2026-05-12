@@ -2889,6 +2889,18 @@ ApiServer::ApiServer(std::shared_ptr<db::Database> database, int port)
 bool ApiServer::isRateLimited(const std::string &ip) {
   std::lock_guard<std::mutex> lock(loginMutex_);
   auto now = std::chrono::steady_clock::now();
+
+  // Prune expired entries to bound map growth (max 10000 IPs)
+  if (loginAttempts_.size() > 10000) {
+    for (auto it = loginAttempts_.begin(); it != loginAttempts_.end(); ) {
+      if (now - it->second.second > std::chrono::seconds(60)) {
+        it = loginAttempts_.erase(it);
+      } else {
+        ++it;
+      }
+    }
+  }
+
   auto &entry = loginAttempts_[ip];
   // Fenster: 60 Sekunden, max. 10 Versuche
   if (now - entry.second > std::chrono::seconds(60)) {
@@ -3098,7 +3110,8 @@ void ApiServer::handleClientTls(int clientFd) {
             << "Content-Length: " << rlBody.size() << "\r\n\r\n"
             << rlBody;
       const std::string rlStr = rlOut.str();
-      write(clientFd, rlStr.c_str(), rlStr.size());
+      SSL_write(ssl, rlStr.c_str(), static_cast<int>(rlStr.size()));
+      TlsContext::freeSslConnection(ssl);
       return;
     }
   }
