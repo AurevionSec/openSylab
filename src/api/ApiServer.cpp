@@ -1720,6 +1720,17 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
         }
       }
 
+      // Pre-check: active orders block sample deletion (returns clean 409 vs DB-level error)
+      {
+        auto orders = database_->getOrdersBySampleId(existing->getSampleId());
+        for (const auto &ord : orders) {
+          if (ord->getStatus() != core::Order::Status::CANCELLED) {
+            return makeError(409, "conflict", "Sample has active orders",
+                             "Order " + ord->getOrderId() +
+                             " must be cancelled before deleting the sample.");
+          }
+        }
+      }
       if (!database_->deleteSample(existing->getId(), actor)) {
         return makeDbErrorResponse(database_->getLastError());
       }
