@@ -1805,8 +1805,8 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       {
         const auto s = existing->getStatus();
         if (s == core::TestResult::Status::REJECTED) {
-          return makeError(409, "conflict", "Result cannot be deleted",
-                           "REJECTED results are retained for audit trail integrity.");
+          // REJECTED = already soft-deleted; return 204 to make DELETE idempotent
+          return ApiResponse{204, "", "application/json"};
         }
         if (s == core::TestResult::Status::VALIDATED) {
           return makeError(409, "conflict", "Result cannot be deleted",
