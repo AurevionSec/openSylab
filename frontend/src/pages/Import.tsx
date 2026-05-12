@@ -4,6 +4,8 @@ import { Button } from '../components/common/Button';
 import { createSample } from '../services/samples';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useAuth } from '../context/AuthContext';
+import { importHl7, importFhir } from '../services/import';
+import type { ImportSummary } from '../services/import';
 
 interface ImportRow {
   lineNumber: number;
@@ -22,7 +24,7 @@ function parseCsvRow(line: string): string[] {
     if (ch === '"') {
       if (inQuotes && i + 1 < line.length && line[i + 1] === '"') {
         current += '"';
-        i++; // skip second quote of escaped pair
+        i++;
       } else {
         inQuotes = !inQuotes;
       }
@@ -38,12 +40,28 @@ function parseCsvRow(line: string): string[] {
 }
 
 export const Import = () => {
-  useDocumentTitle({ module: 'CSV Import' });
+  useDocumentTitle({ module: 'Import' });
   const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState<'csv' | 'hl7' | 'fhir'>('csv');
+
   const [rows, setRows] = useState<ImportRow[]>([]);
   const [importing, setImporting] = useState(false);
   const [fileName, setFileName] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [hl7FileContent, setHl7FileContent] = useState('');
+  const [hl7FileName, setHl7FileName] = useState('');
+  const [hl7Importing, setHl7Importing] = useState(false);
+  const [hl7Result, setHl7Result] = useState<ImportSummary | null>(null);
+  const [hl7Error, setHl7Error] = useState('');
+  const hl7FileInputRef = useRef<HTMLInputElement>(null);
+
+  const [fhirFileContent, setFhirFileContent] = useState('');
+  const [fhirFileName, setFhirFileName] = useState('');
+  const [fhirImporting, setFhirImporting] = useState(false);
+  const [fhirResult, setFhirResult] = useState<ImportSummary | null>(null);
+  const [fhirError, setFhirError] = useState('');
+  const fhirFileInputRef = useRef<HTMLInputElement>(null);
 
   const canImport = user?.role === 'ADMIN' || user?.role === 'OPERATOR';
 
@@ -55,10 +73,8 @@ export const Import = () => {
 
     const reader = new FileReader();
     reader.onload = (evt) => {
-      // Strip UTF-8 BOM if present (common with Excel-exported CSVs)
       const rawText = (evt.target?.result as string).replace(/^\uFEFF/, '');
       const allLines = rawText.split(/\r?\n/).filter(l => l.trim() !== '');
-      // Skip header row if it starts with known column names
       const firstLower = allLines[0]?.toLowerCase() ?? '';
       const lines = (firstLower.startsWith('sample_id') || firstLower.startsWith('id,'))
         ? allLines.slice(1)
@@ -126,6 +142,76 @@ export const Import = () => {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  const handleHl7FileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setHl7FileName(file.name);
+    setHl7Result(null);
+    setHl7Error('');
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      setHl7FileContent((evt.target?.result as string) ?? '');
+    };
+    reader.readAsText(file);
+  };
+
+  const handleHl7Import = async () => {
+    if (!hl7FileContent) return;
+    setHl7Importing(true);
+    setHl7Error('');
+    setHl7Result(null);
+    try {
+      const result = await importHl7(hl7FileContent);
+      setHl7Result(result);
+    } catch (err: unknown) {
+      let msg = 'Fehler beim HL7-Import';
+      if (err && typeof err === 'object' && 'response' in err) {
+        const r = err as { response?: { data?: { error?: { message?: string } } } };
+        msg = r.response?.data?.error?.message ?? msg;
+      } else if (err instanceof Error) {
+        msg = err.message;
+      }
+      setHl7Error(msg);
+    }
+    setHl7Importing(false);
+  };
+
+  const handleFhirFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFhirFileName(file.name);
+    setFhirResult(null);
+    setFhirError('');
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      setFhirFileContent((evt.target?.result as string) ?? '');
+    };
+    reader.readAsText(file);
+  };
+
+  const handleFhirImport = async () => {
+    if (!fhirFileContent) return;
+    setFhirImporting(true);
+    setFhirError('');
+    setFhirResult(null);
+    try {
+      const result = await importFhir(fhirFileContent);
+      setFhirResult(result);
+    } catch (err: unknown) {
+      let msg = 'Fehler beim FHIR-Import';
+      if (err && typeof err === 'object' && 'response' in err) {
+        const r = err as { response?: { data?: { error?: { message?: string } } } };
+        msg = r.response?.data?.error?.message ?? msg;
+      } else if (err instanceof Error) {
+        msg = err.message;
+      }
+      setFhirError(msg);
+    }
+    setFhirImporting(false);
+  };
+
   const successCount = rows.filter(r => r.status === 'success').length;
   const errorCount = rows.filter(r => r.status === 'error').length;
   const pendingCount = rows.filter(r => r.status === 'pending').length;
@@ -134,20 +220,49 @@ export const Import = () => {
   return (
     <Layout>
       <div className="space-y-6">
-        <div className="border-b border-[#E2E8F0] pb-4">
-          <h1 className="text-2xl font-bold text-[#1A1C20] tracking-tight uppercase">CSV Import</h1>
-          <p className="text-[#5E6C84] text-sm mt-1 font-mono">
-            Samples aus CSV-Datei importieren — Format: <code>sample_id,patient_id,patient_name,description</code>
-          </p>
+        <div className="border-b border-[#E2E8F0]">
+          <h1 className="text-2xl font-bold text-[#1A1C20] tracking-tight uppercase mb-4">Import</h1>
+          <div className="flex space-x-6">
+            <button
+              onClick={() => setActiveTab('csv')}
+              className={`pb-4 text-sm font-bold tracking-wider uppercase border-b-2 transition-colors ${
+                activeTab === 'csv'
+                  ? 'border-[#1A1C20] text-[#1A1C20]'
+                  : 'border-transparent text-[#5E6C84] hover:text-[#1A1C20]'
+              }`}
+            >
+              CSV Import
+            </button>
+            <button
+              onClick={() => setActiveTab('hl7')}
+              className={`pb-4 text-sm font-bold tracking-wider uppercase border-b-2 transition-colors ${
+                activeTab === 'hl7'
+                  ? 'border-[#1A1C20] text-[#1A1C20]'
+                  : 'border-transparent text-[#5E6C84] hover:text-[#1A1C20]'
+              }`}
+            >
+              HL7 v2.5.1
+            </button>
+            <button
+              onClick={() => setActiveTab('fhir')}
+              className={`pb-4 text-sm font-bold tracking-wider uppercase border-b-2 transition-colors ${
+                activeTab === 'fhir'
+                  ? 'border-[#1A1C20] text-[#1A1C20]'
+                  : 'border-transparent text-[#5E6C84] hover:text-[#1A1C20]'
+              }`}
+            >
+              FHIR R4
+            </button>
+          </div>
         </div>
 
         {!canImport && (
           <div className="bg-orange-50 border border-orange-200 rounded p-4">
-            <p className="text-orange-800 text-sm">Nur ADMIN und OPERATOR können Samples importieren.</p>
+            <p className="text-orange-800 text-sm">Nur ADMIN und OPERATOR können importieren.</p>
           </div>
         )}
 
-        {canImport && (
+        {canImport && activeTab === 'csv' && (
           <div className="bg-white border border-[#E2E8F0] p-6 space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">CSV-Datei auswählen</label>
@@ -241,6 +356,132 @@ export const Import = () => {
                   </table>
                 </div>
               </div>
+            )}
+          </div>
+        )}
+
+        {canImport && activeTab === 'hl7' && (
+          <div className="bg-white border border-[#E2E8F0] p-6 space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">HL7-Datei auswählen</label>
+              <div
+                className="border-2 border-dashed border-gray-300 rounded p-8 text-center cursor-pointer hover:border-blue-400 transition-colors"
+                onClick={() => hl7FileInputRef.current?.click()}
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => {
+                  e.preventDefault();
+                  const file = e.dataTransfer.files?.[0];
+                  if (file && hl7FileInputRef.current) {
+                    const dt = new DataTransfer();
+                    dt.items.add(file);
+                    hl7FileInputRef.current.files = dt.files;
+                    hl7FileInputRef.current.dispatchEvent(new Event('change', { bubbles: true }));
+                  }
+                }}
+              >
+                <svg className="w-10 h-10 text-gray-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                {hl7FileName ? (
+                  <p className="text-sm font-medium text-blue-600">{hl7FileName}</p>
+                ) : (
+                  <p className="text-sm text-gray-500">HL7-Datei hierher ziehen oder klicken zum Auswählen</p>
+                )}
+              </div>
+              <input
+                ref={hl7FileInputRef}
+                type="file"
+                accept=".hl7,.txt,text/plain"
+                className="hidden"
+                onChange={handleHl7FileChange}
+              />
+            </div>
+
+            {hl7FileName && (
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-gray-600">{hl7FileName} ausgewählt</p>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleHl7Import}
+                  disabled={hl7Importing || !hl7FileContent}
+                >
+                  {hl7Importing ? 'Importiere...' : 'HL7 importieren'}
+                </Button>
+              </div>
+            )}
+
+            {hl7Result && (
+              <p className="text-sm text-green-700 font-medium">
+                Importiert: {hl7Result.imported.samples} Samples, {hl7Result.imported.orders} Orders, {hl7Result.imported.results} Results
+              </p>
+            )}
+
+            {hl7Error && (
+              <p className="text-sm text-red-700 font-medium">{hl7Error}</p>
+            )}
+          </div>
+        )}
+
+        {canImport && activeTab === 'fhir' && (
+          <div className="bg-white border border-[#E2E8F0] p-6 space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">FHIR-Datei auswählen</label>
+              <div
+                className="border-2 border-dashed border-gray-300 rounded p-8 text-center cursor-pointer hover:border-blue-400 transition-colors"
+                onClick={() => fhirFileInputRef.current?.click()}
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => {
+                  e.preventDefault();
+                  const file = e.dataTransfer.files?.[0];
+                  if (file && fhirFileInputRef.current) {
+                    const dt = new DataTransfer();
+                    dt.items.add(file);
+                    fhirFileInputRef.current.files = dt.files;
+                    fhirFileInputRef.current.dispatchEvent(new Event('change', { bubbles: true }));
+                  }
+                }}
+              >
+                <svg className="w-10 h-10 text-gray-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                {fhirFileName ? (
+                  <p className="text-sm font-medium text-blue-600">{fhirFileName}</p>
+                ) : (
+                  <p className="text-sm text-gray-500">FHIR-Datei hierher ziehen oder klicken zum Auswählen</p>
+                )}
+              </div>
+              <input
+                ref={fhirFileInputRef}
+                type="file"
+                accept=".json,application/json"
+                className="hidden"
+                onChange={handleFhirFileChange}
+              />
+            </div>
+
+            {fhirFileName && (
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-gray-600">{fhirFileName} ausgewählt</p>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleFhirImport}
+                  disabled={fhirImporting || !fhirFileContent}
+                >
+                  {fhirImporting ? 'Importiere...' : 'FHIR importieren'}
+                </Button>
+              </div>
+            )}
+
+            {fhirResult && (
+              <p className="text-sm text-green-700 font-medium">
+                Importiert: {fhirResult.imported.samples} Samples, {fhirResult.imported.orders} Orders, {fhirResult.imported.results} Results
+              </p>
+            )}
+
+            {fhirError && (
+              <p className="text-sm text-red-700 font-medium">{fhirError}</p>
             )}
           </div>
         )}
