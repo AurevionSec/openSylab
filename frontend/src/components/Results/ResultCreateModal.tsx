@@ -167,7 +167,7 @@ export const ResultCreateModal = ({ isOpen, onClose, onSuccess }: ResultCreateMo
                   {ordersLoading ? (
                     <p className="text-sm text-gray-500 py-2">Loading orders...</p>
                   ) : availableOrders.length === 0 ? (
-                    <p className="text-sm text-orange-600 py-2">No active orders (IN_PROGRESS or COMPLETED) found.</p>
+                    <p className="text-sm text-orange-600 py-2">No active orders (IN_PROGRESS, REQUESTED, or COMPLETED) found.</p>
                   ) : (
                     <select
                       value={formData.order_id}

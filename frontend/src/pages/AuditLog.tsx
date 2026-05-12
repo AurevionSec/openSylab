@@ -13,6 +13,7 @@ export const AuditLog = () => {
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [exportError, setExportError] = useState('');
   const [filter, setFilter] = useState<AuditLogFilter>({
     limit: 50,
   });
@@ -73,6 +74,7 @@ export const AuditLog = () => {
             <h2 className="text-2xl md:text-3xl font-bold text-gray-900">Audit Log</h2>
             <button
               onClick={() => {
+                setExportError('');
                 const token = localStorage.getItem('opensylab_jwt_token');
                 fetch(`${import.meta.env.VITE_API_URL}/audit/export`, {
                   headers: token ? { Authorization: `Bearer ${token}` } : {}
@@ -91,7 +93,10 @@ export const AuditLog = () => {
                     document.body.removeChild(a);
                     setTimeout(() => URL.revokeObjectURL(url), 100);
                   })
-                  .catch(err => console.error('Export failed:', err));
+                  .catch(err => {
+                    console.error('Export failed:', err);
+                    setExportError(`Export fehlgeschlagen: ${err instanceof Error ? err.message : 'Unbekannter Fehler'}`);
+                  });
               }}
               className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 transition-colors"
             >
@@ -102,6 +107,11 @@ export const AuditLog = () => {
             </button>
           </div>
           <p className="text-gray-600 mt-1">System activity audit trail for compliance and monitoring</p>
+          {exportError && (
+            <div className="bg-red-50 border border-red-200 rounded p-2 mt-2">
+              <p className="text-red-700 text-sm">{exportError}</p>
+            </div>
+          )}
         </div>
 
         <ErrorBanner message={error || null} />

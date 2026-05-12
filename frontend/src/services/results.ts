@@ -123,7 +123,7 @@ export const getResultById = async (id: string): Promise<TestResult> => {
 export const createResult = async (result: Omit<TestResult, 'id' | 'reviewed_date'>): Promise<TestResult> => {
   const response = await api.post<{ data: BackendResult }>('/results', {
     result_id: result.result_id,
-    order_id: parseInt(result.order_id, 10),
+    order_id: (() => { const n = parseInt(result.order_id ?? '', 10); if (isNaN(n)) throw new Error('Invalid order_id'); return n; })(),
     test_parameter: result.parameter,
     value: result.value,
     unit: result.unit,

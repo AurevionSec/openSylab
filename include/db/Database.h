@@ -241,7 +241,8 @@ public:
                                                 int &exportedCount);
 
   // API Keys
-  [[nodiscard]] bool upsertApiKey(const std::string &key, bool active = true);
+  [[nodiscard]] bool upsertApiKey(const std::string &key, bool active = true,
+                                const std::string &role = "OPERATOR");
   [[nodiscard]] bool isApiKeyValid(const std::string &key);
   const std::string &getLastApiKeyRole() const { return lastApiKeyRole_; }
 

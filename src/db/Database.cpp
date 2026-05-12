@@ -5432,7 +5432,8 @@ bool Database::isLdapEnabled() {
   return value.value() == "1";
 }
 
-bool Database::upsertApiKey(const std::string &key, bool active) {
+bool Database::upsertApiKey(const std::string &key, bool active,
+                             const std::string &role) {
   clearError();
 
   if (!isOpen_) {
@@ -5445,10 +5446,11 @@ bool Database::upsertApiKey(const std::string &key, bool active) {
     return false;
   }
 
+  const std::string effectiveRole = role.empty() ? "OPERATOR" : role;
   const char *upsertSQL = R"(
-        INSERT INTO api_keys (key, active, created_date)
-        VALUES (?, ?, ?)
-        ON CONFLICT(key) DO UPDATE SET active = excluded.active;
+        INSERT INTO api_keys (key, active, created_date, role)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET active = excluded.active, role = excluded.role;
     )";
 
   sqlite3_stmt *rawStmt = nullptr;
@@ -5464,6 +5466,7 @@ bool Database::upsertApiKey(const std::string &key, bool active) {
   sqlite3_bind_int(stmt.get(), 2, active ? 1 : 0);
   sqlite3_bind_int64(stmt.get(), 3,
                      static_cast<sqlite3_int64>(std::time(nullptr)));
+  sqlite3_bind_text(stmt.get(), 4, effectiveRole.c_str(), -1, SQLITE_TRANSIENT);
 
   rc = sqlite3_step(stmt.get());
   if (rc != SQLITE_DONE) {

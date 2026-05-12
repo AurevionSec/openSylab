@@ -216,6 +216,7 @@ export const Profile = () => {
                 onSuccess={() => {
                   setIsChangingPassword(false);
                   clearMustChangePassword();
+                  fetchProfile();
                 }}
                 onCancel={() => setIsChangingPassword(false)}
                 forceChange={isForceChange}
@@ -264,7 +265,7 @@ const ChangePasswordForm = ({ onSuccess, onCancel, forceChange }: ChangePassword
     try {
       await changePassword(formData);
       setSuccess(true);
-      onSuccess();
+      setTimeout(() => onSuccess(), 1500);
     } catch (err: unknown) {
       setError((err && typeof err === 'object' && 'response' in err ? (err as {response?: {data?: {error?: {message?: string}}}}).response?.data?.error?.message : undefined) || 'Failed to change password');
     } finally {

@@ -1260,9 +1260,14 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
         return makeDbErrorResponse(database_->getLastError());
       }
       const core::TestResult &responseResult = created ? *created : result;
-      return ApiResponse{201,
-                         "{\"data\":" + resultToJson(responseResult) + "}",
-                         "application/json"};
+      {
+        std::string oidStr;
+        auto parentOrder = database_->getOrder(responseResult.getOrderId());
+        if (parentOrder) { oidStr = parentOrder->getOrderId(); }
+        return ApiResponse{201,
+                           "{\"data\":" + resultToJson(responseResult, oidStr) + "}",
+                           "application/json"};
+      }
     }
 
     if (isPut && path.rfind("/api/v1/samples/", 0) == 0) {
@@ -1633,9 +1638,14 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       }
       auto refreshedResult = database_->getTestResultByResultId(updated.getResultId());
       const core::TestResult &rspResult = refreshedResult ? *refreshedResult : updated;
-      return ApiResponse{200,
-                         "{\"data\":" + resultToJson(rspResult) + "}",
-                         "application/json"};
+      {
+        std::string oidStr;
+        auto parentOrder = database_->getOrder(rspResult.getOrderId());
+        if (parentOrder) { oidStr = parentOrder->getOrderId(); }
+        return ApiResponse{200,
+                           "{\"data\":" + resultToJson(rspResult, oidStr) + "}",
+                           "application/json"};
+      }
     }
   }
 
@@ -2192,8 +2202,13 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                        database_->getLastError());
     }
 
-    return ApiResponse{200, "{\"data\":" + resultToJson(*result) + "}",
-                       "application/json"};
+    {
+      std::string oidStr;
+      auto parentOrder = database_->getOrder(result->getOrderId());
+      if (parentOrder) { oidStr = parentOrder->getOrderId(); }
+      return ApiResponse{200, "{\"data\":" + resultToJson(*result, oidStr) + "}",
+                         "application/json"};
+    }
   }
 
   // GET /api/v1/users - List all users (admin only)
