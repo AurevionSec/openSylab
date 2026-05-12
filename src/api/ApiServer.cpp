@@ -1579,8 +1579,27 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       auto statusIt = payload.find("status");
       if (statusIt != payload.end() && !statusIt->second.empty()) {
         try {
-          updated.setStatus(
-              core::TestResult::stringToStatus(statusIt->second));
+          const auto newStatus = core::TestResult::stringToStatus(statusIt->second);
+          // Enforce terminal-state rule: REJECTED results cannot be re-validated
+          static const std::unordered_map<std::string, std::vector<std::string>>
+              kResultTrans = {
+                {"PENDING",   {"ENTERED", "REJECTED"}},
+                {"ENTERED",   {"VALIDATED", "REJECTED", "REPEATED"}},
+                {"VALIDATED", {"REJECTED"}},
+                {"REPEATED",  {"ENTERED", "VALIDATED", "REJECTED"}},
+                {"REJECTED",  {}},  // terminal — no transitions allowed
+              };
+          const std::string cs = existing->getStatusString();
+          const std::string ns = core::TestResult::statusToString(newStatus);
+          const auto ti = kResultTrans.find(cs);
+          if (ti != kResultTrans.end()) {
+            const auto &allowed = ti->second;
+            if (std::find(allowed.begin(), allowed.end(), ns) == allowed.end() && cs != ns) {
+              return makeError(409, "conflict", "Invalid status transition",
+                               "Transition from " + cs + " to " + ns + " is not allowed.");
+            }
+          }
+          updated.setStatus(newStatus);
         } catch (const std::exception &e) {
           return makeError(400, "validation_error", "Invalid status",
                            e.what());
@@ -3092,7 +3111,7 @@ void ApiServer::handleClientTls(int clientFd) {
 
   std::ostringstream bodyStream;
   bodyStream << requestStream.rdbuf();
-  std::string body = trimLeadingNewlines(bodyStream.str());
+  std::string body = bodyStream.str(); // Keep raw for Content-Length accumulation
   auto lengthIt = request.headers.find("content-length");
   if (lengthIt != request.headers.end()) {
     try {
@@ -3113,7 +3132,7 @@ void ApiServer::handleClientTls(int clientFd) {
       // Ignore invalid content-length and use whatever was read.
     }
   }
-  request.body = body;
+  request.body = trimLeadingNewlines(body);
 
   // Rate-Limiting fuer Login — keyed by real TCP peer address (not spoofable)
   if (request.method == "POST" && request.path == "/api/v1/auth/login") {
@@ -3199,7 +3218,7 @@ void ApiServer::handleClientPlain(int clientFd) {
 
   std::ostringstream bodyStream;
   bodyStream << requestStream.rdbuf();
-  std::string body = trimLeadingNewlines(bodyStream.str());
+  std::string body = bodyStream.str(); // Keep raw for Content-Length accumulation
   auto lengthIt = request.headers.find("content-length");
   if (lengthIt != request.headers.end()) {
     try {
@@ -3220,7 +3239,7 @@ void ApiServer::handleClientPlain(int clientFd) {
       // Ignore invalid content-length and use whatever was read.
     }
   }
-  request.body = body;
+  request.body = trimLeadingNewlines(body);
 
   // Rate-Limiting fuer Login — keyed by real TCP peer address (not spoofable)
   if (request.method == "POST" && request.path == "/api/v1/auth/login") {
