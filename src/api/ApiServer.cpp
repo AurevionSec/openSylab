@@ -1275,6 +1275,15 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                          "Verify the sample_id.");
       }
 
+      // Immutability guard: VALIDATED and ARCHIVED samples cannot be edited
+      {
+        const auto s = existing->getStatus();
+        if (s == core::Sample::Status::VALIDATED || s == core::Sample::Status::ARCHIVED) {
+          return makeError(409, "conflict", "Sample is immutable",
+                           "VALIDATED and ARCHIVED samples cannot be edited (ISO 15189).");
+        }
+      }
+
       auto idIt = payload.find("sample_id");
       if (idIt != payload.end() && idIt->second != sampleId) {
         return makeError(409, "conflict", "sample_id mismatch",
@@ -1376,6 +1385,15 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       if (!existing) {
         return makeError(404, "not_found", "Order not found",
                          "Verify the order_id.");
+      }
+
+      // Immutability guard: VALIDATED and CANCELLED orders cannot be edited
+      {
+        const auto s = existing->getStatus();
+        if (s == core::Order::Status::VALIDATED || s == core::Order::Status::CANCELLED) {
+          return makeError(409, "conflict", "Order is immutable",
+                           "VALIDATED and CANCELLED orders cannot be edited.");
+        }
       }
 
       auto idIt = payload.find("order_id");

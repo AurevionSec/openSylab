@@ -241,6 +241,12 @@ export const Orders = () => {
                               variant="secondary"
                               size="sm"
                               onClick={() => handleEditClick(order.order_id)}
+                              disabled={order.status === 'VALIDATED' || order.status === 'CANCELLED'}
+                              title={
+                                order.status === 'VALIDATED' ? 'Validated orders are immutable (ISO 15189)' :
+                                order.status === 'CANCELLED' ? 'Cancelled orders cannot be edited' :
+                                undefined
+                              }
                             >
                               <span className="flex items-center gap-1">
                                 <svg

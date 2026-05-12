@@ -227,6 +227,12 @@ export const Samples = () => {
                               variant="secondary"
                               size="sm"
                               onClick={() => handleEditClick(sample.sample_id)}
+                              disabled={sample.status === 'VALIDATED' || sample.status === 'ARCHIVED'}
+                              title={
+                                sample.status === 'VALIDATED' ? 'Validated samples are immutable (ISO 15189)' :
+                                sample.status === 'ARCHIVED' ? 'Archived samples are read-only' :
+                                undefined
+                              }
                             >
                               <span className="flex items-center gap-1">
                                 <svg
