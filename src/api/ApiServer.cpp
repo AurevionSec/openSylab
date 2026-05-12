@@ -2505,8 +2505,9 @@ after_user_update:
                        "Current password is incorrect.");
     }
 
-    // Update password
+    // Update password and clear forced-change flag
     user->setPassword(newPwdIt->second);
+    user->setMustChangePassword(false);
     if (!database_->updateUser(*user, actor)) {
       return makeDbErrorResponse(database_->getLastError());
     }
