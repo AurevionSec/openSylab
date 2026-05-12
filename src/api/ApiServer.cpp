@@ -2439,6 +2439,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
         return makeError(400, "validation_error", "Invalid password", validationError);
       }
       updated.setPassword(passwordIt->second);
+      updated.setMustChangePassword(false);
     }
 
     if (!database_->updateUser(updated, actor)) {
