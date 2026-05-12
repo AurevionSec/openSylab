@@ -99,7 +99,7 @@ export const ORDER_TRANSITIONS: Record<string, string[]> = {
 };
 
 export const RESULT_TRANSITIONS: Record<string, string[]> = {
-  PENDING:   ['REVIEWED'],
+  PENDING:   ['REVIEWED', 'REJECTED'],
   REVIEWED:  ['VALIDATED', 'REJECTED', 'AMENDED'],
   AMENDED:   ['REVIEWED', 'VALIDATED', 'REJECTED'],
   VALIDATED: [],

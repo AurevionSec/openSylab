@@ -1414,6 +1414,19 @@ bool Database::deleteSample(int id, const std::string &actor) {
     return false;
   }
 
+  // Check for active orders before archiving — prevents orphaned orders
+  {
+    auto orders = getOrdersBySampleId(existing->getSampleId());
+    for (const auto &ord : orders) {
+      const auto s = ord->getStatus();
+      if (s != core::Order::Status::CANCELLED) {
+        setError("Probe hat aktive Auftraege (ID: " + ord->getOrderId() +
+                 "); Auftraege zuerst stornieren.");
+        return false;
+      }
+    }
+  }
+
   char *errMsg = nullptr;
   int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
                         &errMsg);
