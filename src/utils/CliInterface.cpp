@@ -2831,6 +2831,12 @@ void CliInterface::handleUpdateResult() {
     return;
   }
 
+  if (result->getStatus() == core::TestResult::Status::REJECTED) {
+    std::cout << "\n✗ Abgelehnte Ergebnisse koennen nicht mehr geaendert werden (Terminalzustand).\n";
+    waitForEnter();
+    return;
+  }
+
   std::cout << "\nAktuelles Ergebnis: " << result->getResultId() << " - "
             << result->getTestParameter() << "\n";
   std::cout << "Aktueller Wert: " << result->getValue() << " "

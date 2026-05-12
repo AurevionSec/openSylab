@@ -85,7 +85,11 @@ export const ResultEditModal = ({ isOpen, onClose, result, onSuccess }: ResultEd
 
   if (!isOpen || !result) return null;
 
-  if (result.status === 'VALIDATED') {
+  const terminalMessage = result.status === 'REJECTED'
+    ? 'Rejected results are in terminal state and cannot be modified.'
+    : 'Validated results cannot be edited directly.';
+
+  if (result.status === 'VALIDATED' || result.status === 'REJECTED') {
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
         <div className="bg-white rounded shadow-xl max-w-md w-full p-6">
@@ -98,7 +102,7 @@ export const ResultEditModal = ({ isOpen, onClose, result, onSuccess }: ResultEd
             </button>
           </div>
           <p className="text-amber-700 bg-amber-50 border border-amber-200 rounded p-3 text-sm">
-            This result has been validated and cannot be edited.
+            {terminalMessage}
           </p>
           <div className="mt-4 flex justify-end">
             <button onClick={onClose} className="px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 text-sm font-medium">Close</button>

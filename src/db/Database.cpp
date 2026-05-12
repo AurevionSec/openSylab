@@ -2739,6 +2739,11 @@ bool Database::updateTestResult(const core::TestResult &result,
     return false;
   }
 
+  if (existing->getStatus() == core::TestResult::Status::REJECTED) {
+    setError("REJECTED-Ergebnisse koennen nicht mehr geaendert werden (Terminalzustand).");
+    return false;
+  }
+
   char *errMsg = nullptr;
   int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr, &errMsg);
   if (rc != SQLITE_OK) {
@@ -2921,6 +2926,11 @@ bool Database::updateTestResultWithAudit(const core::TestResult &result,
       setError("Ergebnis mit ID " + std::to_string(result.getId()) +
                " nicht gefunden");
     }
+    return false;
+  }
+
+  if (existing->getStatus() == core::TestResult::Status::REJECTED) {
+    setError("REJECTED-Ergebnisse koennen nicht mehr geaendert werden (Terminalzustand).");
     return false;
   }
 
