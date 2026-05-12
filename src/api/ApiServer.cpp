@@ -1326,12 +1326,14 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
           const std::string cs = existing->getStatusString();
           const std::string ns = core::Sample::statusToString(newStatus);
           const auto ti = kSampleTrans.find(cs);
-          if (ti != kSampleTrans.end()) {
-            const auto &allowed = ti->second;
-            if (std::find(allowed.begin(), allowed.end(), ns) == allowed.end() && cs != ns) {
-              return makeError(409, "conflict", "Invalid status transition",
-                               "Transition from " + cs + " to " + ns + " is not allowed.");
-            }
+          if (ti == kSampleTrans.end()) {
+            return makeError(409, "conflict", "Unknown current status",
+                             "Status '" + cs + "' is not recognized; transition rejected.");
+          }
+          const auto &allowed = ti->second;
+          if (std::find(allowed.begin(), allowed.end(), ns) == allowed.end() && cs != ns) {
+            return makeError(409, "conflict", "Invalid status transition",
+                             "Transition from " + cs + " to " + ns + " is not allowed.");
           }
           updated.setStatus(newStatus);
         } catch (const std::exception &e) {
@@ -1419,12 +1421,14 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
           const std::string &ns = statusIt->second;
           const std::string &cs = existing->getStatusString();
           auto ti = kTrans.find(cs);
-          if (ti != kTrans.end()) {
-            const auto &allowed = ti->second;
-            if (std::find(allowed.begin(), allowed.end(), ns) == allowed.end() && ns != cs) {
-              return makeError(409, "conflict", "Invalid status transition",
-                  "Transition " + cs + " -> " + ns + " is not allowed.");
-            }
+          if (ti == kTrans.end()) {
+            return makeError(409, "conflict", "Unknown current status",
+                             "Status '" + cs + "' is not recognized; transition rejected.");
+          }
+          const auto &allowed = ti->second;
+          if (std::find(allowed.begin(), allowed.end(), ns) == allowed.end() && ns != cs) {
+            return makeError(409, "conflict", "Invalid status transition",
+                "Transition " + cs + " -> " + ns + " is not allowed.");
           }
         }
         try {
@@ -1611,12 +1615,14 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
           const std::string cs = existing->getStatusString();
           const std::string ns = core::TestResult::statusToString(newStatus);
           const auto ti = kResultTrans.find(cs);
-          if (ti != kResultTrans.end()) {
-            const auto &allowed = ti->second;
-            if (std::find(allowed.begin(), allowed.end(), ns) == allowed.end() && cs != ns) {
-              return makeError(409, "conflict", "Invalid status transition",
-                               "Transition from " + cs + " to " + ns + " is not allowed.");
-            }
+          if (ti == kResultTrans.end()) {
+            return makeError(409, "conflict", "Unknown current status",
+                             "Status '" + cs + "' is not recognized; transition rejected.");
+          }
+          const auto &allowed = ti->second;
+          if (std::find(allowed.begin(), allowed.end(), ns) == allowed.end() && cs != ns) {
+            return makeError(409, "conflict", "Invalid status transition",
+                             "Transition from " + cs + " to " + ns + " is not allowed.");
           }
           updated.setStatus(newStatus);
         } catch (const std::exception &e) {

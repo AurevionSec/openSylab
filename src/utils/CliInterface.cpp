@@ -3,6 +3,7 @@
 #include "utils/CsvImport.h"
 #include "utils/CsvResultImport.h"
 #include <algorithm>
+#include <unordered_map>
 #include <cctype>
 #include <chrono>
 #include <ctime>
@@ -802,6 +803,26 @@ void CliInterface::handleUpdateSample() {
     return;
   }
 
+  // Transition guard (mirrors API kSampleTrans)
+  {
+    static const std::unordered_map<std::string, std::vector<std::string>> kT = {
+      {"REGISTERED",  {"IN_ANALYSIS", "ARCHIVED"}},
+      {"IN_ANALYSIS", {"ANALYZED",    "ARCHIVED"}},
+      {"ANALYZED",    {"VALIDATED",   "ARCHIVED"}},
+      {"VALIDATED",   {"ARCHIVED"}},
+      {"ARCHIVED",    {}},
+    };
+    const std::string ns = core::Sample::statusToString(newStatus);
+    auto it = kT.find(oldStatus);
+    if (it != kT.end()) {
+      const auto &allowed = it->second;
+      if (std::find(allowed.begin(), allowed.end(), ns) == allowed.end()) {
+        std::cout << "\n✗ Ungültiger Statuswechsel: " << oldStatus << " → " << ns << " nicht erlaubt.\n";
+        waitForEnter();
+        return;
+      }
+    }
+  }
   sample->setStatus(newStatus);
 
   if (database_->updateSample(*sample, getCurrentUsername())) {
@@ -2254,6 +2275,28 @@ void CliInterface::handleUpdateOrder() {
     return;
   }
   core::Order::Status newStatus = statusOptions[statusChoice - 1];
+  // Transition guard (mirrors API kOrderTrans)
+  {
+    static const std::unordered_map<std::string, std::vector<std::string>> kT = {
+      {"REQUESTED",    {"IN_PROGRESS", "CANCELLED"}},
+      {"IN_PROGRESS",  {"COMPLETED",   "CANCELLED"}},
+      {"COMPLETED",    {"VALIDATED",   "CANCELLED"}},
+      {"VALIDATED",    {"CANCELLED"}},
+      {"CANCELLED",    {}},
+    };
+    const std::string cs = order->getStatusString();
+    const std::string ns = core::Order::statusToString(newStatus);
+    auto it = kT.find(cs);
+    if (it != kT.end()) {
+      const auto &allowed = it->second;
+      if (std::find(allowed.begin(), allowed.end(), ns) == allowed.end() && cs != ns) {
+        std::cout << "\n✗ Ungültiger Statuswechsel: " << cs << " → " << ns << " nicht erlaubt.\n";
+        waitForEnter();
+        return;
+      }
+    }
+  }
+
   if (newStatus == core::Order::Status::COMPLETED) {
     order->setCompletedDate(std::time(nullptr));
   }
