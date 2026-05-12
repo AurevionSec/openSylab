@@ -243,6 +243,7 @@ public:
   // API Keys
   [[nodiscard]] bool upsertApiKey(const std::string &key, bool active = true);
   [[nodiscard]] bool isApiKeyValid(const std::string &key);
+  const std::string &getLastApiKeyRole() const { return lastApiKeyRole_; }
 
   // Retention
   [[nodiscard]] int getRetentionDays();
@@ -348,6 +349,7 @@ public:
 private:
   std::string dbPath_;
   sqlite3 *db_ = nullptr;
+  mutable std::string lastApiKeyRole_;
   bool isOpen_ = false;
   std::string lastError_;
 

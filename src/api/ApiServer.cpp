@@ -873,10 +873,10 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                      "Provide X-API-Key or Authorization: Bearer <token>.");
   }
 
-  // Determine effective role: JWT role or OPERATOR for API-key auth
+  // Determine effective role: JWT role or API-key role (default OPERATOR)
   const std::string effectiveRole = jwtPayload.has_value()
       ? jwtPayload->role
-      : "OPERATOR";
+      : database_->getLastApiKeyRole();
 
   const bool isGet = method == "get";
   const bool isPost = method == "post";

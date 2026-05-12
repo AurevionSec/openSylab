@@ -505,7 +505,8 @@ bool Database::initializeSchema() {
         CREATE TABLE IF NOT EXISTS api_keys (
             key TEXT PRIMARY KEY,
             active INTEGER NOT NULL DEFAULT 1,
-            created_date INTEGER NOT NULL
+            created_date INTEGER NOT NULL,
+            role TEXT NOT NULL DEFAULT 'OPERATOR'
         );
 
         CREATE TABLE IF NOT EXISTS ldap_directory (
@@ -5461,7 +5462,7 @@ bool Database::isApiKeyValid(const std::string &key) {
   }
 
   const char *selectSQL =
-      "SELECT active FROM api_keys WHERE key = ? LIMIT 1;";
+      "SELECT active, role FROM api_keys WHERE key = ? LIMIT 1;";
   sqlite3_stmt *rawStmt = nullptr;
   int rc = sqlite3_prepare_v2(db_, selectSQL, -1, &rawStmt, nullptr);
   if (rc != SQLITE_OK) {
@@ -5476,7 +5477,11 @@ bool Database::isApiKeyValid(const std::string &key) {
   rc = sqlite3_step(stmt.get());
   if (rc == SQLITE_ROW) {
     const int active = sqlite3_column_int(stmt.get(), 0);
-    return active == 1;
+    if (active == 1) {
+      lastApiKeyRole_ = columnText(stmt.get(), 1);
+      if (lastApiKeyRole_.empty()) lastApiKeyRole_ = "OPERATOR";
+      return true;
+    }
   }
   if (rc != SQLITE_DONE) {
     setError("Fehler beim Laden des API-Schlüssels: " +
