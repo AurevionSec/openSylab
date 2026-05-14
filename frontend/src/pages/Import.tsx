@@ -63,11 +63,21 @@ export const Import = () => {
   const [fhirError, setFhirError] = useState('');
   const fhirFileInputRef = useRef<HTMLInputElement>(null);
 
+  const [csvError, setCsvError] = useState('');
+
   const canImport = user?.role === 'ADMIN' || user?.role === 'OPERATOR';
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setCsvError('Datei zu groß. Maximale Größe: 5 MB.');
+      setFileName('');
+      setRows([]);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+    setCsvError('');
     setFileName(file.name);
     setRows([]);
 
@@ -86,6 +96,12 @@ export const Import = () => {
         message: '',
       }));
       setRows(parsed);
+    };
+    reader.onerror = () => {
+      setCsvError('Fehler beim Lesen der Datei.');
+      setFileName('');
+      setRows([]);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     };
     reader.readAsText(file);
   };
@@ -139,12 +155,20 @@ export const Import = () => {
   const handleReset = () => {
     setRows([]);
     setFileName('');
+    setCsvError('');
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleHl7FileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setHl7Error('Datei zu groß. Maximale Größe: 5 MB.');
+      setHl7FileContent('');
+      setHl7FileName('');
+      if (hl7FileInputRef.current) hl7FileInputRef.current.value = '';
+      return;
+    }
     setHl7FileName(file.name);
     setHl7Result(null);
     setHl7Error('');
@@ -153,6 +177,7 @@ export const Import = () => {
     reader.onload = (evt) => {
       setHl7FileContent((evt.target?.result as string) ?? '');
     };
+    reader.onerror = () => { setHl7Error('Fehler beim Lesen der Datei.'); setHl7FileName(''); setHl7FileContent(''); };
     reader.readAsText(file);
   };
 
@@ -181,6 +206,13 @@ export const Import = () => {
   const handleFhirFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setFhirError('Datei zu groß. Maximale Größe: 5 MB.');
+      setFhirFileContent('');
+      setFhirFileName('');
+      if (fhirFileInputRef.current) fhirFileInputRef.current.value = '';
+      return;
+    }
     setFhirFileName(file.name);
     setFhirResult(null);
     setFhirError('');
@@ -189,6 +221,7 @@ export const Import = () => {
     reader.onload = (evt) => {
       setFhirFileContent((evt.target?.result as string) ?? '');
     };
+    reader.onerror = () => { setFhirError('Fehler beim Lesen der Datei.'); setFhirFileName(''); setFhirFileContent(''); };
     reader.readAsText(file);
   };
 

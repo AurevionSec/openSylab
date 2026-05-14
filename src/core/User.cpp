@@ -33,9 +33,9 @@ static std::string base64Encode(const unsigned char* data, size_t len) {
   result.reserve(((len + 2) / 3) * 4);
 
   for (size_t i = 0; i < len; i += 3) {
-    unsigned int val = data[i] << 16;
-    if (i + 1 < len) val |= data[i + 1] << 8;
-    if (i + 2 < len) val |= data[i + 2];
+    unsigned int val = static_cast<unsigned int>(data[i]) << 16;
+    if (i + 1 < len) val |= static_cast<unsigned int>(data[i + 1]) << 8;
+    if (i + 2 < len) val |= static_cast<unsigned int>(data[i + 2]);
 
     result.push_back(base64_chars[(val >> 18) & 0x3F]);
     result.push_back(base64_chars[(val >> 12) & 0x3F]);
@@ -165,12 +165,24 @@ bool User::verifyPassword(const std::string &password) const {
       return false; // Malformed hash
     }
 
-    int iterations = std::stoi(iterStr);
+    int iterations;
+    try {
+      iterations = std::stoi(iterStr);
+      if (iterations < 1 || iterations > 1000000) {
+        return false;
+      }
+    } catch (const std::exception&) {
+      return false;
+    }
     std::vector<unsigned char> salt = base64Decode(saltB64);
     std::vector<unsigned char> expectedHash = base64Decode(hashB64);
 
-    // Derive key from provided password with the same salt and iterations
     const int hashLen = 32; // 256 bits
+    if (salt.empty() || expectedHash.size() != static_cast<size_t>(hashLen)) {
+      return false;
+    }
+
+    // Derive key from provided password with the same salt and iterations
     unsigned char derivedHash[hashLen];
 
     if (PKCS5_PBKDF2_HMAC(
@@ -252,3 +264,4 @@ void User::setRoleName(const std::string &roleName) {
 
 } // namespace core
 } // namespace opensylab
+

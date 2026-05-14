@@ -7,9 +7,24 @@
 #include "test_macros.h"
 #include "utils/Fhir.h"
 #include <cstdio>
+#include <cstdlib>
+#include <ctime>
+#include <atomic>
+#include <chrono>
+#include <sstream>
 #include <string>
 
 using namespace opensylab::utils;
+
+namespace {
+std::string uniqueDbPath() {
+  static std::atomic<int> counter{0};
+  auto ts = std::chrono::high_resolution_clock::now().time_since_epoch().count();
+  std::ostringstream ss;
+  ss << "test_fhir_" << ts << "_" << counter++ << ".db";
+  return ss.str();
+}
+} // namespace
 
 bool test_fhir_ParseValidBundle() {
   const std::string payload =
@@ -37,7 +52,7 @@ bool test_fhir_ParseValidBundle() {
 }
 
 bool test_fhir_ImportCreatesEntities() {
-  std::string dbPath = "test_fhir_import.db";
+  std::string dbPath = uniqueDbPath();
   auto db = std::make_shared<opensylab::db::Database>(dbPath);
   ASSERT_TRUE(db->open());
   ASSERT_TRUE(db->initializeSchema());
@@ -70,7 +85,7 @@ bool test_fhir_ImportCreatesEntities() {
 }
 
 bool test_fhir_ImportLogsErrors() {
-  std::string dbPath = "test_fhir_errors.db";
+  std::string dbPath = uniqueDbPath();
   auto db = std::make_shared<opensylab::db::Database>(dbPath);
   ASSERT_TRUE(db->open());
   ASSERT_TRUE(db->initializeSchema());

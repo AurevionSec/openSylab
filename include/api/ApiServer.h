@@ -65,6 +65,7 @@ public:
 
   bool run();
   void stop();
+  ~ApiServer();
 
   /**
    * @brief Enable TLS/HTTPS support

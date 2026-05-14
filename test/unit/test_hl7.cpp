@@ -7,9 +7,24 @@
 #include "test_macros.h"
 #include "utils/Hl7.h"
 #include <cstdio>
+#include <cstdlib>
+#include <ctime>
+#include <atomic>
+#include <chrono>
+#include <sstream>
 #include <string>
 
 using namespace opensylab::utils;
+
+namespace {
+std::string uniqueDbPath() {
+  static std::atomic<int> counter{0};
+  auto ts = std::chrono::high_resolution_clock::now().time_since_epoch().count();
+  std::ostringstream ss;
+  ss << "test_hl7_" << ts << "_" << counter++ << ".db";
+  return ss.str();
+}
+} // namespace
 
 bool test_hl7_ParseValidOruR01() {
   const std::string message =
@@ -85,7 +100,7 @@ bool test_hl7_InvalidMessageType() {
 }
 
 bool test_hl7_ImportCreatesEntities() {
-  std::string dbPath = "test_hl7_import.db";
+  std::string dbPath = uniqueDbPath();
   auto db = std::make_shared<opensylab::db::Database>(dbPath);
   ASSERT_TRUE(db->open());
   ASSERT_TRUE(db->initializeSchema());
@@ -116,7 +131,7 @@ bool test_hl7_ImportCreatesEntities() {
 }
 
 bool test_hl7_ImportLogsErrors() {
-  std::string dbPath = "test_hl7_errors.db";
+  std::string dbPath = uniqueDbPath();
   auto db = std::make_shared<opensylab::db::Database>(dbPath);
   ASSERT_TRUE(db->open());
   ASSERT_TRUE(db->initializeSchema());

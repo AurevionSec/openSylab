@@ -22,6 +22,7 @@ add_executable(opensylab_tests ${TEST_SOURCES})
 # Include-Verzeichnisse
 target_include_directories(opensylab_tests PRIVATE
     ${PROJECT_SOURCE_DIR}/include
+    ${CMAKE_BINARY_DIR}/include
 )
 
 # Libraries verlinken
@@ -42,6 +43,7 @@ target_sources(opensylab_tests PRIVATE
     ${PROJECT_SOURCE_DIR}/src/utils/CsvResultImport.cpp
     ${PROJECT_SOURCE_DIR}/src/utils/Hl7.cpp
     ${PROJECT_SOURCE_DIR}/src/utils/Fhir.cpp
+    ${PROJECT_SOURCE_DIR}/src/utils/CliInterface.cpp
 )
 
 # Test hinzufügen

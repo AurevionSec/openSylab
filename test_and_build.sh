@@ -1,13 +1,13 @@
 #!/bin/bash
 #
-# OpenSylab v0.2 - Build und Test-Skript
+# OpenSylab v0.8 - Build und Test-Skript
 # Kompiliert das Projekt und führt alle Tests aus
 #
 
 set -e  # Bei Fehler abbrechen
 
 echo "═══════════════════════════════════════════════════════════"
-echo "  OpenSylab v0.2 - Build & Test Script"
+echo "  OpenSylab v0.8 - Build & Test Script"
 echo "═══════════════════════════════════════════════════════════"
 echo ""
 
@@ -53,7 +53,7 @@ echo "════════════════════════�
 echo ""
 echo "Binaries:"
 echo "  - Hauptprogramm: ./build/bin/OpenSylab"
-echo "  - Tests:         ./build/opensylab_tests"
+echo "  - Tests:         ./build/bin/opensylab_tests"
 echo ""
 echo "Zum Ausführen:"
 echo "  ./build/bin/OpenSylab"

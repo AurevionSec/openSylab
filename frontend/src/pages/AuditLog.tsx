@@ -18,6 +18,7 @@ export const AuditLog = () => {
   const [filter, setFilter] = useState<AuditLogFilter>({
     limit: 50,
   });
+  const cancelRef = useRef<(() => void) | null>(null);
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
@@ -42,16 +43,20 @@ export const AuditLog = () => {
   };
 
   useEffect(() => {
-    const cancel = runFetch(filter);
-    return cancel;
+    cancelRef.current = runFetch(filter);
+    return () => { cancelRef.current?.(); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleApplyFilter = () => runFetch(filter);
+  const handleApplyFilter = () => {
+    cancelRef.current?.();
+    cancelRef.current = runFetch(filter);
+  };
 
   const handleResetFilter = () => {
     const resetFilter = { limit: 50 };
     setFilter(resetFilter);
-    runFetch(resetFilter);
+    cancelRef.current?.();
+    cancelRef.current = runFetch(resetFilter);
   };
 
   if (loading) {

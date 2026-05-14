@@ -747,8 +747,8 @@ bool Database::createSample(const core::Sample &sample,
   }
 
   const char *insertSQL = R"(
-        INSERT INTO samples (sample_id, patient_id, patient_name, description, status, registration_date)
-        VALUES (?, ?, ?, ?, ?, ?);
+        INSERT INTO samples (sample_id, patient_id, patient_name, description, status, registration_date, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?);
     )";
 
   sqlite3_stmt *rawStmt = nullptr;
@@ -774,6 +774,8 @@ bool Database::createSample(const core::Sample &sample,
                     SQLITE_TRANSIENT);
   sqlite3_bind_int64(stmt.get(), 6,
                      static_cast<sqlite3_int64>(sample.getRegistrationDate()));
+  const std::time_t nowTs = std::time(nullptr);
+  sqlite3_bind_int64(stmt.get(), 7, static_cast<sqlite3_int64>(nowTs));
 
   rc = sqlite3_step(stmt.get());
 
@@ -838,8 +840,8 @@ Database::createSamplesBatch(const std::vector<core::Sample> &samples,
   }
 
   const char *insertSQL = R"(
-        INSERT INTO samples (sample_id, patient_id, patient_name, description, status, registration_date)
-        VALUES (?, ?, ?, ?, ?, ?);
+        INSERT INTO samples (sample_id, patient_id, patient_name, description, status, registration_date, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?);
     )";
 
   sqlite3_stmt *rawStmt = nullptr;
@@ -870,6 +872,8 @@ Database::createSamplesBatch(const std::vector<core::Sample> &samples,
     sqlite3_bind_int64(
         stmt.get(), 6,
         static_cast<sqlite3_int64>(sample.getRegistrationDate()));
+    sqlite3_bind_int64(stmt.get(), 7,
+        static_cast<sqlite3_int64>(std::time(nullptr)));
 
     rc = sqlite3_step(stmt.get());
     if (rc != SQLITE_DONE) {
@@ -5525,16 +5529,16 @@ bool Database::upsertApiKey(const std::string &key, bool active,
   return true;
 }
 
-bool Database::isApiKeyValid(const std::string &key) {
+std::optional<std::string> Database::isApiKeyValid(const std::string &key) {
   clearError();
 
   if (!isOpen_) {
     setError("Datenbank ist nicht geöffnet");
-    return false;
+    return std::nullopt;
   }
 
   if (key.empty()) {
-    return false;
+    return std::nullopt;
   }
 
   const char *selectSQL =
@@ -5544,7 +5548,7 @@ bool Database::isApiKeyValid(const std::string &key) {
   if (rc != SQLITE_OK) {
     setError("Fehler beim Vorbereiten des SELECT: " +
              std::string(sqlite3_errmsg(db_)));
-    return false;
+    return std::nullopt;
   }
 
   auto stmt = makeStatement(rawStmt);
@@ -5554,10 +5558,12 @@ bool Database::isApiKeyValid(const std::string &key) {
   if (rc == SQLITE_ROW) {
     const int active = sqlite3_column_int(stmt.get(), 0);
     if (active == 1) {
-      lastApiKeyRole_ = columnText(stmt.get(), 1);
-      if (lastApiKeyRole_.empty()) lastApiKeyRole_ = "OPERATOR";
-      return true;
+      std::string role = columnText(stmt.get(), 1);
+      if (role.empty()) role = "OPERATOR";
+      return role;
     }
+    clearError();
+    return std::nullopt;
   }
   if (rc != SQLITE_DONE) {
     setError("Fehler beim Laden des API-Schlüssels: " +
@@ -5565,7 +5571,7 @@ bool Database::isApiKeyValid(const std::string &key) {
   } else {
     clearError();
   }
-  return false;
+  return std::nullopt;
 }
 
 bool Database::upsertLdapUser(const std::string &username,

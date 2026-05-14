@@ -49,7 +49,7 @@ Sample::Status Sample::stringToStatus(const std::string &statusStr) {
     return it->second;
   }
 
-  throw std::invalid_argument("Ungültiger Status-String: " + statusStr);
+  return Status::REGISTERED;
 }
 
 } // namespace core

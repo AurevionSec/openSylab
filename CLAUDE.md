@@ -181,7 +181,7 @@ Aktive Bugs werden ausschließlich in `TODO.md` dokumentiert.
 
 **Bekannte offene Punkte:**
 - Default Credentials `admin/admin` — nur für Dev, niemals in Prod
-- TLS vorhanden (`--tls` Flag), aber noch nicht in Production erzwungen
+- TLS vorhanden (`--tls-cert`/`--tls-key` Flags + `--force-https`), in Prod konfigurieren
 
 ---
 

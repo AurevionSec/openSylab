@@ -1829,7 +1829,7 @@ void CliInterface::handleDiagnosticsLogs() {
   waitForEnter();
 }
 
-bool CliInterface::canAccessDiagnostics() {
+bool CliInterface::canAccessDiagnostics() const {
   if (!currentUser_) {
     return false;
   }
@@ -1853,7 +1853,7 @@ bool CliInterface::canAccessDiagnostics() {
   return false;
 }
 
-bool CliInterface::canAccessSupportData() {
+bool CliInterface::canAccessSupportData() const {
   if (!currentUser_) {
     return false;
   }

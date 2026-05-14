@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.15)
 
 # Projektdefinition
 project(OpenSylab
-    VERSION 0.8.0
+    VERSION 0.8.1
     DESCRIPTION "Open Source Laboratory Information Management System (LIMS)"
     LANGUAGES CXX
 )
@@ -10,9 +10,11 @@ project(OpenSylab
 # Version-Header aus Template generieren (SSOT: VERSION in project() oben)
 configure_file(
     "${CMAKE_SOURCE_DIR}/include/version.h.in"
-    "${CMAKE_SOURCE_DIR}/include/version.h"
+    "${CMAKE_BINARY_DIR}/include/version.h"
     @ONLY
 )
+
+include_directories(${CMAKE_BINARY_DIR}/include)
 
 # C++ Standard festlegen
 set(CMAKE_CXX_STANDARD 17)

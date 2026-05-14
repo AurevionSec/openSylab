@@ -1,9 +1,15 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
 export const Sidebar = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, logout } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login', { replace: true });
+  };
 
   const isActive = (path: string) => location.pathname === path;
 
@@ -192,7 +198,7 @@ export const Sidebar = () => {
             <p className="text-xs text-gray-500">{getRoleDisplay()}</p>
           </div>
           <button
-            onClick={logout}
+            onClick={handleLogout}
             className="ml-auto text-gray-500 hover:text-white transition-colors"
             title="Logout"
           >

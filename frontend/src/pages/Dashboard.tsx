@@ -41,7 +41,8 @@ export const Dashboard = () => {
         let statsData: DashboardStats | null = null;
         try {
           statsData = await getDashboardStats();
-        } catch {
+        } catch (err) {
+          console.error('Failed to load dashboard stats:', err);
           statsData = {
             samples: { entity_type: 'samples', total: 0, by_status: [] },
             orders: { entity_type: 'orders', total: 0, by_status: [] },

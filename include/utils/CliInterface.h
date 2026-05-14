@@ -129,8 +129,8 @@ private:
   std::string getCurrentUsername() const {
     return currentUser_ ? currentUser_->getUsername() : "nicht angemeldet";
   }
-  bool canAccessDiagnostics();
-  bool canAccessSupportData();
+  bool canAccessDiagnostics() const;
+  bool canAccessSupportData() const;
 
   // Hilfsfunktionen
   std::string readInput(const std::string &prompt);

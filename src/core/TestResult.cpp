@@ -57,7 +57,7 @@ TestResult::Status TestResult::stringToStatus(const std::string &statusStr) {
     return it->second;
   }
 
-  throw std::invalid_argument("Ungültiger Status-String: " + statusStr);
+  return Status::PENDING;
 }
 
 // Flag-Hilfsfunktionen
@@ -100,7 +100,7 @@ TestResult::Flag TestResult::stringToFlag(const std::string &flagStr) {
     return it->second;
   }
 
-  throw std::invalid_argument("Ungültiger Flag-String: " + flagStr);
+  return Flag::UNDEFINED;
 }
 
 // Plausibilitätsprüfung
@@ -135,8 +135,7 @@ TestResult::Flag TestResult::evaluateFlag() const {
   }
 
   // Referenzwerte unvollständig oder ungueltig
-  if ((referenceLow_ == 0.0 && referenceHigh_ == 0.0) ||
-      referenceHigh_ <= referenceLow_) {
+  if (referenceHigh_ <= referenceLow_) {
     return Flag::UNDEFINED;
   }
 

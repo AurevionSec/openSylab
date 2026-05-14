@@ -8,6 +8,7 @@
  */
 
 #include "version.h"
+#include "test_macros.h"
 #include <functional>
 #include <iostream>
 #include <string>
@@ -33,31 +34,6 @@ void registerTest(const std::string &name, std::function<bool()> func) {
   } testRegistrar_##name;                                                      \
   }                                                                            \
   bool test_##name()
-
-#define ASSERT_TRUE(expr)                                                      \
-  if (!(expr)) {                                                               \
-    std::cerr << "  ✗ Assertion failed: " << #expr << "\n";                    \
-    return false;                                                              \
-  }
-
-#define ASSERT_FALSE(expr)                                                     \
-  if (expr) {                                                                  \
-    std::cerr << "  ✗ Assertion failed (expected false): " << #expr << "\n";   \
-    return false;                                                              \
-  }
-
-#define ASSERT_EQ(a, b)                                                        \
-  if ((a) != (b)) {                                                            \
-    std::cerr << "  ✗ Assertion failed: " << #a << " == " << #b << "\n";       \
-    std::cerr << "    Expected: " << (b) << ", Got: " << (a) << "\n";          \
-    return false;                                                              \
-  }
-
-#define ASSERT_NE(a, b)                                                        \
-  if ((a) == (b)) {                                                            \
-    std::cerr << "  ✗ Assertion failed: " << #a << " != " << #b << "\n";       \
-    return false;                                                              \
-  }
 
 // Externe Test-Funktionen (aus anderen Dateien)
 extern void registerSampleTests();

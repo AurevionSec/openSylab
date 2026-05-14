@@ -846,6 +846,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
   // Authentication: Try JWT first, fall back to API-Key
   std::optional<auth::JwtAuth::TokenPayload> jwtPayload =
       extractAndValidateJwt(request.headers);
+  std::optional<std::string> apiKeyRole;
 
   bool authenticated = false;
   std::string actor;
@@ -858,7 +859,8 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
   } else {
     // Try API-Key authentication
     const std::string apiKey = extractApiKey(request.headers);
-    if (!apiKey.empty() && database_->isApiKeyValid(apiKey)) {
+    apiKeyRole = database_->isApiKeyValid(apiKey);
+    if (apiKeyRole.has_value()) {
       authenticated = true;
       actor = sanitizeActor(apiKey);
     }
@@ -872,7 +874,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
   // Determine effective role: JWT role or API-key role (default OPERATOR)
   const std::string effectiveRole = jwtPayload.has_value()
       ? jwtPayload->role
-      : database_->getLastApiKeyRole();
+      : (apiKeyRole.has_value() ? apiKeyRole.value() : std::string("OPERATOR"));
 
   const bool isGet = method == "get";
   const bool isPost = method == "post";
@@ -901,7 +903,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                      "VIEWER and CUSTOM roles cannot create, update, or delete records.");
   }
 
-  if (isPost || isPut) {
+  if ((isPost || isPut) && path.rfind("/api/v1/users", 0) != 0) {
     const std::string body = trimLeadingNewlines(request.body);
     if (body.empty()) {
       return makeError(400, "validation_error", "Missing request body",
@@ -2832,16 +2834,21 @@ after_user_update:
       }
     }
 
+    static std::atomic<unsigned> exportSeq{0};
     const std::string tmpPath = "/tmp/opensylab_audit_export_"
-        + std::to_string(std::time(nullptr)) + ".csv";
+        + std::to_string(::getpid()) + "_"
+        + std::to_string(std::time(nullptr))
+        + "_" + std::to_string(exportSeq.fetch_add(1)) + ".csv";
     int exportedCount = 0;
     if (!database_->exportAuditLogToCsv(tmpPath, filter, actor, exportedCount)) {
+      std::remove(tmpPath.c_str());
       return makeDbErrorResponse(database_->getLastError());
     }
 
     // Read file into response body
     std::ifstream f(tmpPath, std::ios::binary);
     if (!f.is_open()) {
+      std::remove(tmpPath.c_str());
       return makeError(500, "internal_error", "Export failed",
                        "Could not read export file.");
     }
@@ -3030,6 +3037,14 @@ ApiServer::ApiServer(std::shared_ptr<db::Database> database, int port)
   }
 }
 
+ApiServer::~ApiServer() {
+  running_ = false;
+  if (serverFd_ >= 0) {
+    close(serverFd_);
+    serverFd_ = -1;
+  }
+}
+
 bool ApiServer::isRateLimited(const std::string &ip) {
   std::lock_guard<std::mutex> lock(loginMutex_);
   auto now = std::chrono::steady_clock::now();
@@ -3069,10 +3084,14 @@ bool ApiServer::bindAndListen() {
   addr.sin_port = htons(static_cast<uint16_t>(port_));
 
   if (bind(serverFd_, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) < 0) {
+    close(serverFd_);
+    serverFd_ = -1;
     return false;
   }
 
   if (listen(serverFd_, 10) < 0) {
+    close(serverFd_);
+    serverFd_ = -1;
     return false;
   }
 
@@ -3241,7 +3260,8 @@ void ApiServer::handleClientTls(int clientFd) {
   request.body = trimLeadingNewlines(body);
 
   // Rate-Limiting fuer Login — keyed by real TCP peer address (not spoofable)
-  if (request.method == "POST" && request.path == "/api/v1/auth/login") {
+  const std::string _rlPath = [&]{ auto p = request.path; auto q = p.find('?'); return q != std::string::npos ? p.substr(0, q) : p; }();
+  if (request.method == "POST" && _rlPath == "/api/v1/auth/login") {
     sockaddr_in peerAddrTls{};
     socklen_t peerLenTls = sizeof(peerAddrTls);
     std::string clientIp;
@@ -3348,7 +3368,8 @@ void ApiServer::handleClientPlain(int clientFd) {
   request.body = trimLeadingNewlines(body);
 
   // Rate-Limiting fuer Login — keyed by real TCP peer address (not spoofable)
-  if (request.method == "POST" && request.path == "/api/v1/auth/login") {
+  const std::string _rlPath = [&]{ auto p = request.path; auto q = p.find('?'); return q != std::string::npos ? p.substr(0, q) : p; }();
+  if (request.method == "POST" && _rlPath == "/api/v1/auth/login") {
     sockaddr_in peerAddrPlain{};
     socklen_t peerLenPlain = sizeof(peerAddrPlain);
     std::string clientIp;

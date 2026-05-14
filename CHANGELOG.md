@@ -2,6 +2,41 @@
 
 Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert.
 
+## [0.8.1] - 2026-05-14
+
+### Sicherheit
+- **`isApiKeyValid` thread-safe refactoriert**: Gibt jetzt `std::optional<std::string>` zurück — eliminiert `lastApiKeyRole_` als geteilten Mutable-State (Race-Condition-Prävention)
+- **Rate-Limiter Bypass geschlossen**: Query-Strings (`?foo=bar`) am Login-Endpoint umgingen den Rate-Limiter — Pfad wird jetzt vor dem Vergleich normalisiert
+- **RBAC-Reihenfolge korrigiert**: User-Management-Routen überspringen den generischen JSON-Parse-Block — Auth-Check erfolgt jetzt vor JSON-Validierung (verhindert Auth-Info-Leak)
+- **`verifyPassword` gehärtet**: `std::stoi` in try/catch + Schranke auf 1–1.000.000 Iterationen + Salt-Leerprüfung vor PBKDF2-Aufruf
+- **`base64Encode`**: Implizite Int-Promotion vor Left-Shift durch `static_cast<unsigned int>` behoben
+
+### Fehlerbehebungen (Backend)
+- **`bindAndListen()`**: FD-Leak bei `bind()`/`listen()`-Fehler — `serverFd_` wird jetzt auf allen Fehlerpfaden geschlossen und auf `-1` zurückgesetzt
+- **`~ApiServer`**: Fehlender Destruktor ergänzt (RAII-Cleanup für `serverFd_`); setzt `running_ = false` vor Socket-Close
+- **`createSample`/`createSamplesBatch`**: `updated_at` wurde als `0` geschrieben — wird jetzt via `std::time()` korrekt gebunden (auch In-Memory-Objekt konsistent)
+- **`isApiKeyValid`**: Fälschlicher `setError()` bei inaktivem Key (Schlüssel existiert, aber `active=0`) — ruft jetzt `clearError()` auf vor `return nullopt`
+- **`evaluateFlag()`**: Floating-Point-Gleichheitsvergleich auf `0.0` entfernt — `referenceHigh_ <= referenceLow_` genügt (verhindert Fehlklassifikation bei Untergrenze 0)
+- **`stringToStatus`/`stringToFlag`/`stringToPriority`**: `throw std::invalid_argument` bei unbekannten DB-Strings durch sichere Fallback-Rückgabewerte ersetzt — verhindert Abbruch bei korrumpierten Zeilen
+- **`CliInterface`**: `canAccessDiagnostics()` und `canAccessSupportData()` als `const` markiert
+- **Audit-Export**: Temporäre Datei wurde bei Fehler nicht gelöscht — `std::remove()` auf allen Fehlerpfaden ergänzt; Dateiname enthält jetzt PID + atomaren Sequenz-Zähler (Kollisionsschutz)
+
+### Fehlerbehebungen (Frontend)
+- **Sidebar**: `logout()` navigiert jetzt zu `/login` — verhindert kurzen Flash geschützter Inhalte nach Logout
+- **AuditLog**: Initialem Fetch-Ergebnis wird in `cancelRef` gespeichert; `handleApplyFilter`/`handleResetFilter` brechen In-Flight-Requests vor neuem Fetch ab (Race-Condition-Prävention)
+- **Dashboard**: Fehler bei `getDashboardStats()` wird jetzt via `console.error` sichtbar statt still verschluckt
+- **Import — CSV**: `csvError`-State ergänzt (`setError` war undefiniert → TypeScript-Compilefehler)
+- **Import — alle Typen**: 5-MB-Dateigrößen-Guard für CSV, HL7 und FHIR ergänzt
+- **Import — alle Typen**: `reader.onerror`-Handler für alle `FileReader`-Instanzen ergänzt; Size-Guard löscht jetzt auch veraltete Dateiname/Content-States
+- **ResultCreateModal**: Auto-berechnetes Flag überschreibt manuelle Auswahl nicht mehr (neuer `flagManuallySet`-State)
+
+### Tests & Build-System
+- **`test_runner.cpp`**: Doppelte `ASSERT_*`-Makrodefinitionen entfernt — werden jetzt über `#include "test_macros.h"` bezogen
+- **`test_hl7.cpp` / `test_fhir.cpp`**: Hardcodierte DB-Pfade durch `uniqueDbPath()` mit `high_resolution_clock` + atomarem Zähler ersetzt
+- **`CMakeLists.txt`**: `configure_file` schreibt `version.h` in den Build-Tree (`CMAKE_BINARY_DIR`) statt in den Source-Tree
+- **`test/CMakeLists.txt`**: `CliInterface.cpp` zu Test-Sources ergänzt; `CMAKE_BINARY_DIR/include` als expliziter Include-Pfad eingetragen
+- **`test_and_build.sh`**: Versionsnummer auf v0.8 korrigiert; Binary-Pfad auf `build/bin/opensylab_tests` korrigiert
+
 ## [0.8.0] - 2026-05-12
 
 ### Sicherheit (P0)

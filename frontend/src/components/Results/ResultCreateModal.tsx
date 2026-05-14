@@ -45,6 +45,7 @@ export const ResultCreateModal = ({ isOpen, onClose, onSuccess }: ResultCreateMo
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [flagManuallySet, setFlagManuallySet] = useState(false);
   const [availableOrders, setAvailableOrders] = useState<Order[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
 
@@ -53,6 +54,7 @@ export const ResultCreateModal = ({ isOpen, onClose, onSuccess }: ResultCreateMo
       setFormData({ result_id: '', order_id: '', parameter: '', value: '', unit: '',
                     reference_min: '', reference_max: '', flag: 'NORMAL', status: 'PENDING',
                     reviewed_by: '', notes: '' });
+      setFlagManuallySet(false);
       setError('');
       return;
     }
@@ -68,10 +70,10 @@ export const ResultCreateModal = ({ isOpen, onClose, onSuccess }: ResultCreateMo
   }, [isOpen]);
 
   useEffect(() => {
-    if (!formData.value) return;
+    if (!formData.value || flagManuallySet) return;
     const autoFlag = computeFlag(formData.value, formData.reference_min, formData.reference_max);
     setFormData((prev) => ({ ...prev, flag: autoFlag }));
-  }, [formData.value, formData.reference_min, formData.reference_max]);
+  }, [formData.value, formData.reference_min, formData.reference_max, flagManuallySet]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -109,6 +111,7 @@ export const ResultCreateModal = ({ isOpen, onClose, onSuccess }: ResultCreateMo
   };
 
   const handleChange = (field: keyof typeof formData, value: string) => {
+    if (field === 'flag') setFlagManuallySet(true);
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
