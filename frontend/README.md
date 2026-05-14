@@ -2,8 +2,8 @@
 
 Modern React TypeScript frontend for the OpenSylab Laboratory Information Management System.
 
-**Version:** 0.7.0
-**Last Updated:** 2026-05-11
+**Version:** 0.8.2
+**Last Updated:** 2026-05-15
 **Status:** Production-Ready
 
 ## Tech Stack
@@ -38,18 +38,18 @@ src/
 │   ├── samples.ts       # Sample CRUD operations
 │   ├── orders.ts        # Order CRUD operations
 │   ├── results.ts       # Result CRUD operations
-│   ├── users.ts         # User management (v0.6+)
-│   ├── audit.ts         # Audit log service (v0.6+)
-│   └── stats.ts         # Statistics service (v0.6+)
+│   ├── users.ts         # User management
+│   ├── audit.ts         # Audit log service
+│   └── stats.ts         # Statistics service
 ├── context/             # React contexts
 │   └── AuthContext.tsx  # Authentication state management
 ├── types/               # TypeScript type definitions
 │   ├── sample.ts        # Sample types
 │   ├── order.ts         # Order types
 │   ├── result.ts        # TestResult types
-│   ├── user.ts          # User types (v0.6+)
-│   ├── audit.ts         # Audit log types (v0.6+)
-│   └── stats.ts         # Statistics types (v0.6+)
+│   ├── user.ts          # User types
+│   ├── audit.ts         # Audit log types
+│   └── stats.ts         # Statistics types
 └── utils/               # Utility functions and constants
     └── constants.ts     # API_BASE_URL, default values
 ```
@@ -135,7 +135,7 @@ VITE_API_URL=https://api.opensylab.yourdomain.com/api/v1
 
 ## Features
 
-### 🔐 Authentication (v0.5+)
+### 🔐 Authentication
 
 - **JWT-based authentication** with HS256 tokens
 - **Protected routes** with automatic redirection to login
@@ -144,7 +144,7 @@ VITE_API_URL=https://api.opensylab.yourdomain.com/api/v1
 - **Automatic token refresh**
 - **Logout** functionality
 
-### 📊 Dashboard (v0.6+)
+### 📊 Dashboard
 
 - **Multi-entity statistics**:
   - Sample counts by status (Captured, In Analysis, Analyzed, Validated, Archived)
@@ -180,7 +180,7 @@ VITE_API_URL=https://api.opensylab.yourdomain.com/api/v1
 - **Result details** with reference ranges
 - **Result entry form** (planned for v0.8.0)
 
-### 👥 User Management (v0.6+ - Admin Only)
+### 👥 User Management (Admin Only)
 
 - **CRUD operations** for users
 - **Role-Based Access Control (RBAC)**:
@@ -192,7 +192,7 @@ VITE_API_URL=https://api.opensylab.yourdomain.com/api/v1
 - **User profile data** (name, email, last login)
 - **Modal-based create/edit forms**
 
-### 📜 Audit Log (v0.6+ - Admin Only)
+### 📜 Audit Log (Admin Only)
 
 - **Complete audit trail** for compliance
 - **Filtering**:
@@ -203,7 +203,7 @@ VITE_API_URL=https://api.opensylab.yourdomain.com/api/v1
 - **ISO 15189 compliance tracking**
 - **Immutable audit entries**
 
-### 👤 User Profile (v0.6+)
+### 👤 User Profile
 
 - **View user information**
 - **Change password** with validation
@@ -247,7 +247,7 @@ The frontend communicates with the OpenSylab backend API via Axios.
 - `PUT /results/:id` - Update result
 - `DELETE /results/:id` - Delete result (planned for v0.8.0)
 
-#### User Management (v0.6+ - Admin Only)
+#### User Management (Admin Only)
 - `GET /users` - List all users
 - `POST /users` - Create new user
 - `PUT /users/:id` - Update user
@@ -255,7 +255,7 @@ The frontend communicates with the OpenSylab backend API via Axios.
 - `GET /users/me` - Get current user profile
 - `PUT /users/me/password` - Change password
 
-#### Audit & Statistics (v0.6+)
+#### Audit & Statistics
 - `GET /audit` - Get audit log (Admin only, with filtering)
 - `GET /stats` - Get dashboard statistics
 
@@ -367,7 +367,7 @@ npm run test:coverage
 npm run test:e2e
 ```
 
-## Implemented Features (v0.6.0)
+## Implemented Features (v0.8.2)
 
 ✅ JWT-based authentication
 ✅ Protected routes with RBAC
@@ -412,7 +412,7 @@ npm run test:e2e
 
 ## Documentation
 
-- **[UI_EXTENSIONS_V06.md](UI_EXTENSIONS_V06.md)** - v0.6.0 UI features documentation
+- **[UI_EXTENSIONS_V06.md](UI_EXTENSIONS_V06.md)** - v0.8.2 UI features documentation
 - **[DEVELOPMENT.md](DEVELOPMENT.md)** - Development guide
 - **[INTEGRATION.md](INTEGRATION.md)** - Backend integration guide
 - **[QUICK_START.md](QUICK_START.md)** - Quick start guide
@@ -454,6 +454,6 @@ See [../LICENSE.txt](../LICENSE.txt) for license information.
 
 ---
 
-**Frontend Version:** 0.7.0
-**Backend Compatibility:** OpenSylab v0.7.0+
-**Last Updated:** 2026-05-11
+**Frontend Version:** 0.8.2
+**Backend Compatibility:** OpenSylab v0.8.2+
+**Last Updated:** 2026-05-15
