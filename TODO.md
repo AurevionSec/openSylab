@@ -1,7 +1,7 @@
 # OpenSylab — Roadmap & TODO
 
-**Aktuelle Version:** v0.7.0 (2026-05-11)
-**Nächste Version:** v0.8.0
+**Aktuelle Version:** v0.8.2 (2026-05-14)
+**Nächste Version:** v0.9.0
 **Branch:** main
 
 ---
@@ -16,7 +16,11 @@ Auto-Flag · Batch-CSV-Import · HL7 · FHIR · Audit-Trail · 181 Unit-Tests ·
 
 ---
 
-## 🎯 v0.8.0 — Analyse & Planung
+## ✅ v0.8.x — Abgeschlossen (2026-05-14)
+
+Vollständige Änderungsliste: [CHANGELOG.md](CHANGELOG.md)
+
+Highlights: Rate Limiting · Erzwungener Passwort-Wechsel · HTTPS erzwingen · Health-Endpoint · HL7/FHIR API-Endpoints · Audit-Log-Export · Status-Transition-Validierung im Backend · CI/CD Pipeline · 43 Bug-Hunt-Iterationen · Security-Hardening · 181 Unit-Tests grün
 
 ### P0 — Sicherheit (Blocker für Production)
 
@@ -114,4 +118,4 @@ P0 komplett + Health-Endpoint + HL7/FHIR-Endpoints + Breadcrumb-Fix + TESTING.md
 
 ---
 
-*Zuletzt aktualisiert: 2026-05-11 — Analyse nach v0.7.0-Release*
+*Zuletzt aktualisiert: 2026-05-14 — v0.8.2 Release*

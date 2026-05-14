@@ -289,11 +289,10 @@ core::Sample CsvImport::parseRecord(const std::vector<std::string> &fields) {
   }
 
   if (fields.size() > 4 && !fields[4].empty()) {
-    try {
-      sample.setStatus(core::Sample::stringToStatus(fields[4]));
-    } catch (const std::exception &) {
+    if (!core::Sample::isValidStatusString(fields[4])) {
       throw std::invalid_argument("Ungueltiger Status: " + fields[4]);
     }
+    sample.setStatus(core::Sample::stringToStatus(fields[4]));
   } else {
     sample.setStatus(core::Sample::Status::REGISTERED);
   }

@@ -71,7 +71,7 @@ bool test_api_SerializeResultJson() {
 
   const std::string json = ApiRouter::resultToJson(result);
   ASSERT_NE(json.find("\"result_id\":\"R_API_1\""), std::string::npos);
-  ASSERT_NE(json.find("\"order_id\":42"), std::string::npos);
+  ASSERT_NE(json.find("\"order_id\":\"42\""), std::string::npos);
   ASSERT_NE(json.find("\"status\":\"VALIDATED\""), std::string::npos);
   return true;
 }

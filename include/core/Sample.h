@@ -57,6 +57,7 @@ public:
   std::string getStatusString() const;
   static std::string statusToString(Status status);
   static Status stringToStatus(const std::string &statusStr);
+  static bool isValidStatusString(const std::string &statusStr);
 
 private:
   int id_;                       // Datenbank-ID

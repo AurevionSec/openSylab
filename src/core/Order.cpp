@@ -61,6 +61,17 @@ Order::Status Order::stringToStatus(const std::string &statusStr) {
   return Status::REQUESTED;
 }
 
+bool Order::isValidStatusString(const std::string &statusStr) {
+  static const std::unordered_map<std::string, Status> m = {
+      {"Angefordert", Status::REQUESTED}, {"REQUESTED", Status::REQUESTED},
+      {"In Bearbeitung", Status::IN_PROGRESS}, {"IN_PROGRESS", Status::IN_PROGRESS},
+      {"Abgeschlossen", Status::COMPLETED}, {"COMPLETED", Status::COMPLETED},
+      {"Validiert", Status::VALIDATED}, {"VALIDATED", Status::VALIDATED},
+      {"Storniert", Status::CANCELLED}, {"CANCELLED", Status::CANCELLED},
+  };
+  return m.count(statusStr) > 0;
+}
+
 // Priorität-Hilfsfunktionen
 std::string Order::getPriorityString() const {
   return priorityToString(priority_);
@@ -92,6 +103,15 @@ Order::Priority Order::stringToPriority(const std::string &priorityStr) {
   }
 
   return Priority::NORMAL;
+}
+
+bool Order::isValidPriorityString(const std::string &priorityStr) {
+  static const std::unordered_map<std::string, Priority> m = {
+      {"Normal", Priority::NORMAL}, {"NORMAL", Priority::NORMAL},
+      {"Dringend", Priority::URGENT}, {"URGENT", Priority::URGENT},
+      {"Notfall", Priority::EMERGENCY}, {"EMERGENCY", Priority::EMERGENCY},
+  };
+  return m.count(priorityStr) > 0;
 }
 
 } // namespace core

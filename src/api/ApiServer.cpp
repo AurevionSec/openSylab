@@ -1873,13 +1873,12 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
     }
     auto statusIt = query.find("status");
     if (statusIt != query.end()) {
-      try {
-        filter.status = core::Sample::statusToString(
-            core::Sample::stringToStatus(statusIt->second));
-      } catch (const std::exception &) {
+      if (!core::Sample::isValidStatusString(statusIt->second)) {
         return makeError(400, "validation_error", "Invalid status",
                          "Use Erfasst, In Analyse, Analysiert, Validiert, Archiviert.");
       }
+      filter.status = core::Sample::statusToString(
+          core::Sample::stringToStatus(statusIt->second));
     }
     auto limitIt = query.find("limit");
     if (limitIt != query.end()) {
@@ -2020,13 +2019,12 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
     db::Database::OrderFilter filter;
     auto statusIt = query.find("status");
     if (statusIt != query.end()) {
-      try {
-        filter.status = core::Order::statusToString(
-            core::Order::stringToStatus(statusIt->second));
-      } catch (const std::exception &) {
+      if (!core::Order::isValidStatusString(statusIt->second)) {
         return makeError(400, "validation_error", "Invalid status",
-                         "Use Angefordert, In Bearbeitung, Abgeschlossen, Validiert, Storniert.");
+                         "Use REQUESTED, IN_PROGRESS, COMPLETED, VALIDATED, CANCELLED.");
       }
+      filter.status = core::Order::statusToString(
+          core::Order::stringToStatus(statusIt->second));
     }
     auto sampleIt = query.find("sample_id");
     if (sampleIt != query.end()) {
@@ -2034,13 +2032,12 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
     }
     auto priorityIt = query.find("priority");
     if (priorityIt != query.end()) {
-      try {
-        filter.priority = core::Order::priorityToString(
-            core::Order::stringToPriority(priorityIt->second));
-      } catch (const std::exception &) {
+      if (!core::Order::isValidPriorityString(priorityIt->second)) {
         return makeError(400, "validation_error", "Invalid priority",
-                         "Use Normal, Dringend, Notfall.");
+                         "Use NORMAL, URGENT, EMERGENCY.");
       }
+      filter.priority = core::Order::priorityToString(
+          core::Order::stringToPriority(priorityIt->second));
     }
     auto limitIt = query.find("limit");
     if (limitIt != query.end()) {

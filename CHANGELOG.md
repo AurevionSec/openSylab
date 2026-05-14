@@ -2,6 +2,15 @@
 
 Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert.
 
+## [0.8.2] - 2026-05-14
+
+### Fehlerbehebungen (Tests & Validierung)
+- **include/core/Sample.h / include/core/Order.h**: Neue Validierungsmethoden (`isValidStatusString`, `isValidPriorityString`) für Sample, Order — entkoppeln Input-Validierung von der DB-Deserialisierungs-Fallback-Logik
+- **src/api/ApiServer.cpp**: Query-Parameter-Validierung für Status (Samples, Orders) und Priority (Orders) verwendet jetzt `isValidStatusString`/`isValidPriorityString` statt try/catch um `stringToStatus`/`stringToPriority` — verhindert Regression durch Safe-Fallback
+- **src/utils/CsvImport.cpp**: Status-Validierung beim CSV-Import prüft jetzt via `isValidStatusString` vor dem Setzen — korrumpierter Status in CSV erzeugt wieder Fehlermeldung
+- **test/unit/test_api.cpp**: `SerializeResultJson`-Assertion auf String-Format von `order_id` aktualisiert (war: numerisch, jetzt: `O-YYYY-NNN`)
+- **Alle 181 Tests grün** (vorher: 177/181; 4 Regressions-Tests schlugen fehl)
+
 ## [0.8.1] - 2026-05-14
 
 ### Sicherheit

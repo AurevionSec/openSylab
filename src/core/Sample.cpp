@@ -52,5 +52,16 @@ Sample::Status Sample::stringToStatus(const std::string &statusStr) {
   return Status::REGISTERED;
 }
 
+bool Sample::isValidStatusString(const std::string &statusStr) {
+  static const std::unordered_map<std::string, Status> m = {
+      {"Erfasst", Status::REGISTERED}, {"REGISTERED", Status::REGISTERED},
+      {"In Analyse", Status::IN_ANALYSIS}, {"IN_ANALYSIS", Status::IN_ANALYSIS},
+      {"Analysiert", Status::ANALYZED}, {"ANALYZED", Status::ANALYZED},
+      {"Validiert", Status::VALIDATED}, {"VALIDATED", Status::VALIDATED},
+      {"Archiviert", Status::ARCHIVED}, {"ARCHIVED", Status::ARCHIVED},
+  };
+  return m.count(statusStr) > 0;
+}
+
 } // namespace core
 } // namespace opensylab

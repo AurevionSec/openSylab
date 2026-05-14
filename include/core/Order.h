@@ -73,11 +73,13 @@ public:
   std::string getStatusString() const;
   static std::string statusToString(Status status);
   static Status stringToStatus(const std::string &statusStr);
+  static bool isValidStatusString(const std::string &statusStr);
 
   // Hilfsfunktionen für Priorität
   std::string getPriorityString() const;
   static std::string priorityToString(Priority priority);
   static Priority stringToPriority(const std::string &priorityStr);
+  static bool isValidPriorityString(const std::string &priorityStr);
 
 private:
   int id_;                    // Datenbank-ID

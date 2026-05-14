@@ -2,9 +2,9 @@
 
 **Open Source Laboratory Information Management System**
 
-[![Version](https://img.shields.io/badge/version-0.8.1-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.8.2-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-green)](#lizenz)
-[![Tests](https://img.shields.io/badge/tests-75%20passing-brightgreen)](#tests)
+[![Tests](https://img.shields.io/badge/tests-181%20passing-brightgreen)](#tests)
 [![C++](https://img.shields.io/badge/C%2B%2B-17-orange)](src/)
 [![React](https://img.shields.io/badge/React-18-61dafb)](frontend/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue)](frontend/src/)
@@ -92,7 +92,7 @@ Es verwaltet Proben, Aufträge und Testergebnisse mit vollständigem Audit-Trail
 
 ---
 
-## Features — v0.8
+## Features — v0.8.2
 
 ### Labordaten-Verwaltung
 | Feature | Beschreibung |
@@ -140,16 +140,16 @@ Es verwaltet Proben, Aufträge und Testergebnisse mit vollständigem Audit-Trail
 | **useEntityList-Hook** | Universeller paginierter Listen-Hook mit Abbruch-Mechanik, Race-Condition-sicher |
 | **MFA-Login-Flow** | Zweistufiger Login: Credentials → TOTP-Code |
 | **Sichere Logout-Navigation** | Sidebar-Logout navigiert sofort zu `/login` |
-| **Health-Endpoint** | `GET /api/v1/health` — unauthentifiziert, liefert `{"status":"ok","version":"0.8.1"}` |
+| **Health-Endpoint** | `GET /api/v1/health` — unauthentifiziert, liefert `{"status":"ok","version":"0.8.2"}` |
 | **Version-SSOT** | `CMakeLists.txt` → `include/version.h` (C++); `package.json` → `VITE_APP_VERSION` (Frontend) |
 
 ### Qualität
 | Metrik | Wert |
 |--------|------|
-| **Unit-Tests** | 75 passing (182 registriert; Server-Integrationstests mit eigenem Timeout) |
+| **Unit-Tests** | 181 passing |
 | **TypeScript** | strict mode, 0 Errors |
 | **npm audit** | 0 Vulnerabilities |
-| **Bug-Hunts** | 12 Iterationen (diese Session), 3 aufeinanderfolgende saubere Runs — 21 Dateien, 30+ Bugs behoben |
+| **Bug-Hunts** | 12 Iterationen (diese Session), 3 aufeinanderfolgende saubere Runs — 21 Dateien, 30+ Bugs behoben. v0.8.2: 4 regressions fixed |
 | **Gesamt Bug-Hunts** | 68 Iterationen total, 90+ Bugs behoben |
 
 ---
@@ -341,4 +341,4 @@ MIT — siehe [LICENSE](LICENSE)
 
 Vollständige Versionshistorie: [CHANGELOG.md](CHANGELOG.md)
 
-**Aktuelle Version: [0.8.1](CHANGELOG.md#081---2026-05-14)** — Bug-Hunt & Security Hardening (30+ Fixes, 3 aufeinanderfolgende saubere Review-Iterationen).
+**Aktuelle Version: [0.8.2](CHANGELOG.md#082---2026-05-14)** — Test-Regression-Fix: alle 181 Tests grün (isValidStatusString-Refactor).
