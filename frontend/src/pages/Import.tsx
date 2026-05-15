@@ -332,6 +332,10 @@ export const Import = () => {
               />
             </div>
 
+            {csvError && (
+              <p className="text-sm text-red-700 font-medium">{csvError}</p>
+            )}
+
             {rows.length > 0 && (
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
