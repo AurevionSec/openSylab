@@ -17,9 +17,6 @@ Es verwaltet Proben, Aufträge und Testergebnisse mit vollständigem Audit-Trail
 
 ## Screenshots
 
-> **Hinweis:** Screenshots aus `http://192.168.10.140:5173` aufnehmen und unter `docs/screenshots/` ablegen.  
-> Empfohlene Auflösung: 1440 × 900 px, Format: PNG.
-
 ### Dashboard
 <!-- SCREENSHOT: Hauptansicht nach Login -->
 <!-- Aufnahme: http://192.168.10.140:5173/ (als admin eingeloggt) -->
