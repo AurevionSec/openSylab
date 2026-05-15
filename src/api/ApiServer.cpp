@@ -456,7 +456,16 @@ bool parseJsonString(const std::string &input, size_t &pos, std::string &out,
             return false;
           }
         }
-        value << (code <= 0x7F ? static_cast<char>(code) : '?');
+        if (code <= 0x7F) {
+          value << static_cast<char>(code);
+        } else if (code <= 0x7FF) {
+          value << static_cast<char>(0xC0 | (code >> 6));
+          value << static_cast<char>(0x80 | (code & 0x3F));
+        } else {
+          value << static_cast<char>(0xE0 | (code >> 12));
+          value << static_cast<char>(0x80 | ((code >> 6) & 0x3F));
+          value << static_cast<char>(0x80 | (code & 0x3F));
+        }
         break;
       }
       default:
