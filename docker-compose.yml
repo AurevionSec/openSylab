@@ -7,7 +7,7 @@ services:
     container_name: opensylab-backend
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "9080:8080"
     volumes:
       # Persist SQLite database
       - opensylab-data:/app/data
@@ -24,7 +24,7 @@ services:
     networks:
       - opensylab-network
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/api/v1/health || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/api/v1/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -38,7 +38,7 @@ services:
     container_name: opensylab-frontend
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "9090:80"
     depends_on:
       backend:
         condition: service_healthy
