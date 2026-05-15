@@ -80,7 +80,7 @@ Es verwaltet Proben, Aufträge und Testergebnisse mit vollständigem Audit-Trail
 ![Users](docs/screenshots/users.png)
 *RBAC-Rollenverwaltung: ADMIN / OPERATOR / VIEWER / CUSTOM*
 
-### Dark Mode — God Mode
+### Dark Mode 
 <!-- SCREENSHOT: Dashboard im Dark Mode (sudo-Tastenkombination aktiviert) -->
 <!-- Aufnahme: s-u-d-o eingeben außerhalb Inputs → Terminal-Industrial-Theme -->
 <!-- Zeigt: Acid-Green (#CCFF00), Cyan (#00F0FF) Akzente auf dunklem Hintergrund -->
