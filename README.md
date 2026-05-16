@@ -1,6 +1,6 @@
 # OpenSylab LIMS
 
-**High-Performance, Clinical-Grade Laboratory Information Management System**
+**Open-Source LIMS für die medizinische Diagnostik — ISO 15189-konform, selbst gehostet, MIT-lizenziert.**
 
 [![Version](https://img.shields.io/badge/version-0.8.2-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-green)](#lizenz)
@@ -10,19 +10,35 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue)](frontend/src/)
 [![Security](https://img.shields.io/badge/security-PBKDF2%20%7C%20JWT%20%7C%20TOTP-red)](#sicherheit)
 
-OpenSylab ist eine moderne, native LIMS-Plattform für die medizinische Diagnostik. Entwickelt für maximale Zuverlässigkeit, Geschwindigkeit und kompromisslose Datensicherheit, bietet es eine schlanke Alternative zu überladenen Enterprise-Systemen.
+OpenSylab ist ein LIMS für kleine bis mittlere Diagnostiklabore, die ein vollständiges, ISO 15189-taugliches System betreiben wollen — ohne Enterprise-Lizenzkosten, ohne US-Cloud-Abhängigkeit, ohne Datenbankserver.
 
 ---
 
 ## Warum OpenSylab?
 
-OpenSylab bricht mit der Trägheit klassischer Laborsysteme durch radikales Engineering:
+### ⚖️ ISO 15189 Audit-Trail als Architektur-Fundament
 
-*   🚀 **Native Performance:** Ein C++17 Core ohne schwerfällige Frameworks ermöglicht Latenzen im Millisekundenbereich und minimalen Ressourcenverbrauch — ideal für High-Throughput-Umgebungen und Edge-Computing direkt am Analysegerät.
-*   🛡️ **Security by Default:** Militärische Sicherheitsstandards sind fest integriert. PBKDF2-Hashing, JWT-Authentifizierung und MFA (TOTP) schützen Patientendaten ab dem ersten Byte.
-*   ⚖️ **ISO 15189 Ready:** Ein unveränderlicher, revisionssicherer Audit-Trail auf Datenbankebene sorgt für lückenlose Nachvollziehbarkeit — Compliance ist kein Feature, sondern das Fundament.
-*   ⚡ **Precision Engineering UI:** Ein "Neo-Clinical Industrial" Interface, das auf maximale Lesbarkeit und Fehlervermeidung in Stresssituationen optimiert ist. Keine Spielereien, nur produktiver Fokus.
-*   🔌 **Seamless Interop:** Native, hocheffiziente Parser für HL7 v2.5.1 und FHIR R4 ermöglichen eine reibungslose Integration in bestehende Krankenhaus-Informationssysteme (KIS).
+Jede CREATE / UPDATE / DELETE-Operation auf Proben, Aufträgen, Ergebnissen und Benutzern erzeugt zwingend einen `AuditEntry` mit `user_id`, `action`, `entity_type`, `entity_id` und `timestamp` — direkt in der Datenbankschicht, nicht als optionales Feature. Keine andere Open-Source-LIMS-Lösung implementiert das als unveräußerliches Fundament. Compliance ist hier kein Modul, das man zuschaltet.
+
+### 🔌 HL7 v2.5.1 + FHIR R4 — nativ, kein Middleware-Server
+
+Native C++-Parser für HL7 v2.5.1 (`ORU^R01`) und FHIR R4 Bundles (Patient, Specimen, ServiceRequest, Observation) — kein separater FHIR-Middleware-Server, kein Java-Heap, keine Dependency auf externe Dienste. Import und Export direkt über die REST-API.
+
+### 🔓 MIT-Lizenz · Self-Hosted · Keine Datenbankserver-Abhängigkeit
+
+MIT-Lizenz bedeutet: kein Copyleft, keine Lizenz-Compliance-Bürokratie für IT-Abteilungen, keine Einschränkungen für kommerzielle Weiterentwicklung. SQLite als embedded Datenbank: Backup = Datei kopieren, Betrieb auf einer günstigen ARM-VM möglich, kein DBA-Personal erforderlich. Patientendaten verlassen die eigene Infrastruktur nicht.
+
+### 🚀 Minimaler Ressourcenverbrauch durch nativen C++17-Core
+
+Kein JVM-Warmup, kein Interpreter-Overhead, kein Framework-Bloat. OpenSylab läuft auf Hardware, auf der kein Java-basiertes LIMS auch nur startet — relevant für Edge-Deployments direkt am Analysegerät oder ressourcenbeschränkte On-Premise-Umgebungen.
+
+### 🛡️ Sicherheit mit konkreten Mechanismen
+
+PBKDF2-HMAC-SHA256 (210.000 Iterationen, Random-Salt), HMAC-SHA256 JWT, TOTP/MFA (RFC 6238), RBAC auf vier Rollen (ADMIN / OPERATOR / VIEWER / CUSTOM) mit Auth-Check vor JSON-Parse, Rate-Limiting auf dem Login-Endpoint, TLS-Enforcement via `--force-https`.
+
+### ⚡ Neo-Clinical Industrial UI
+
+Designphilosophie: "User Competence statt User Delight." Monospace-Datenfont für tabellarische Ziffern, hoher Kontrast, Information Density die Labortechniker bevorzugen. Kein generisches SaaS-Styling.
 
 ---
 
@@ -97,6 +113,20 @@ OpenSylab bricht mit der Trägheit klassischer Laborsysteme durch radikales Engi
 <!-- Zeigt: Acid-Green (#CCFF00), Cyan (#00F0FF) Akzente auf dunklem Hintergrund -->
 ![Dark Mode](docs/screenshots/dark_mode.png)
 *Terminal Industrial Dark Mode mit Neon-Akzenten — aktiviert via `sudo`-Tastenkombination*
+
+---
+
+## Für wen ist OpenSylab?
+
+| Zielgruppe | Warum OpenSylab passt |
+|---|---|
+| **Kleine bis mittlere Diagnostiklabore** | ISO 15189-Audit-Trail + RBAC ohne Enterprise-Lizenzkosten (LabWare, STARLIMS: ab 100.000 USD/Jahr) |
+| **Forschungslabore in Universitätskliniken** | Vollständiger Workflow (Sample → Order → Result → Audit) mit klinischem Compliance-Niveau |
+| **Labore mit Datenschutz-Anforderungen (DSGVO)** | Self-Hosted, keine US-Cloud-Abhängigkeit, Patientendaten in eigener Infrastruktur |
+| **IT-Teams ohne DBA-Personal** | SQLite embedded: kein Datenbankserver, kein Connection-Pool, Backup via Dateikopie |
+| **Einrichtungen mit KIS-Integration** | HL7 v2.5.1 + FHIR R4 nativ — kein separater Middleware-Server erforderlich |
+
+OpenSylab ist **nicht** geeignet für: Hochdurchsatz-Labore mit >100 gleichzeitigen Schreibzugriffen (Single-Writer-Limit von SQLite), Labore die SaaS-Betrieb ohne eigene IT-Infrastruktur benötigen.
 
 ---
 
@@ -313,7 +343,7 @@ cd frontend && npx tsc --noEmit
 timeout 60 ./build/bin/opensylab_tests
 ```
 
-**75 Unit-Tests passing** — Backend (C++): Datenbank, Domain-Entities, API-Router, CSV-Import, HL7, FHIR, Statistiken, Utils.
+**181 Unit-Tests passing** — Backend (C++): Datenbank, Domain-Entities, API-Router, CSV-Import, HL7, FHIR, Statistiken, Utils.
 
 Weitere Details: [docs/TESTING.md](docs/TESTING.md)
 
