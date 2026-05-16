@@ -107,3 +107,9 @@ frontend/dist/
 frontend/build/
 test_results_*.csv
 test_db_*.db
+test_validation_demo
+test_validation_demo.cpp
+test_validation.sh
+test_and_build.sh
+VALIDATION_*.md
+CLAUDE.md
