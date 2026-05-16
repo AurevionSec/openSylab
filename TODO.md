@@ -35,7 +35,7 @@ Highlights: Rate Limiting · Erzwungener Passwort-Wechsel · HTTPS erzwingen · 
       Credential Stuffing (single-threaded, kein Login-Counter)
 - [x] **API-Key-Fallback entfernen oder härten** — X-API-Key-Auth bypassed RBAC
       vollständig (wird als OPERATOR behandelt, keine Rollen-Prüfung möglich)
-- [ ] **Socket-Timeouts implementieren** — Fehlendes `SO_RCVTIMEO` / `SO_SNDTIMEO`
+- [x] **Socket-Timeouts implementieren** — Fehlendes `SO_RCVTIMEO` / `SO_SNDTIMEO`
       im `ApiServer` macht das System anfällig für Slowloris-DoS-Angriffe.
 
 ### P1 — Fehlende Kernfeatures
@@ -128,12 +128,12 @@ P0 komplett + Health-Endpoint + HL7/FHIR-Endpoints + Breadcrumb-Fix + TESTING.md
 
 ### Kritische Bugs (neu identifiziert)
 
-- [ ] **Status-Enum-Mismatch Frontend/Backend** — `constants.ts` definiert
+- [x] **Status-Enum-Mismatch Frontend/Backend** — `constants.ts` definiert
       `RESULT_TRANSITIONS` mit `REVIEWED`/`AMENDED`; `ApiServer.cpp` nutzt
       `ENTERED`/`REPEATED`. Frontend zeigt Transitions an, die das Backend ablehnt.
       Stiller ISO 15189-Compliance-Bug. Datei: `frontend/src/utils/constants.ts`,
       `src/api/ApiServer.cpp` (`kResultTrans`).
-- [ ] **SQLite WAL-Mode nicht aktiviert** — Ohne `PRAGMA journal_mode=WAL` blockiert
+- [x] **SQLite WAL-Mode nicht aktiviert** — Ohne `PRAGMA journal_mode=WAL` blockiert
       jeder Write alle parallelen Reads. Bei Batch-CSV-Import ist der Server für die
       Dauer des Imports für alle anderen Nutzer blockiert.
       Fix: `PRAGMA journal_mode=WAL;` in `Database::initializeSchema()`.
@@ -142,7 +142,7 @@ P0 komplett + Health-Endpoint + HL7/FHIR-Endpoints + Breadcrumb-Fix + TESTING.md
       Sehr lange Authorization-Header (z.B. große JWTs, viele Cookies) werden stumm
       abgeschnitten — Auth schlägt dann ohne erklärbaren Fehler fehl.
       Fix: Header-Akkumulation analog zur Body-Akkumulation via Content-Length.
-- [ ] **Keine Security-Header in HTTP-Responses** — Kein `Strict-Transport-Security`,
+- [x] **Keine Security-Header in HTTP-Responses** — Kein `Strict-Transport-Security`,
       kein `X-Content-Type-Options`, kein `X-Frame-Options` in den API-Antworten.
       Relevant besonders für den Plain-HTTP-Pfad und Browser-Clients.
 - [ ] **Kein JWT-Token-Blacklisting nach Logout** — Tokens bleiben bis zu ihrer
