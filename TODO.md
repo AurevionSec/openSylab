@@ -1,276 +1,275 @@
 # OpenSylab — Roadmap & TODO
 
-**Aktuelle Version:** v0.8.2 (2026-05-14)
-**Nächste Version:** v0.9.0
+**Current version:** v0.8.2 (2026-05-14)
+**Next version:** v0.9.0
 **Branch:** main
 
 ---
 
-## ✅ v0.7.0 — Abgeschlossen (2026-05-11)
+## ✅ v0.7.0 — Completed (2026-05-11)
 
-Vollständige Änderungsliste: [CHANGELOG.md](CHANGELOG.md#070---2026-05-11)
+Full change list: [CHANGELOG.md](CHANGELOG.md#070---2026-05-11)
 
-Highlights: JWT-Auth · PBKDF2 · RBAC · MFA/TOTP · LDAP · Soft-Delete ·
-Auto-Flag · Batch-CSV-Import · HL7 · FHIR · Audit-Trail · 181 Unit-Tests ·
-60+ Bugfixes aus intensivem Bughunt · Single Source of Truth für Version
-
----
-
-## ✅ v0.8.x — Abgeschlossen (2026-05-14)
-
-Vollständige Änderungsliste: [CHANGELOG.md](CHANGELOG.md)
-
-Highlights: Rate Limiting · Erzwungener Passwort-Wechsel · HTTPS erzwingen · Health-Endpoint · HL7/FHIR API-Endpoints · Audit-Log-Export · Status-Transition-Validierung im Backend · CI/CD Pipeline · 43 Bug-Hunt-Iterationen · Security-Hardening · 181 Unit-Tests grün
-
-### P0 — Sicherheit (Blocker für Production)
-
-- [x] **Kein Standard-JWT-Secret in VCS** — `docker-compose.yml` enthält
-      `change-this-secret-key-in-production` als Klartextsecret.
-      Fix: Secret aus Datei/Vault lesen, Startup-Fehler wenn dev-secret in Prod.
-- [x] **Erzwungener Passwort-Wechsel** bei erstem Login mit `admin/admin`
-      (kein first-run guard vorhanden — Prod-Deployments laufen mit Standardcreds)
-- [x] **HTTPS erzwingen** — `--force-https` Flag für Prod, HTTP→HTTPS Redirect
-      (`--tls` Flag existiert in main.cpp, aber kein Enforcement)
-- [x] **Rate Limiting** auf `/api/v1/auth/login` — aktuell 0 Schutz gegen
-      Credential Stuffing (single-threaded, kein Login-Counter)
-- [x] **API-Key-Fallback entfernen oder härten** — X-API-Key-Auth bypassed RBAC
-      vollständig (wird als OPERATOR behandelt, keine Rollen-Prüfung möglich)
-- [x] **Socket-Timeouts implementieren** — Fehlendes `SO_RCVTIMEO` / `SO_SNDTIMEO`
-      im `ApiServer` macht das System anfällig für Slowloris-DoS-Angriffe.
-
-### P1 — Fehlende Kernfeatures
-
-- [x] **Health-Endpoint** `GET /api/v1/health` — fehlt komplett;
-      Docker-Healthcheck deaktiviert, Reverse-Proxy-Probes schlagen fehl
-- [x] **HL7/FHIR API-Endpoints** — `Hl7Exchange` + `FhirExchange` sind
-      vollständig implementiert (Hl7.cpp, Fhir.cpp) aber in ApiServer.cpp
-      nicht verdrahtet. Zero HTTP-Routes für `/api/v1/hl7/*` und `/api/v1/fhir/*`.
-- [x] **Audit-Log-Export UI** — `Database::exportAuditLogToCsv()` existiert im
-      Backend, aber kein HTTP-Endpoint und kein Export-Button auf der Audit-Seite
-- [x] **Status-Transition-Validierung im Backend** — nur im Frontend per
-      `SAMPLE_TRANSITIONS`/`ORDER_TRANSITIONS` erzwungen; das Backend akzeptiert
-      jeden Status-String auf PUT (ISO 15189 Compliance-Lücke)
-- [ ] **Konfigurationsdatei** `opensylab.conf` — aktuell alles via CLI-Flags /
-      Env-Vars; kein standardisierter Konfig-Pfad für Prod-Deployments
-- [ ] **Frontend Unit-Tests** — 0 automatisierte Frontend-Tests (Vitest + RTL).
-      Docs: "geplant für v0.8.0"
-- [ ] **OpenAPI / Swagger** — kein maschinenlesbarer API-Contract, 30+ Endpoints
-      ohne Dokumentation
-- [ ] **Datenbankmigrationen** — kein versioniertes Migration-System;
-      Schema-Upgrade von v0.7 → v0.8 = manuell oder DB-Reset
-
-### P2 — UI/UX-Verbesserungen
-
-- [x] **Create-Button auf Results-Seite** ohne `canWrite`-Guard —
-      VIEWER sieht den Button (schlägt beim Submit fehl, aber verwirrend)
-- [x] **Breadcrumb-Bug** — `/audit-log` wird als "Dashboard" angezeigt
-      (`routeNames` hat `/audit` statt `/audit-log` in Header.tsx)
-- [x] **Suche: inkonsistente Prefix-Logik** — `O` (ohne Bindestrich) → Orders,
-      `R-` (mit Bindestrich) → Results; `RES-001` landet silently bei Samples
-- [x] **Import-Seite: nur Samples** — UI ruft nur `createSample()` auf;
-      Ergebnis-Import (CsvResultImport.cpp), HL7, FHIR sind nicht erreichbar
-- [x] **Dashboard Statistik-Fallback** — bei > 100 Einträgen werden Kacheln
-      und Diagramme unvollständig (client-seitige Aggregation mit limit:100)
-- [x] **Order-ID in Ergebnissen** — `resultToJson()` sendet numerische PK,
-      nicht den lesbaren String wie `O-2024-001`; Tabelle zeigt Zahlen statt IDs
-- [x] **`updated_at` bei Proben** — `sampleToJson()` hat kein `updated_at`-Feld;
-      Frontend zeigt immer `registration_date` als "zuletzt geändert"
-- [x] **Live-Zähler in Sidebar-Badges** — `badge: '24'` in Sidebar ist
-      hardcoded und wird nie gerendert (toter Code)
-- [x] **Passwort-Stärke-Indikator** auf der Profil-Seite
-- [x] **TESTING.md stale** — zeigt "62 Tests" statt aktuell 181
-
-### P3 — Infrastruktur / Operations
-
-- [x] **CI/CD Pipeline** — kein `.github/workflows/`; kein automatischer
-      Build/Test/Push auf PR oder merge
-- [x] **Backend-Healthcheck in docker-compose.yml** — aktuell auskommentiert;
-      Frontend-Container startet ggf. vor dem Backend
-- [x] **CORS-Duplikation** — `getenv("OPENSYLAB_CORS_ORIGIN")` wird in
-      `handleClientTls()` und `handleClientPlain()` separat gelesen (2 Stellen)
-- [ ] **Multi-threaded Server / Concurrency** — Aktuelle `serveLoop()` ist
-      sequenziell/blockierend; ein langsamer/böswilliger Client blockiert
-      die gesamte API für alle anderen Benutzer. Umstellung auf Thread-Pool
-      oder Thread-per-Connection erforderlich.
-- [ ] **Geheimer Schlüssel-Rotation** — kein dokumentierter Prozess zum
-      Rotieren von JWT-Secret ohne Server-Neustart
+Highlights: JWT Auth · PBKDF2 · RBAC · MFA/TOTP · LDAP · Soft-Delete ·
+Auto-Flag · Batch CSV Import · HL7 · FHIR · Audit Trail · 181 unit tests ·
+60+ bug fixes from intensive bug hunt · Single Source of Truth for version
 
 ---
 
-## Gesamtübersicht v0.8 nach Aufwand
+## ✅ v0.8.x — Completed (2026-05-14)
 
-| Kategorie | Items | Aufwand (geschätzt) |
-|-----------|-------|---------------------|
-| P0 Sicherheit | 6 | ~2.5 Wochen |
-| P1 Kernfeatures | 8 | ~4 Wochen |
-| P2 UI/UX | 10 | ~2 Wochen |
-| P3 Infrastruktur | 5 | ~1.5 Wochen |
-| **Gesamt** | **29** | **~10 Wochen** |
+Full change list: [CHANGELOG.md](CHANGELOG.md)
 
-**Empfohlener MVP-Scope für v0.8.0** (fokussiert auf Production-Readiness):
-P0 komplett + Health-Endpoint + HL7/FHIR-Endpoints + Breadcrumb-Fix + TESTING.md
+Highlights: Rate Limiting · Forced password change · Enforce HTTPS · Health endpoint · HL7/FHIR API endpoints · Audit log export · Status transition validation in backend · CI/CD pipeline · 43 bug-hunt iterations · Security hardening · 181 unit tests green
+
+### P0 — Security (blocker for production)
+
+- [x] **No default JWT secret in VCS** — `docker-compose.yml` contains
+      `change-this-secret-key-in-production` as a plaintext secret.
+      Fix: read secret from file/vault, fail on startup if dev secret is used in prod.
+- [x] **Forced password change** on first login with `admin/admin`
+      (no first-run guard present — prod deployments run with default credentials)
+- [x] **Enforce HTTPS** — `--force-https` flag for prod, HTTP→HTTPS redirect
+      (`--tls` flag exists in main.cpp, but no enforcement)
+- [x] **Rate Limiting** on `/api/v1/auth/login` — currently zero protection against
+      credential stuffing (single-threaded, no login counter)
+- [x] **Remove or harden API key fallback** — X-API-Key auth bypassed RBAC
+      completely (treated as OPERATOR, no role check possible)
+- [x] **Implement socket timeouts** — Missing `SO_RCVTIMEO` / `SO_SNDTIMEO`
+      in `ApiServer` makes the system vulnerable to Slowloris DoS attacks.
+
+### P1 — Missing core features
+
+- [x] **Health endpoint** `GET /api/v1/health` — missing entirely;
+      Docker health check disabled, reverse proxy probes fail
+- [x] **HL7/FHIR API endpoints** — `Hl7Exchange` + `FhirExchange` are
+      fully implemented (Hl7.cpp, Fhir.cpp) but not wired in ApiServer.cpp.
+      Zero HTTP routes for `/api/v1/hl7/*` and `/api/v1/fhir/*`.
+- [x] **Audit log export UI** — `Database::exportAuditLogToCsv()` exists in
+      the backend, but no HTTP endpoint and no export button on the audit page
+- [x] **Status transition validation in backend** — only enforced in the frontend via
+      `SAMPLE_TRANSITIONS`/`ORDER_TRANSITIONS`; the backend accepts any status string
+      on PUT (ISO 15189 compliance gap)
+- [ ] **Configuration file** `opensylab.conf` — currently everything via CLI flags /
+      env vars; no standardized config path for prod deployments
+- [ ] **Frontend unit tests** — 0 automated frontend tests (Vitest + RTL).
+      Docs: "planned for v0.8.0"
+- [ ] **OpenAPI / Swagger** — no machine-readable API contract, 30+ endpoints
+      without documentation
+- [ ] **Database migrations** — no versioned migration system;
+      schema upgrade from v0.7 → v0.8 = manual or DB reset
+
+### P2 — UI/UX improvements
+
+- [x] **Create button on Results page** without `canWrite` guard —
+      VIEWER sees the button (fails on submit, but confusing)
+- [x] **Breadcrumb bug** — `/audit-log` is displayed as "Dashboard"
+      (`routeNames` has `/audit` instead of `/audit-log` in Header.tsx)
+- [x] **Search: inconsistent prefix logic** — `O` (without dash) → Orders,
+      `R-` (with dash) → Results; `RES-001` silently lands in Samples
+- [x] **Import page: samples only** — UI only calls `createSample()`;
+      result import (CsvResultImport.cpp), HL7, FHIR are not reachable
+- [x] **Dashboard statistics fallback** — with > 100 entries, tiles
+      and charts are incomplete (client-side aggregation with limit:100)
+- [x] **Order ID in results** — `resultToJson()` sends the numeric PK,
+      not the human-readable string like `O-2024-001`; table shows numbers instead of IDs
+- [x] **`updated_at` on samples** — `sampleToJson()` has no `updated_at` field;
+      frontend always shows `registration_date` as "last modified"
+- [x] **Live counters in sidebar badges** — `badge: '24'` in Sidebar is
+      hardcoded and never rendered (dead code)
+- [x] **Password strength indicator** on the profile page
+- [x] **TESTING.md stale** — shows "62 tests" instead of current 181
+
+### P3 — Infrastructure / Operations
+
+- [x] **CI/CD pipeline** — no `.github/workflows/`; no automated
+      build/test/push on PR or merge
+- [x] **Backend health check in docker-compose.yml** — currently commented out;
+      frontend container may start before the backend
+- [x] **CORS duplication** — `getenv("OPENSYLAB_CORS_ORIGIN")` is read separately in
+      `handleClientTls()` and `handleClientPlain()` (2 locations)
+- [ ] **Multi-threaded server / concurrency** — current `serveLoop()` is
+      sequential/blocking; a slow or malicious client blocks
+      the entire API for all other users. Migration to thread pool
+      or thread-per-connection required.
+- [ ] **Secret key rotation** — no documented process for rotating
+      the JWT secret without a server restart
 
 ---
 
-## Bekannte technische Schulden (kein Release-Blocker)
+## v0.8 overall summary by Effort
 
-- `token_expiry`-Key wird in `auth.ts` geschrieben aber in `api.ts` als `_expiry`
-  gelesen — wenn der Key fehlt, stiller Logout bei jedem Request
-- Test-Runner nutzt eigenes Macro-Framework statt Catch2/GoogleTest → kein
-  Standard-CI-Output ohne Custom-Skripte
-- Keine E2E/Integration-Tests (Playwright/Cypress)
-- **JSON-Parser Einschränkungen** — Handgeschriebener Parser in `ApiServer.cpp`
-  unterstützt keine Arrays oder verschachtelten Objekte; erschwert API-Ausbau.
+| Category | Items | Effort (estimated) |
+|----------|-------|--------------------|
+| P0 Security | 6 | ~2.5 weeks |
+| P1 Core features | 8 | ~4 weeks |
+| P2 UI/UX | 10 | ~2 weeks |
+| P3 Infrastructure | 5 | ~1.5 weeks |
+| **Total** | **29** | **~10 weeks** |
+
+**Recommended MVP scope for v0.8.0** (focused on production readiness):
+P0 complete + health endpoint + HL7/FHIR endpoints + breadcrumb fix + TESTING.md
 
 ---
 
-## Strategische Analyse-Findings (2026-05-16)
+## Known technical debt (not a release blocker)
 
-### Kritische Bugs (neu identifiziert)
+- `token_expiry` key is written in `auth.ts` but read as `_expiry` in `api.ts`
+  — if the key is missing, silent logout on every request
+- Test runner uses its own macro framework instead of Catch2/GoogleTest → no
+  standard CI output without custom scripts
+- No E2E/integration tests (Playwright/Cypress)
+- **JSON parser limitations** — hand-written parser in `ApiServer.cpp`
+  does not support arrays or nested objects; complicates API expansion.
 
-- [x] **Status-Enum-Mismatch Frontend/Backend** — `constants.ts` definiert
-      `RESULT_TRANSITIONS` mit `REVIEWED`/`AMENDED`; `ApiServer.cpp` nutzt
-      `ENTERED`/`REPEATED`. Frontend zeigt Transitions an, die das Backend ablehnt.
-      Stiller ISO 15189-Compliance-Bug. Datei: `frontend/src/utils/constants.ts`,
+---
+
+## Strategic Analysis Findings (2026-05-16)
+
+### Critical bugs (newly identified)
+
+- [x] **Status enum mismatch frontend/backend** — `constants.ts` defines
+      `RESULT_TRANSITIONS` with `REVIEWED`/`AMENDED`; `ApiServer.cpp` uses
+      `ENTERED`/`REPEATED`. Frontend shows transitions that the backend rejects.
+      Silent ISO 15189 compliance bug. Files: `frontend/src/utils/constants.ts`,
       `src/api/ApiServer.cpp` (`kResultTrans`).
-- [x] **SQLite WAL-Mode nicht aktiviert** — Ohne `PRAGMA journal_mode=WAL` blockiert
-      jeder Write alle parallelen Reads. Bei Batch-CSV-Import ist der Server für die
-      Dauer des Imports für alle anderen Nutzer blockiert.
+- [x] **SQLite WAL mode not enabled** — Without `PRAGMA journal_mode=WAL` every
+      write blocks all concurrent reads. During a batch CSV import the server is
+      blocked for all other users for the duration of the import.
       Fix: `PRAGMA journal_mode=WAL;` in `Database::initializeSchema()`.
-- [ ] **HTTP-Header-Truncation bei >8192 Bytes** — `handleClientPlain` /
-      `handleClientTls` lesen im ersten `recv`/`SSL_read` exakt 8192 Bytes.
-      Sehr lange Authorization-Header (z.B. große JWTs, viele Cookies) werden stumm
-      abgeschnitten — Auth schlägt dann ohne erklärbaren Fehler fehl.
-      Fix: Header-Akkumulation analog zur Body-Akkumulation via Content-Length.
-- [x] **Keine Security-Header in HTTP-Responses** — Kein `Strict-Transport-Security`,
-      kein `X-Content-Type-Options`, kein `X-Frame-Options` in den API-Antworten.
-      Relevant besonders für den Plain-HTTP-Pfad und Browser-Clients.
-- [ ] **Kein JWT-Token-Blacklisting nach Logout** — Tokens bleiben bis zu ihrer
-      Ablaufzeit (60 min) gültig. Bei kompromittierten Credentials ist der
-      Angreifer für dieses Fenster autorisiert. Fix: Redis-basierte Blacklist oder
-      kurzlebige Tokens + Refresh-Token-Rotation.
-- [ ] **Kein TOTP Base32-Enrollment-Flow dokumentiert** — TOTP-Secrets werden
-      offenbar als Rohstring gespeichert. Kompatibilität mit Standard-Authenticator-
-      Apps (Google Authenticator, Authy) via QR-Code-Enrollment prüfen.
+- [ ] **HTTP header truncation at >8192 bytes** — `handleClientPlain` /
+      `handleClientTls` read exactly 8192 bytes in the first `recv`/`SSL_read`.
+      Very long Authorization headers (e.g. large JWTs, many cookies) are silently
+      truncated — auth then fails without an explainable error.
+      Fix: header accumulation analogous to body accumulation via Content-Length.
+- [x] **No security headers in HTTP responses** — No `Strict-Transport-Security`,
+      no `X-Content-Type-Options`, no `X-Frame-Options` in API responses.
+      Especially relevant for the plain HTTP path and browser clients.
+- [ ] **No JWT token blacklisting after logout** — Tokens remain valid until expiry
+      (60 min). With compromised credentials the attacker is authorized for that
+      window. Fix: Redis-based blacklist or short-lived tokens + refresh token rotation.
+- [ ] **No TOTP Base32 enrollment flow documented** — TOTP secrets appear to be stored
+      as raw strings. Verify compatibility with standard authenticator apps
+      (Google Authenticator, Authy) via QR code enrollment.
 
-### Architektur-Schulden (Mittel- bis Langfrist)
+### Architecture debt (medium to long term)
 
-- [ ] **`ApiServer.cpp` aufteilen (God-File, ~3400 Zeilen)** — Alle ~30 Route-Handler,
-      JSON-Parser, URL-Decoder, Rate-Limiter, CORS-Logik in einer einzigen Datei.
-      Refactoring: Je eine Handler-Klasse pro Ressource (SampleHandler, OrderHandler,
+- [ ] **Split `ApiServer.cpp` (God-file, ~3400 lines)** — All ~30 route handlers,
+      JSON parser, URL decoder, rate limiter, CORS logic in a single file.
+      Refactoring: one handler class per resource (SampleHandler, OrderHandler,
       ResultHandler, UserHandler, AuditHandler, StatsHandler, HL7Handler, FhirHandler).
-      Aufwand: ~3–4 Wochen.
-- [ ] **JSON-Parser ersetzen: nlohmann/json via FetchContent** — Eigenentwicklung
-      unterstützt keine Arrays oder verschachtelten Objekte. nlohmann/json ist
-      header-only, zero transitive Dependencies, exzellenter Security-Track-Record.
-      FetchContent-Infrastruktur existiert bereits (jwt-cpp). Aufwand: ~1 Woche.
-- [ ] **Layer-Verletzung: API importiert DB direkt** — `include/api/ApiServer.h`
-      importiert `db/Database.h` direkt; verletzt die dokumentierte 5-Layer-Regel
-      (Layer 4 darf nicht Layer 1 importieren). Langfristig ein Repository-/Service-
-      Pattern einführen als Mediator.
-- [ ] **PostgreSQL-Backend-Option** — SQLite ist für Single-Lab-Edition korrekt;
-      für Multi-Site / Multi-Tenant (Roadmap v1.1) braucht es eine DB-Abstraktions-
-      schicht mit PostgreSQL-Support. Roadmap v0.9 sieht das vor.
+      Effort: ~3–4 weeks.
+- [ ] **Replace JSON parser: nlohmann/json via FetchContent** — The hand-rolled
+      implementation does not support arrays or nested objects. nlohmann/json is
+      header-only, zero transitive dependencies, excellent security track record.
+      FetchContent infrastructure already exists (jwt-cpp). Effort: ~1 week.
+- [ ] **Layer violation: API imports DB directly** — `include/api/ApiServer.h`
+      imports `db/Database.h` directly; violates the documented 5-layer rule
+      (Layer 4 must not import Layer 1). Introduce a repository/service pattern
+      as a mediator long term.
+- [ ] **PostgreSQL backend option** — SQLite is correct for the single-lab edition;
+      for multi-site / multi-tenant (roadmap v1.1) a DB abstraction layer with
+      PostgreSQL support is needed. Roadmap v0.9 foresees this.
 
-### v0.9.0 — Architektur-Modernisierung (Prio-Vorschlag)
+### v0.9.0 — Architecture modernization (priority proposal)
 
-- [ ] **Thread-Pool / Thread-per-Connection** (→ bestehend in P3, hier priorisiert)
-- [ ] **Socket-Timeouts** `SO_RCVTIMEO` / `SO_SNDTIMEO` (→ bestehend in P0)
-- [ ] **nlohmann/json einbinden** (→ neu, s.o.)
-- [ ] **SQLite WAL-Mode** (→ neu, s.o.)
-- [ ] **Status-Enum-Mismatch** Frontend/Backend (→ neu, s.o.)
-- [ ] **Hash-Chain Audit-Trail** — Kryptografisch verkettete Audit-Einträge: jeder
-      Hash enthält den Hash des vorherigen Eintrags. Manipulierter Eintrag bricht
-      die gesamte Chain — mathematisch nachweisbar. Optional: RFC 3161-qualifizierter
-      Zeitstempel (QTSP nach eIDAS) pro Hash für forensische Verwertbarkeit.
-      Aufwand: ~3–4 Wochen (Implementation + Verifikations-Tool + Dokumentation).
-- [ ] **OpenAPI / Swagger** (→ bestehend in P1)
-- [ ] **Datenbankmigrationen** (→ bestehend in P1)
-- [ ] **PostgreSQL-Backend-Option** (→ neu, s.o.)
-- [ ] **Strukturierte JSON-Logs** — Aktuell kein dediziertes Logging-System;
-      `std::cout`/`std::cerr` in Library-Code verletzt die CLAUDE.md-Regel.
-
----
-
-## Strategische Roadmap-Erweiterungen
-
-### STR-1: IQ/OQ/PQ-Validierungspaket (ISO 15189)
-
-Kein Code — Dokumentation. Installationsqualifizierung (IQ), Betriebsqualifizierung
-(OQ), Leistungsqualifizierung (PQ) nach DIN EN ISO 15189 pro OpenSylab-Version.
-Mit automatisierten Testskripten, die den OQ-Prozess reproduzierbar machen.
-
-- Zielgruppe: DAkkS-akkreditierte Labore (~2.000 in Deutschland), ÖKAS (Österreich),
-  SAS (Schweiz)
-- Marktrelevanz: Validierungsdokumentation kostet bei externen Beratern 5.000–20.000 €;
-  OpenSylab kann das mit Eigenkenntnis für 3.000–10.000 € anbieten
-- Moat: Nur durch direkte Zusammenarbeit mit akkreditierten Laboren und regulatorisches
-  Domain-Know-how erstellbar; ein Fork repliziert das nicht automatisch
-- Aufwand: ~6–10 Wochen initial, ~2–3 Wochen pro Major-Version-Update
-
-### STR-2: ASTM/LIS02-A2 Geräte-Konnektivität
-
-Native C++-Implementierung des ASTM E1394/LIS02-A2-Protokolls (RS-232/TCP-basierter
-Standard für Gerät-LIS-Kommunikation). Ergebnisse kommen direkt vom Analysegerät —
-keine manuelle Eingabe. Erste Zielgeräte: Sysmex XN-Serie (Hämatologie) oder
-Roche cobas c (klinische Chemie).
-
-- Zielgruppe: Labore mit automatisierten Analysegeräten — die Kunden mit echtem Budget
-- Moat: Gerätehersteller-spezifische Edge Cases sind nur durch physischen Gerätezugang
-  lernbar; wer das dokumentiert hat, ist Monate voraus
-- Aufwand: ~4–6 Wochen pro Geräteklasse (mit Testzugang oder Simulator)
-
-### STR-3: Signiertes Docker-Image + SBOM ("OpenSylab Verified")
-
-Cosign/Sigstore-signierte Docker-Images, Software Bill of Materials (SPDX/CycloneDX),
-öffentliches CVE-Scan-Dashboard via Trivy in CI/CD. Verifizierungs-Workflow prüft
-beim Start die Integrität des Images.
-
-- Zielgruppe: Krankenhauslabore in KRITIS-regulierten Infrastrukturen, IT-Security-
-  Verantwortliche mit Anforderungen an Software-Herkunftsnachweise
-- Aufwand: ~2–3 Wochen für Setup, danach automatisiert in CI/CD
-
-### STR-4: OpenSylab Academy — Zertifizierung für Laborinformatiker
-
-Kostenpflichtiges Online-Schulungsprogramm (Teachable/Podia):
-- Modul 1: OpenSylab Administration (~200–300 €)
-- Modul 2: ISO 15189 Compliance mit OpenSylab (~300–500 €)
-- Modul 3: Geräteintegration & API (~200–300 €)
-Mit anerkanntem Zertifikat "Certified OpenSylab Administrator".
-
-- Zielgruppe: Laborinformatiker, IT-Admins in Laboren, LIMS-Consultants
-- Strategischer Nebeneffekt: Jeder Absolvent = potenzieller Consulting-Kunde;
-  Academy ist gleichzeitig Vertriebs-Funnel
-- Aufwand: ~4–6 Wochen für erste Kursversion
+- [ ] **Thread pool / thread-per-connection** (→ existing in P3, prioritized here)
+- [ ] **Socket timeouts** `SO_RCVTIMEO` / `SO_SNDTIMEO` (→ existing in P0)
+- [ ] **Integrate nlohmann/json** (→ new, see above)
+- [ ] **SQLite WAL mode** (→ new, see above)
+- [ ] **Status enum mismatch** frontend/backend (→ new, see above)
+- [ ] **Hash-chain audit trail** — Cryptographically chained audit entries: each
+      hash includes the hash of the previous entry. A tampered entry breaks the
+      entire chain — mathematically provable. Optional: RFC 3161-qualified
+      timestamp (QTSP per eIDAS) per hash for forensic admissibility.
+      Effort: ~3–4 weeks (implementation + verification tool + documentation).
+- [ ] **OpenAPI / Swagger** (→ existing in P1)
+- [ ] **Database migrations** (→ existing in P1)
+- [ ] **PostgreSQL backend option** (→ new, see above)
+- [ ] **Structured JSON logs** — No dedicated logging system currently;
+      `std::cout`/`std::cerr` in library code violates the CLAUDE.md rule.
 
 ---
 
-## Monetarisierungsreihenfolge (Empfehlung)
+## Strategic roadmap extensions
 
-**Phase 1 (v0.9–v1.0): Support & Consulting — sofort umsetzbar**
-- Deployment & Hardening: 1.500–5.000 € pro Engagement
-- ISO 15189-Validierungsdokumentation für Labore: 3.000–10.000 €
-- Schulungen: 500–1.500 € pro Session
-- Voraussetzung: keine — sofort Revenue-generierend
+### STR-1: IQ/OQ/PQ validation package (ISO 15189)
+
+No code — documentation. Installation Qualification (IQ), Operational Qualification
+(OQ), Performance Qualification (PQ) per DIN EN ISO 15189 per OpenSylab version.
+With automated test scripts that make the OQ process reproducible.
+
+- Target audience: DAkkS-accredited laboratories (~2,000 in Germany), ÖKAS (Austria),
+  SAS (Switzerland)
+- Market relevance: Validation documentation costs 5,000–20,000 € from external
+  consultants; OpenSylab can offer this for 3,000–10,000 € with in-house expertise
+- Moat: Only achievable through direct collaboration with accredited laboratories and
+  regulatory domain knowledge; a fork cannot replicate this automatically
+- Effort: ~6–10 weeks initially, ~2–3 weeks per major version update
+
+### STR-2: ASTM/LIS02-A2 device connectivity
+
+Native C++ implementation of the ASTM E1394/LIS02-A2 protocol (RS-232/TCP-based
+standard for instrument-LIS communication). Results arrive directly from the analyzer —
+no manual entry. First target instruments: Sysmex XN series (hematology) or
+Roche cobas c (clinical chemistry).
+
+- Target audience: Laboratories with automated analyzers — the customers with real budget
+- Moat: Instrument-vendor-specific edge cases can only be learned through physical device
+  access; whoever has documented them is months ahead
+- Effort: ~4–6 weeks per instrument class (with test access or simulator)
+
+### STR-3: Signed Docker image + SBOM ("OpenSylab Verified")
+
+Cosign/Sigstore-signed Docker images, Software Bill of Materials (SPDX/CycloneDX),
+public CVE scan dashboard via Trivy in CI/CD. Verification workflow checks image
+integrity at startup.
+
+- Target audience: Hospital laboratories in KRITIS-regulated infrastructures, IT security
+  officers with requirements for software provenance attestation
+- Effort: ~2–3 weeks for setup, then automated in CI/CD
+
+### STR-4: OpenSylab Academy — certification for laboratory informaticists
+
+Paid online training program (Teachable/Podia):
+- Module 1: OpenSylab Administration (~200–300 €)
+- Module 2: ISO 15189 Compliance with OpenSylab (~300–500 €)
+- Module 3: Device integration & API (~200–300 €)
+With a recognized certificate "Certified OpenSylab Administrator".
+
+- Target audience: Laboratory informaticists, IT admins in labs, LIMS consultants
+- Strategic side effect: Every graduate = potential consulting customer;
+  Academy serves simultaneously as a sales funnel
+- Effort: ~4–6 weeks for the first course version
+
+---
+
+## Monetization roadmap (recommendation)
+
+**Phase 1 (v0.9–v1.0): Support & Consulting — actionable immediately**
+- Deployment & hardening: 1,500–5,000 € per engagement
+- ISO 15189 validation documentation for laboratories: 3,000–10,000 €
+- Training sessions: 500–1,500 € per session
+- Prerequisite: none — revenue-generating immediately
 
 **Phase 2 (v1.0–v1.2): Compliance-as-a-Service + Open Core**
-- Produktifiziertes IQ/OQ/PQ-Paket: 5.000–15.000 € Erstvalidierung + 1.500–3.000 €/Jahr
-- Open Core: proprietäre Enterprise-Features (Geräte-Konnektoren STR-2,
-  Hash-Chain-Audit mit eIDAS-Zeitstempel, Multi-Site-Management)
-- MIT-Kern bleibt öffentlich; proprietäre Features strukturell isoliert
-- Voraussetzung: STR-1 (Validierungspaket) muss fertig sein
+- Productized IQ/OQ/PQ package: 5,000–15,000 € initial validation + 1,500–3,000 €/year
+- Open Core: proprietary enterprise features (device connectors STR-2,
+  hash-chain audit with eIDAS timestamp, multi-site management)
+- MIT core remains public; proprietary features structurally isolated
+- Prerequisite: STR-1 (validation package) must be complete
 
-**Phase 3 (v1.3+): Managed SaaS — erst nach DSGVO-Klärung**
-- Preismodell: Starter 99 €/Mo · Professional 299 €/Mo · Enterprise 999 €/Mo
-- Voraussetzung: AVV mit jedem Kunden, BSI-C5-zertifiziertes RZ, ISO 27001,
-  MDR-Klärung (Medizinprodukt?), Multi-Tenant-Architektur (Roadmap v1.1)
-- Zeitrahmen: frühestens 12–18 Monate Vorlauf vor erstem Umsatz
+**Phase 3 (v1.3+): Managed SaaS — only after DSGVO clarification**
+- Pricing model: Starter 99 €/mo · Professional 299 €/mo · Enterprise 999 €/mo
+- Prerequisite: AVV with every customer, BSI C5-certified data center, ISO 27001,
+  MDR clarification (medical device?), multi-tenant architecture (roadmap v1.1)
+- Timeline: 12–18 months lead time at minimum before first revenue
 
-**Phase 4 (langfristig): OEM-Deals, Marketplace**
-- OEM mit mittelgroßen IVD-Herstellern (Sysmex, Mindray) über Referenz-Implementierungen
-- Plugin-Marketplace erst sinnvoll ab ~1.000 GitHub Stars + aktiver Community
-- Plugin-Architektur technisch jetzt vorbereiten (Extension-Points für Geräte-Konnektoren)
+**Phase 4 (long term): OEM deals, marketplace**
+- OEM with mid-sized IVD manufacturers (Sysmex, Mindray) via reference implementations
+- Plugin marketplace only makes sense from ~1,000 GitHub stars + active community
+- Plugin architecture to be technically prepared now (extension points for device connectors)
 
 ---
 
-*Zuletzt aktualisiert: 2026-05-16 — Strategische Analyse*
+*Last updated: 2026-05-16 — Strategic Analysis*

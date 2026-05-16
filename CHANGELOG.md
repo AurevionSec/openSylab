@@ -1,236 +1,236 @@
 # OpenSylab - Changelog
 
-Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert.
+All notable changes to this project are documented in this file.
 
 ## [0.8.2] - 2026-05-14
 
-### Fehlerbehebungen (Tests & Validierung)
-- **include/core/Sample.h / include/core/Order.h**: Neue Validierungsmethoden (`isValidStatusString`, `isValidPriorityString`) für Sample, Order — entkoppeln Input-Validierung von der DB-Deserialisierungs-Fallback-Logik
-- **src/api/ApiServer.cpp**: Query-Parameter-Validierung für Status (Samples, Orders) und Priority (Orders) verwendet jetzt `isValidStatusString`/`isValidPriorityString` statt try/catch um `stringToStatus`/`stringToPriority` — verhindert Regression durch Safe-Fallback
-- **src/utils/CsvImport.cpp**: Status-Validierung beim CSV-Import prüft jetzt via `isValidStatusString` vor dem Setzen — korrumpierter Status in CSV erzeugt wieder Fehlermeldung
-- **test/unit/test_api.cpp**: `SerializeResultJson`-Assertion auf String-Format von `order_id` aktualisiert (war: numerisch, jetzt: `O-YYYY-NNN`)
-- **Alle 181 Tests grün** (vorher: 177/181; 4 Regressions-Tests schlugen fehl)
+### Bug fixes (Tests & Validation)
+- **include/core/Sample.h / include/core/Order.h**: Add new validation methods (`isValidStatusString`, `isValidPriorityString`) for Sample and Order — decouple input validation from DB deserialization fallback logic
+- **src/api/ApiServer.cpp**: Query-parameter validation for status (Samples, Orders) and priority (Orders) now uses `isValidStatusString`/`isValidPriorityString` instead of try/catch around `stringToStatus`/`stringToPriority` — prevents regression via safe fallback
+- **src/utils/CsvImport.cpp**: Status validation during CSV import now checks via `isValidStatusString` before setting — corrupted status in CSV again produces an error message
+- **test/unit/test_api.cpp**: Update `SerializeResultJson` assertion on string format of `order_id` (was: numeric, now: `O-YYYY-NNN`)
+- **All 181 tests green** (previously: 177/181; 4 regression tests failed)
 
 ## [0.8.1] - 2026-05-14
 
-### Sicherheit
-- **`isApiKeyValid` thread-safe refactoriert**: Gibt jetzt `std::optional<std::string>` zurück — eliminiert `lastApiKeyRole_` als geteilten Mutable-State (Race-Condition-Prävention)
-- **Rate-Limiter Bypass geschlossen**: Query-Strings (`?foo=bar`) am Login-Endpoint umgingen den Rate-Limiter — Pfad wird jetzt vor dem Vergleich normalisiert
-- **RBAC-Reihenfolge korrigiert**: User-Management-Routen überspringen den generischen JSON-Parse-Block — Auth-Check erfolgt jetzt vor JSON-Validierung (verhindert Auth-Info-Leak)
-- **`verifyPassword` gehärtet**: `std::stoi` in try/catch + Schranke auf 1–1.000.000 Iterationen + Salt-Leerprüfung vor PBKDF2-Aufruf
-- **`base64Encode`**: Implizite Int-Promotion vor Left-Shift durch `static_cast<unsigned int>` behoben
+### Security
+- **`isApiKeyValid` refactored to be thread-safe**: Now returns `std::optional<std::string>` — eliminates `lastApiKeyRole_` as shared mutable state (race condition prevention)
+- **Rate-limiter bypass closed**: Query strings (`?foo=bar`) on the login endpoint bypassed the rate limiter — path is now normalized before comparison
+- **RBAC ordering fixed**: User-management routes skip the generic JSON-parse block — auth check now happens before JSON validation (prevents auth-info leak)
+- **`verifyPassword` hardened**: `std::stoi` wrapped in try/catch + limit clamped to 1–1,000,000 iterations + salt emptiness check before PBKDF2 call
+- **`base64Encode`**: Fix implicit int promotion before left-shift via `static_cast<unsigned int>`
 
-### Fehlerbehebungen (Backend)
-- **`bindAndListen()`**: FD-Leak bei `bind()`/`listen()`-Fehler — `serverFd_` wird jetzt auf allen Fehlerpfaden geschlossen und auf `-1` zurückgesetzt
-- **`~ApiServer`**: Fehlender Destruktor ergänzt (RAII-Cleanup für `serverFd_`); setzt `running_ = false` vor Socket-Close
-- **`createSample`/`createSamplesBatch`**: `updated_at` wurde als `0` geschrieben — wird jetzt via `std::time()` korrekt gebunden (auch In-Memory-Objekt konsistent)
-- **`isApiKeyValid`**: Fälschlicher `setError()` bei inaktivem Key (Schlüssel existiert, aber `active=0`) — ruft jetzt `clearError()` auf vor `return nullopt`
-- **`evaluateFlag()`**: Floating-Point-Gleichheitsvergleich auf `0.0` entfernt — `referenceHigh_ <= referenceLow_` genügt (verhindert Fehlklassifikation bei Untergrenze 0)
-- **`stringToStatus`/`stringToFlag`/`stringToPriority`**: `throw std::invalid_argument` bei unbekannten DB-Strings durch sichere Fallback-Rückgabewerte ersetzt — verhindert Abbruch bei korrumpierten Zeilen
-- **`CliInterface`**: `canAccessDiagnostics()` und `canAccessSupportData()` als `const` markiert
-- **Audit-Export**: Temporäre Datei wurde bei Fehler nicht gelöscht — `std::remove()` auf allen Fehlerpfaden ergänzt; Dateiname enthält jetzt PID + atomaren Sequenz-Zähler (Kollisionsschutz)
+### Bug fixes (Backend)
+- **`bindAndListen()`**: FD leak on `bind()`/`listen()` error — `serverFd_` is now closed and reset to `-1` on all error paths
+- **`~ApiServer`**: Add missing destructor (RAII cleanup for `serverFd_`); sets `running_ = false` before socket close
+- **`createSample`/`createSamplesBatch`**: `updated_at` was written as `0` — now correctly bound via `std::time()` (in-memory object also kept consistent)
+- **`isApiKeyValid`**: Erroneous `setError()` on inactive key (key exists but `active=0`) — now calls `clearError()` before `return nullopt`
+- **`evaluateFlag()`**: Remove floating-point equality comparison against `0.0` — `referenceHigh_ <= referenceLow_` is sufficient (prevents misclassification at lower bound 0)
+- **`stringToStatus`/`stringToFlag`/`stringToPriority`**: Replace `throw std::invalid_argument` on unknown DB strings with safe fallback return values — prevents crash on corrupted rows
+- **`CliInterface`**: Mark `canAccessDiagnostics()` and `canAccessSupportData()` as `const`
+- **Audit export**: Temporary file was not deleted on error — add `std::remove()` on all error paths; filename now includes PID + atomic sequence counter (collision prevention)
 
-### Fehlerbehebungen (Frontend)
-- **Sidebar**: `logout()` navigiert jetzt zu `/login` — verhindert kurzen Flash geschützter Inhalte nach Logout
-- **AuditLog**: Initialem Fetch-Ergebnis wird in `cancelRef` gespeichert; `handleApplyFilter`/`handleResetFilter` brechen In-Flight-Requests vor neuem Fetch ab (Race-Condition-Prävention)
-- **Dashboard**: Fehler bei `getDashboardStats()` wird jetzt via `console.error` sichtbar statt still verschluckt
-- **Import — CSV**: `csvError`-State ergänzt (`setError` war undefiniert → TypeScript-Compilefehler)
-- **Import — alle Typen**: 5-MB-Dateigrößen-Guard für CSV, HL7 und FHIR ergänzt
-- **Import — alle Typen**: `reader.onerror`-Handler für alle `FileReader`-Instanzen ergänzt; Size-Guard löscht jetzt auch veraltete Dateiname/Content-States
-- **ResultCreateModal**: Auto-berechnetes Flag überschreibt manuelle Auswahl nicht mehr (neuer `flagManuallySet`-State)
+### Bug fixes (Frontend)
+- **Sidebar**: `logout()` now navigates to `/login` — prevents brief flash of protected content after logout
+- **AuditLog**: Initial fetch result stored in `cancelRef`; `handleApplyFilter`/`handleResetFilter` cancel in-flight requests before new fetch (race condition prevention)
+- **Dashboard**: Error from `getDashboardStats()` now surfaced via `console.error` instead of silently swallowed
+- **Import — CSV**: Add `csvError` state (`setError` was undefined → TypeScript compile error)
+- **Import — all types**: Add 5 MB file-size guard for CSV, HL7, and FHIR
+- **Import — all types**: Add `reader.onerror` handler for all `FileReader` instances; size guard now also clears stale filename/content states
+- **ResultCreateModal**: Auto-calculated flag no longer overwrites manual selection (new `flagManuallySet` state)
 
-### Tests & Build-System
-- **`test_runner.cpp`**: Doppelte `ASSERT_*`-Makrodefinitionen entfernt — werden jetzt über `#include "test_macros.h"` bezogen
-- **`test_hl7.cpp` / `test_fhir.cpp`**: Hardcodierte DB-Pfade durch `uniqueDbPath()` mit `high_resolution_clock` + atomarem Zähler ersetzt
-- **`CMakeLists.txt`**: `configure_file` schreibt `version.h` in den Build-Tree (`CMAKE_BINARY_DIR`) statt in den Source-Tree
-- **`test/CMakeLists.txt`**: `CliInterface.cpp` zu Test-Sources ergänzt; `CMAKE_BINARY_DIR/include` als expliziter Include-Pfad eingetragen
-- **`test_and_build.sh`**: Versionsnummer auf v0.8 korrigiert; Binary-Pfad auf `build/bin/opensylab_tests` korrigiert
+### Tests & build system
+- **`test_runner.cpp`**: Remove duplicate `ASSERT_*` macro definitions — now sourced via `#include "test_macros.h"`
+- **`test_hl7.cpp` / `test_fhir.cpp`**: Replace hardcoded DB paths with `uniqueDbPath()` using `high_resolution_clock` + atomic counter
+- **`CMakeLists.txt`**: `configure_file` writes `version.h` into the build tree (`CMAKE_BINARY_DIR`) instead of the source tree
+- **`test/CMakeLists.txt`**: Add `CliInterface.cpp` to test sources; add `CMAKE_BINARY_DIR/include` as explicit include path
+- **`test_and_build.sh`**: Fix version number to v0.8; fix binary path to `build/bin/opensylab_tests`
 
 ## [0.8.0] - 2026-05-12
 
-### Sicherheit (P0)
-- **Rate Limiting** auf `/api/v1/auth/login` (10 Requests / 60 Sekunden pro IP, HTTP 429)
-- **Erzwungener Passwort-Wechsel** bei erstem Login mit Standard-Credentials (`admin/admin`)
-- **CORS dedup**: `OPENSYLAB_CORS_ORIGIN` wird einmalig im Konstruktor gelesen, nicht mehr doppelt pro Request
-- **API-Key-RBAC gehärtet**: Rollenspalte in `api_keys`-Tabelle, Keys erhalten zugewiesene Rolle statt hartcodiertem OPERATOR
-- **TLS-Flags**: `--tls-cert`, `--tls-key` CLI-Flags + `OPENSYLAB_TLS_CERT/KEY` Env-Vars
-- **`--force-https`**: Startabbruch wenn TLS nicht konfiguriert — verhindert versehentlichen HTTP-Betrieb in Prod
+### Security (P0)
+- **Rate limiting** on `/api/v1/auth/login` (10 requests / 60 seconds per IP, HTTP 429)
+- **Forced password change** on first login with default credentials (`admin/admin`)
+- **CORS dedup**: `OPENSYLAB_CORS_ORIGIN` is read once in the constructor, no longer twice per request
+- **API key RBAC hardened**: Role column in `api_keys` table; keys receive an assigned role instead of hardcoded OPERATOR
+- **TLS flags**: `--tls-cert`, `--tls-key` CLI flags + `OPENSYLAB_TLS_CERT/KEY` env vars
+- **`--force-https`**: Abort on startup if TLS is not configured — prevents accidental HTTP operation in production
 
-### Neue Features
-- **`GET /api/v1/health`**: Unauthentifizierter Health-Endpoint mit Version (`{"status":"ok","version":"0.8.0"}`)
-- **HL7 v2.5.1 HTTP-Endpoints**: `POST /api/v1/hl7/import`, `GET /api/v1/hl7/export/{id}` — Hl7Exchange jetzt über HTTP erreichbar
-- **FHIR R4 HTTP-Endpoints**: `POST /api/v1/fhir/import`, `GET /api/v1/fhir/export/{id}` — FhirExchange jetzt über HTTP erreichbar
-- **Audit-Log-Export UI**: Export-Button auf der Audit-Log-Seite (CSV, ADMIN only)
-- **Status-Transition-Validierung im Backend**: Sample PUT und Order PUT lehnen ungültige Statusübergänge mit 422 ab
-- **Import-Seite erweiterert**: Tabs für CSV-Samples / HL7 v2.5.1 / FHIR R4 Import
-- **Dashboard-Statistiken präzise**: Priority-Verteilung und Critical-Count kommen vom Backend (nicht mehr client-seitige Aggregation mit limit:100)
-- **Docker-Healthcheck** aktiviert: Backend-Container nutzt `/api/v1/health`, Frontend wartet auf `service_healthy`
-- **CI/CD Pipeline** (`.github/workflows/ci.yml`): Backend-Build+Tests und Frontend-TypeCheck+Build auf Push/PR
+### New features
+- **`GET /api/v1/health`**: Unauthenticated health endpoint with version (`{"status":"ok","version":"0.8.0"}`)
+- **HL7 v2.5.1 HTTP endpoints**: `POST /api/v1/hl7/import`, `GET /api/v1/hl7/export/{id}` — Hl7Exchange now accessible via HTTP
+- **FHIR R4 HTTP endpoints**: `POST /api/v1/fhir/import`, `GET /api/v1/fhir/export/{id}` — FhirExchange now accessible via HTTP
+- **Audit log export UI**: Export button on the Audit Log page (CSV, ADMIN only)
+- **Status transition validation in backend**: Sample PUT and Order PUT reject invalid status transitions with 422
+- **Import page extended**: Tabs for CSV Samples / HL7 v2.5.1 / FHIR R4 import
+- **Dashboard statistics precise**: Priority distribution and critical count come from the backend (no longer client-side aggregation with limit:100)
+- **Docker healthcheck** enabled: Backend container uses `/api/v1/health`; frontend waits on `service_healthy`
+- **CI/CD pipeline** (`.github/workflows/ci.yml`): Backend build+tests and frontend TypeCheck+build on push/PR
 
-### Fehlerbehebungen
-- Breadcrumb-Bug: `/audit-log` zeigte "Dashboard" → auf "Audit Log" korrigiert
-- Suche: Präfix `O-` statt `O` für Order-Routing (verhindert Fehlrouting bei Wörtern beginnend mit 'O')
-- Create-Button auf Results-Seite nicht mehr sichtbar für VIEWER
-- `order_id` in Ergebnis-Antworten zeigt jetzt String (`O-2024-001`) statt numerischem FK
-- `updated_at` in Sample-Antworten hinzugefügt
-- Sidebar-Badge `'24'` (hardcoded, nie gerendert) entfernt
-- TESTING.md: 62 Tests → 181 Tests korrigiert
+### Bug fixes
+- Breadcrumb bug: `/audit-log` showed "Dashboard" → corrected to "Audit Log"
+- Search: Prefix `O-` instead of `O` for order routing (prevents misrouting on words starting with 'O')
+- Create button on Results page no longer visible to VIEWER
+- `order_id` in result responses now shows string (`O-2024-001`) instead of numeric FK
+- Add `updated_at` to Sample responses
+- Remove sidebar badge `'24'` (hardcoded, never rendered)
+- TESTING.md: correct 62 tests → 181 tests
 
-### Qualität
-- TypeScript Strict: 0 Fehler nach allen Änderungen
-- 181 Unit-Tests bleiben grün
-- Frontend-Build: 0 Errors, clean
+### Quality
+- TypeScript strict: 0 errors after all changes
+- 181 unit tests remain green
+- Frontend build: 0 errors, clean
 
 ## [0.7.0] - 2026-05-11
 
-### Sicherheit
-- **JWT-Authentifizierung** vollständig implementiert (ersetzt API-Key-Only-Modus)
-- **PBKDF2-HMAC-SHA256** Passwort-Hashing (210.000 Iterationen, OWASP 2023)
-- **RBAC** (Role-Based Access Control): ADMIN / OPERATOR / VIEWER / CUSTOM — auf allen Schreib-Endpoints durchgesetzt
-- **Last-Admin-Schutz**: updateUser, deleteUser, assignUserRole blockieren Demotierung/Deaktivierung des letzten aktiven Admins innerhalb einer Transaktion (kein TOCTOU-Fenster)
-- **MFA (TOTP RFC 6238)**: Zwei-Schritt-Login-Flow, ±1 Zeitfenster-Toleranz
-- **LDAP-Authentifizierung** mit lokaler Shadow-Account-Verwaltung
-- **Self-Delete-Guard**: Admin kann sich nicht selbst deaktivieren
+### Security
+- **JWT authentication** fully implemented (replaces API-key-only mode)
+- **PBKDF2-HMAC-SHA256** password hashing (210,000 iterations, OWASP 2023)
+- **RBAC** (Role-Based Access Control): ADMIN / OPERATOR / VIEWER / CUSTOM — enforced on all write endpoints
+- **Last-admin protection**: updateUser, deleteUser, assignUserRole block demotion/deactivation of the last active admin within a transaction (no TOCTOU window)
+- **MFA (TOTP RFC 6238)**: Two-step login flow, ±1 time-window tolerance
+- **LDAP authentication** with local shadow account management
+- **Self-delete guard**: Admin cannot deactivate their own account
 
-### Neue Features
-- **Soft-Delete** für Proben (ARCHIVED), Aufträge (CANCELLED), Ergebnisse (REJECTED) — physische Zeilen bleiben für Audit-Trail erhalten
-- **Auto-Flag-Berechnung** bei Ergebnissen: NORMAL / LOW / HIGH / CRITICAL (margins-basiert: 50 % des Referenzintervalls)
-- **Batch-CSV-Import** für Proben und Ergebnisse mit Fehler-Tracking pro Zeile
-- **HL7 v2.5.1 Import/Export** (ORU^R01) mit korrektem Feld-Escaping (`\F\`, `\S\`, …)
-- **FHIR R4 Bundle** Import/Export
-- **Audit-Log-Export** als CSV mit Retention-Policy
-- **Dashboard-Statistiken** mit Status-Breakdown (Echtzeitdaten)
-- **Single Source of Truth** für Versionsnummer: `CMakeLists.txt` → `include/version.h` (C++); `package.json` → `import.meta.env.VITE_APP_VERSION` (Frontend)
+### New features
+- **Soft delete** for samples (ARCHIVED), orders (CANCELLED), results (REJECTED) — physical rows kept for audit trail
+- **Auto-flag calculation** on results: NORMAL / LOW / HIGH / CRITICAL (margin-based: 50% of reference interval)
+- **Batch CSV import** for samples and results with per-row error tracking
+- **HL7 v2.5.1 import/export** (ORU^R01) with correct field escaping (`\F\`, `\S\`, …)
+- **FHIR R4 Bundle** import/export
+- **Audit log export** as CSV with retention policy
+- **Dashboard statistics** with status breakdown (real-time data)
+- **Single Source of Truth** for version number: `CMakeLists.txt` → `include/version.h` (C++); `package.json` → `import.meta.env.VITE_APP_VERSION` (Frontend)
 
-### Fehlerbehebungen (Bughunt-Iterationen 25–56)
-- 60+ Bugs behoben, darunter:
-  - TOCTOU-Race in updateUser/deleteUser/assignUserRole → Transaktion öffnet vor dem Lesen
-  - `sqlite3_errmsg()` nach `ROLLBACK` → Fehlermeldung jetzt vor dem Rollback gesichert (43 Stellen)
-  - DELETE `/api/v1/users/:id` war durch Routing-Block unerreichbar
-  - `exportValidatedResultsToCsv` TOCTOU: Datei und Audit-Log jetzt atomar
-  - Alle Export-Funktionen entfernen Teildateien auf jedem Fehlerpfad
-  - `makeDbErrorResponse` sanitisiert SQLite-Internals aus HTTP-Antworten
-  - MFA-403-Interceptor blockierte Login-Flow im Frontend
-  - `ResultEditModal` nutzte numerische PK statt `result_id` für PUT-Requests
-  - `updateResult` sendete falsche Feldnamen (`reviewed_by`/`notes` statt `measured_by`/`comment`)
+### Bug fixes (bughunt iterations 25–56)
+- 60+ bugs fixed, including:
+  - TOCTOU race in updateUser/deleteUser/assignUserRole → transaction opens before read
+  - `sqlite3_errmsg()` after `ROLLBACK` → error message now saved before rollback (43 locations)
+  - DELETE `/api/v1/users/:id` was unreachable due to routing block
+  - `exportValidatedResultsToCsv` TOCTOU: file and audit log now atomic
+  - All export functions remove partial files on every error path
+  - `makeDbErrorResponse` sanitizes SQLite internals from HTTP responses
+  - MFA 403 interceptor was blocking login flow in frontend
+  - `ResultEditModal` used numeric PK instead of `result_id` for PUT requests
+  - `updateResult` sent wrong field names (`reviewed_by`/`notes` instead of `measured_by`/`comment`)
 
-### Qualität
-- **181 Unit-Tests** (von 62 auf 181 ausgebaut)
-- TypeScript Strict-Mode — keine `any`-Typen im Produktionscode
-- Vollständige RBAC-Durchsetzung im Frontend (canWrite-Guards, Sidebar-Links)
-- `useEntityList`-Hook mit korrekter Abbruch-Mechanik (kein State-Update nach Unmount)
+### Quality
+- **181 unit tests** (expanded from 62 to 181)
+- TypeScript strict mode — no `any` types in production code
+- Full RBAC enforcement in frontend (canWrite guards, sidebar links)
+- `useEntityList` hook with correct abort mechanics (no state update after unmount)
 
 ## [0.6.0-polish] - 2026-02-11
 
-### Neue Features
+### New features
 
 #### 🎨 God Mode Dark Theme (Terminal Industrial)
 - **Complete Dark Mode Implementation**:
   - Terminal Industrial Aesthetic: 90% "The Abyss" (Deep Navy/Black) + 10% "The Raver" (Neon Accents)
   - Color Palette: Acid Green (#CCFF00), Cyan (#00F0FF), Magenta (#FF0055)
-  - Brutalist Tables mit eckigen Designs (0px border-radius)
-  - Hollow HUD-Style Badges mit transparenten Hintergründen
-  - Primary Buttons in Biohazard Neon Green mit schwarzem Text
-  - Input Fields mit Cyan-Text und Neon Focus Glow
+  - Brutalist Tables with square designs (0px border-radius)
+  - Hollow HUD-Style Badges with transparent backgrounds
+  - Primary Buttons in Biohazard Neon Green with black text
+  - Input Fields with Cyan text and Neon Focus Glow
   - Professional Dark Mode Toggle in Profile Page
   - Persistent via localStorage
 
 #### 🎮 Easter Egg: "Ghost in the Machine"
 - **Key Sequence Activation**:
-  - Secret Code: `s-u-d-o` (außerhalb von Input-Feldern)
-  - Toggles Dark Mode mit CRT-Glitch-Effekt (300ms)
-  - Console Messages mit Neon-Bannern ("SYSTEM OVERRIDE: GOD MODE ENGAGED")
-  - Vollständig unsichtbar in Code-Reviews (getarnt als "Keyboard Event Listener")
-  - Sync mit localStorage für Theme-Persistenz
+  - Secret Code: `s-u-d-o` (outside of input fields)
+  - Toggles Dark Mode with CRT glitch effect (300ms)
+  - Console messages with neon banners ("SYSTEM OVERRIDE: GOD MODE ENGAGED")
+  - Fully invisible in code reviews (disguised as "Keyboard Event Listener")
+  - Sync with localStorage for theme persistence
 
 #### ✨ High-Fidelity UI Details
-- **Toxische Textauswahl**: Neon-Grün (#CCFF00) Highlighting bei Text-Selektion
-- **Industrial Scrollbars**: Eckige Präzisionsinstrumente mit Cyan Hover-State
-- **Neon Focus Glow**: CRT-Monitor-ähnlicher Glow-Effekt auf fokussierten Inputs
-- **Scanner Line**: Table Rows mit Acid-Green Border (2px links) beim Hover
-- **Instant Reactions**: 0s Transition für brutales, mechanisches Feedback
+- **Toxic text selection**: Neon green (#CCFF00) highlighting on text selection
+- **Industrial scrollbars**: Square precision instruments with Cyan hover state
+- **Neon focus glow**: CRT-monitor-like glow effect on focused inputs
+- **Scanner line**: Table rows with Acid-Green border (2px left) on hover
+- **Instant reactions**: 0s transition for brutal, mechanical feedback
 
 #### ⚛️ Helix Engine Emblem & Reactor Ping
 - **Brand Logo Integration**:
-  - Helix Engine Emblem in Sidebar Header platziert
-  - Reactor Ping Animation: 10s Heartbeat Cycle
-  - Asymmetrisches Timing: 10% aktiv (1s Flash), 90% Stille (9s Sleep)
-  - Subtle Blue Glow alle 10 Sekunden (0-5% Peak, 5-10% Return, 10-100% Sleep)
-  - "Dangerous Competence" Präsenz-Signal
+  - Helix Engine Emblem placed in Sidebar Header
+  - Reactor Ping Animation: 10s heartbeat cycle
+  - Asymmetric timing: 10% active (1s flash), 90% silence (9s sleep)
+  - Subtle blue glow every 10 seconds (0–5% peak, 5–10% return, 10–100% sleep)
+  - "Dangerous Competence" presence signal
 
 #### 📑 Dynamic Document Title Architecture
 - **Browser Tab Title Management**:
   - Formula: `[Context] | [Module] | OpenSylab`
   - Examples: `Dashboard | OpenSylab`, `S045 - Edit Sample | OpenSylab`
-  - Dirty State Support mit `*` Prefix für ungespeicherte Änderungen
-  - useDocumentTitle Hook für alle Pages implementiert
-  - Automatic Cleanup beim Unmount
+  - Dirty state support with `*` prefix for unsaved changes
+  - useDocumentTitle hook implemented for all pages
+  - Automatic cleanup on unmount
 
 #### 🎬 Clinical Transitions (Medical-Grade UI Responsiveness)
 - **Modal Animations**:
   - **HUD Snap-In** (Create Forms): 150ms scale(0.97→1) + translateY(10px→0)
-  - **Slide from Top** (Edit Forms): 220ms translateY(-30px→0) mit Bounce-Easing
-  - **Backdrop Fade**: 200ms opacity fade für Modal-Hintergrund
+  - **Slide from Top** (Edit Forms): 220ms translateY(-30px→0) with bounce easing
+  - **Backdrop Fade**: 200ms opacity fade for modal background
 - **Page Transitions**:
   - **Data Reveal**: 250ms translateY(4px→0) + opacity fade
-  - Content baut sich klinisch von unten nach oben auf
+  - Content builds up clinically from bottom to top
 - **Micro-Interactions**:
-  - **Buttons**: 150ms `ease-out` für maximale Reaktionsgeschwindigkeit
-  - **Table Rows**: 75ms `ease-out` - Hover klebt am Cursor
+  - **Buttons**: 150ms `ease-out` for maximum responsiveness
+  - **Table Rows**: 75ms `ease-out` — hover sticks to cursor
 
 #### 🔘 Ghost Button Variant ("Wall of Blood" Fix)
 - **New Button Variant**: `ghost`
-  - Transparent Background mit Gray Text
-  - Nur Red bei Hover (nicht permanent solid red)
-  - Angewendet auf alle Table Delete-Buttons (Samples, Orders, Results)
-  - Fix für visuelles Rauschen durch 20+ rote Buttons pro Seite
+  - Transparent background with gray text
+  - Red only on hover (not permanently solid red)
+  - Applied to all table delete buttons (Samples, Orders, Results)
+  - Fix for visual noise caused by 20+ red buttons per page
 
-### Verbesserungen
+### Improvements
 
 #### 🌐 Frontend UI/UX Polish
 - **Professional Dark Mode Toggle**:
-  - Removed "God Mode" Branding für Medical Context
-  - Clinical Description: "Switch to dark theme for reduced eye strain"
-  - Standard Blue Color Scheme statt Neon Green
-  - Keine Status Messages oder Confirmation Banners
+  - Removed "God Mode" branding for medical context
+  - Clinical description: "Switch to dark theme for reduced eye strain"
+  - Standard blue color scheme instead of neon green
+  - No status messages or confirmation banners
 - **Button Component Optimization**:
-  - 150ms ease-out transitions (war 200ms)
-  - Instant response feeling für ärztliche Workflows
+  - 150ms ease-out transitions (was 200ms)
+  - Instant response feeling for clinical workflows
 
 #### 🔧 Backend Quality Improvements
 - **Audit Log API Fixes**:
-  - Backend returns English enum values (war German)
-  - `actionToString()` und `entityToString()` standardisiert
-  - Alle Entity Types (AuditEntry, Order, Sample, TestResult) aktualisiert
-  - Frontend TypeScript Enums matchen jetzt perfekt
+  - Backend returns English enum values (was German)
+  - `actionToString()` and `entityToString()` standardized
+  - All entity types (AuditEntry, Order, Sample, TestResult) updated
+  - Frontend TypeScript enums now match perfectly
 
-### Technische Details
+### Technical details
 
-#### Neue Dateien
-- **`frontend/src/context/ThemeContext.tsx`** - Global Dark Mode State Management mit localStorage
-- **`frontend/src/hooks/useDocumentTitle.ts`** - Dynamic Browser Title Hook
-- **`frontend/public/assets/brand-helix-core.svg`** - Helix Engine Logo (SVG)
-- **`frontend/public/assets/brand-helix-core.png`** - Helix Engine Logo (PNG, user-provided)
+#### New files
+- **`frontend/src/context/ThemeContext.tsx`** - Global Dark Mode state management with localStorage
+- **`frontend/src/hooks/useDocumentTitle.ts`** - Dynamic browser title hook
+- **`frontend/public/assets/brand-helix-core.svg`** - Helix Engine logo (SVG)
+- **`frontend/public/assets/brand-helix-core.png`** - Helix Engine logo (PNG, user-provided)
 
-#### Geänderte Dateien (31 files changed)
+#### Changed files (31 files changed)
 - **Backend**: `src/core/AuditEntry.cpp`, `src/core/Order.cpp`, `src/core/Sample.cpp`, `src/core/TestResult.cpp`
 - **Frontend Core**: `frontend/index.html` (Easter Egg Script), `frontend/src/index.css` (Dark Mode + Animations)
 - **Frontend Components**: All Modals (6), Layout, Sidebar, Button
-- **Frontend Pages**: All Pages (8) mit Document Title Integration
+- **Frontend Pages**: All Pages (8) with Document Title integration
 
-#### CSS Animations Implementiert
-- `@keyframes reactor-ping` - Helix Logo Heartbeat (10s cycle)
-- `@keyframes hud-snap` - Modal Create Forms (150ms)
-- `@keyframes slide-from-top` - Modal Edit Forms (220ms)
-- `@keyframes backdrop-fade` - Modal Background (200ms)
-- `@keyframes data-reveal` - Page Content (250ms)
-- `@keyframes glitch` - CRT Screen Glitch (300ms)
+#### CSS animations implemented
+- `@keyframes reactor-ping` - Helix Logo heartbeat (10s cycle)
+- `@keyframes hud-snap` - Modal create forms (150ms)
+- `@keyframes slide-from-top` - Modal edit forms (220ms)
+- `@keyframes backdrop-fade` - Modal background (200ms)
+- `@keyframes data-reveal` - Page content (250ms)
+- `@keyframes glitch` - CRT screen glitch (300ms)
 
-### Statistiken
+### Statistics
 - **31 files changed**
 - **1,037 insertions (+)**
 - **198 deletions (-)**
-- **4 neue Dateien** (ThemeContext, useDocumentTitle, 2x Logo Assets)
+- **4 new files** (ThemeContext, useDocumentTitle, 2x logo assets)
 
 ### Commit
 - **Hash**: `b6a731c`
@@ -241,126 +241,126 @@ Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert
 
 ## [0.6.0] - 2026-02-02
 
-### Neue Features
+### New features
 
 #### 🆕 User Management (Admin Interface)
-- **User Management Page** für Administratoren:
-  - Liste aller Systembenutzer mit Details (Username, Role, Email, Status, Last Login)
-  - Create User Modal mit Formularvalidierung
-  - Edit User Modal (Username immutable, optionales Passwort-Update)
-  - Delete User mit Bestätigungsdialog
-  - Role Assignment: ADMIN, OPERATOR, VIEWER, CUSTOM
-  - Active/Inactive Toggle für Benutzerkonten
-  - Color-coded Role Badges für visuelle Klarheit
-- **Backend API Endpoints**:
+- **User Management Page** for administrators:
+  - List of all system users with details (Username, Role, Email, Status, Last Login)
+  - Create User Modal with form validation
+  - Edit User Modal (Username immutable, optional password update)
+  - Delete User with confirmation dialog
+  - Role assignment: ADMIN, OPERATOR, VIEWER, CUSTOM
+  - Active/Inactive toggle for user accounts
+  - Color-coded role badges for visual clarity
+- **Backend API endpoints**:
   - GET `/api/v1/users` - List all users (admin only)
   - POST `/api/v1/users` - Create user (admin only)
   - PUT `/api/v1/users/:id` - Update user (admin only)
   - DELETE `/api/v1/users/:id` - Delete user (admin only)
   - GET `/api/v1/users/me` - Get current user profile
   - PUT `/api/v1/users/me/password` - Change password
-- **Dateien**:
+- **Files**:
   - `frontend/src/pages/Users.tsx` - User Management Page
-  - `frontend/src/services/users.ts` - User API Service
-  - `frontend/src/types/user.ts` - Enhanced User Types
+  - `frontend/src/services/users.ts` - User API service
+  - `frontend/src/types/user.ts` - Enhanced user types
 
 #### 🆕 Audit Log Viewer (Compliance & Monitoring)
-- **Audit Log Page** für Administratoren:
-  - Vollständiger Audit Trail aller Systemaktionen
-  - Multi-Criteria Filtering (User, Action, Entity, Limit)
-  - Adjustable Result Limit (25, 50, 100, 250 entries)
-  - Color-coded Action Badges (CREATE, UPDATE, DELETE, etc.)
-  - Comprehensive Table Display (Timestamp, User, Action, Entity, Details)
-- **Backend API Endpoint**:
+- **Audit Log Page** for administrators:
+  - Complete audit trail of all system actions
+  - Multi-criteria filtering (User, Action, Entity, Limit)
+  - Adjustable result limit (25, 50, 100, 250 entries)
+  - Color-coded action badges (CREATE, UPDATE, DELETE, etc.)
+  - Comprehensive table display (Timestamp, User, Action, Entity, Details)
+- **Backend API endpoint**:
   - GET `/api/v1/audit` - Get audit log with filters (admin only)
-- **Dateien**:
+- **Files**:
   - `frontend/src/pages/AuditLog.tsx` - Audit Log Viewer
-  - `frontend/src/services/audit.ts` - Audit Log Service
-  - `frontend/src/types/audit.ts` - Audit Entry Types
+  - `frontend/src/services/audit.ts` - Audit Log service
+  - `frontend/src/types/audit.ts` - Audit entry types
 
 #### 🆕 User Profile & Password Management
-- **Profile Page** für alle Benutzer:
-  - Read-only Account Information Display
+- **Profile Page** for all users:
+  - Read-only account information display
   - Show Username, Role, Full Name, Email, Account Status
-  - Last Login und Account Creation Date
-  - User ID Display
+  - Last Login and Account Creation Date
+  - User ID display
 - **Password Change Functionality**:
-  - Secure Password Change Form
-  - Current Password Verification Required
-  - Password Confirmation Matching
-  - Minimum 8 Character Requirement
-  - Success/Error Feedback
-- **Dateien**:
+  - Secure password change form
+  - Current password verification required
+  - Password confirmation matching
+  - Minimum 8 character requirement
+  - Success/error feedback
+- **Files**:
   - `frontend/src/pages/Profile.tsx` - User Profile Page
 
 #### 🆕 Enhanced Dashboard Statistics
 - **Multi-Entity Statistics Display**:
-  - Comprehensive Stats für Samples, Orders, Results
-  - Status Breakdown by Entity Type
-  - Server-side Statistics Aggregation
-  - Real-time Data from Stats API
-- **Backend API Endpoint**:
+  - Comprehensive stats for Samples, Orders, Results
+  - Status breakdown by entity type
+  - Server-side statistics aggregation
+  - Real-time data from Stats API
+- **Backend API endpoint**:
   - GET `/api/v1/stats` - Get dashboard statistics
-- **Dateien**:
+- **Files**:
   - `frontend/src/pages/Dashboard.tsx` - Enhanced Dashboard
-  - `frontend/src/services/stats.ts` - Statistics Service
-  - `frontend/src/types/stats.ts` - Statistics Types
+  - `frontend/src/services/stats.ts` - Statistics service
+  - `frontend/src/types/stats.ts` - Statistics types
 
-### Verbesserungen
+### Improvements
 
 #### 🔒 Role-Based Access Control (RBAC)
-- **Frontend Route Protection**:
-  - Enhanced ProtectedRoute Component mit `requiredRole` Prop
-  - Access Denied Message für unauthorized Access
-  - Automatic Redirect zu Dashboard bei fehlenden Berechtigungen
-- **Backend API Protection**:
-  - JWT Payload Role Verification
-  - Admin-only Endpoints enforcement
-  - Consistent 403 Forbidden Responses
+- **Frontend route protection**:
+  - Enhanced ProtectedRoute component with `requiredRole` prop
+  - Access Denied message for unauthorized access
+  - Automatic redirect to Dashboard on missing permissions
+- **Backend API protection**:
+  - JWT payload role verification
+  - Admin-only endpoint enforcement
+  - Consistent 403 Forbidden responses
 - **Navigation**:
-  - Role-based Menu Filtering in Sidebar
-  - Admin-only Items hidden für Non-Admin Users
-  - New Menu Items: 👥 Users, 📜 Audit Log, 👤 Profile
+  - Role-based menu filtering in Sidebar
+  - Admin-only items hidden for non-admin users
+  - New menu items: 👥 Users, 📜 Audit Log, 👤 Profile
 
 #### 📱 UI/UX Improvements
-- **Consistent Design Patterns**:
-  - Modal-based Forms für Create/Edit Operations
-  - Confirmation Dialogs für Destructive Actions
-  - Color-coded Badges für Status/Roles
-  - Responsive Table Layouts
-  - Loading States während Async Operations
-- **Error Handling**:
-  - Graceful Error Display
-  - API Error Messages surfaced to UI
-  - Form Validation Feedback
-  - Clear User Communication
+- **Consistent design patterns**:
+  - Modal-based forms for Create/Edit operations
+  - Confirmation dialogs for destructive actions
+  - Color-coded badges for status/roles
+  - Responsive table layouts
+  - Loading states during async operations
+- **Error handling**:
+  - Graceful error display
+  - API error messages surfaced to UI
+  - Form validation feedback
+  - Clear user communication
 
 #### 📚 Documentation
-- **New Documentation Files**:
-  - `frontend/UI_EXTENSIONS_V06.md` - Comprehensive v0.6 Feature Guide
-  - Default Credentials Documented (admin/admin)
-  - Usage Guide für Admin und Regular Users
-  - Technical Details und File Structure
+- **New documentation files**:
+  - `frontend/UI_EXTENSIONS_V06.md` - Comprehensive v0.6 feature guide
+  - Default credentials documented (admin/admin)
+  - Usage guide for admin and regular users
+  - Technical details and file structure
 
-### Sicherheit
+### Security
 
-- **Password Security**: Current Password Verification für Changes
-- **Audit Logging**: All User Actions Tracked
-- **Role-Based Access**: Frontend und Backend Enforcement
-- **Session Management**: JWT Token with Expiration
+- **Password security**: Current password verification required for changes
+- **Audit logging**: All user actions tracked
+- **Role-based access**: Frontend and backend enforcement
+- **Session management**: JWT token with expiration
 
-### Technische Details
+### Technical details
 
-- **Backend**: 8 neue API Endpoints für User Management, Audit, Stats
-- **Frontend**: 3 neue Pages (Users, AuditLog, Profile)
-- **Type Safety**: Comprehensive TypeScript Types für alle Entities
-- **API Integration**: Axios-based Services mit JWT Authentication
+- **Backend**: 8 new API endpoints for User Management, Audit, Stats
+- **Frontend**: 3 new pages (Users, AuditLog, Profile)
+- **Type safety**: Comprehensive TypeScript types for all entities
+- **API integration**: Axios-based services with JWT authentication
 
-### Breaking Changes
+### Breaking changes
 
-Keine - alle Änderungen sind additiv und rückwärtskompatibel.
+None — all changes are additive and backward-compatible.
 
-### Default Credentials
+### Default credentials
 
 ⚠️ **IMPORTANT**: Change immediately after first login!
 
@@ -369,293 +369,293 @@ Keine - alle Änderungen sind additiv und rückwärtskompatibel.
 
 ## [0.5.0] - 2026-02-01
 
-### Neue Features
+### New features
 
-#### 🆕 JWT-basierte Authentifizierung
-- **JWT Token Authentication** als Ersatz für API-Key-Authentifizierung:
-  - HS256-Algorithmus mit konfigurierbarem Secret
-  - 60-Minuten Token-Gültigkeit
-  - Token-Generierung mit User-Claims (userId, username, role)
-  - Token-Validierung mit Signatur- und Ablaufprüfung
-  - Rückwärtskompatibilität: JWT-first mit API-Key-Fallback
-- **Login-Endpoint**: POST `/api/v1/auth/login`
-  - Username/Password-Authentifizierung
-  - JWT-Token-Rückgabe mit User-Info
-  - Detaillierte Fehlerbehandlung (401, 400, 500)
-- **Bibliothek**: jwt-cpp v0.7.0 via CMake FetchContent
-- **Dateien**:
-  - `include/auth/JwtAuth.h` - JWT-Authentifizierung Header
-  - `src/auth/JwtAuth.cpp` - JWT-Implementierung
-  - `src/api/ApiServer.cpp` - Login-Handler und Token-Validierung
+#### 🆕 JWT-based authentication
+- **JWT Token Authentication** as replacement for API-key authentication:
+  - HS256 algorithm with configurable secret
+  - 60-minute token validity
+  - Token generation with user claims (userId, username, role)
+  - Token validation with signature and expiry check
+  - Backward compatibility: JWT-first with API-key fallback
+- **Login endpoint**: POST `/api/v1/auth/login`
+  - Username/password authentication
+  - JWT token response with user info
+  - Detailed error handling (401, 400, 500)
+- **Library**: jwt-cpp v0.7.0 via CMake FetchContent
+- **Files**:
+  - `include/auth/JwtAuth.h` - JWT authentication header
+  - `src/auth/JwtAuth.cpp` - JWT implementation
+  - `src/api/ApiServer.cpp` - Login handler and token validation
 
 #### 🆕 React Frontend (MVP)
-- **Single Page Application** mit React 18 + TypeScript:
-  - Vite Build-System mit Hot Module Replacement
-  - TailwindCSS für responsive UI
-  - React Router für Client-Side-Routing
-- **Authentifizierung**:
-  - Login-Seite mit Username/Password-Formular
-  - JWT-Token-Management (localStorage mit Ablaufprüfung)
-  - Automatische Token-Validierung bei App-Start
-  - Protected Routes mit Redirect zu Login
-  - Logout-Funktion mit Token-Bereinigung
-- **Dashboard**: Übersichtsseite mit Willkommensnachricht
-- **Probenverwaltung** (Samples):
-  - Samples-Liste mit Filtering nach Status
-  - Pagination (20 Items pro Seite)
-  - Sample Create Modal mit Formularvalidierung
-  - Sample Edit Modal mit Datenvorausfüllung
-  - Status-Dropdown mit allen SAMPLE_STATUSES
-  - Real-time Formularvalidierung
-- **Auftragsverwaltung** (Orders):
-  - Orders-Liste mit Dual-Filtering (Status + Priority)
-  - Order Create Modal mit vollständigem Formular
-  - Order Edit Modal mit Datenvorladung
-  - Status- und Priority-Badges mit Farbcodierung
-  - Pagination und Responsive Table
-- **Ergebnisverwaltung** (Results):
-  - Results-Liste mit Dual-Filtering (Status + Flag)
-  - Anzeige von Parameter, Value, Unit, Reference Range
-  - Flag-Badges (NORMAL, LOW, HIGH, CRITICAL)
-  - Status-Badges (PENDING, REVIEWED, VALIDATED, etc.)
-  - Pagination für große Datenmengen
-- **UI-Komponenten**:
-  - Layout mit Header und Navigation (Sidebar mit 4 Menüpunkten)
-  - Card, Button, Input Komponenten
-  - Loading States und Error Handling
-  - Responsive Design
-  - Modal-basierte CRUD-Workflows
-- **API-Integration**:
-  - Axios-basierte API-Client
-  - JWT Bearer Token Interceptor
-  - CORS-Unterstützung
-  - Fehlerbehandlung mit Backend-Message-Extraktion
-- **Dateien**:
-  - `frontend/` - Komplettes React-Frontend-Projekt
-  - `frontend/src/services/` - API Services (auth, samples, orders, results)
-  - `frontend/src/context/AuthContext.tsx` - Auth-State-Management
-  - `frontend/src/pages/` - Seiten (Login, Dashboard, Samples, Orders, Results)
-  - `frontend/src/components/` - UI-Komponenten (Modals, Common, Layout)
+- **Single Page Application** with React 18 + TypeScript:
+  - Vite build system with Hot Module Replacement
+  - TailwindCSS for responsive UI
+  - React Router for client-side routing
+- **Authentication**:
+  - Login page with username/password form
+  - JWT token management (localStorage with expiry check)
+  - Automatic token validation on app start
+  - Protected routes with redirect to login
+  - Logout with token cleanup
+- **Dashboard**: Overview page with welcome message
+- **Sample management** (Samples):
+  - Samples list with filtering by status
+  - Pagination (20 items per page)
+  - Sample Create Modal with form validation
+  - Sample Edit Modal with data pre-fill
+  - Status dropdown with all SAMPLE_STATUSES
+  - Real-time form validation
+- **Order management** (Orders):
+  - Orders list with dual filtering (Status + Priority)
+  - Order Create Modal with full form
+  - Order Edit Modal with data preload
+  - Status and priority badges with color coding
+  - Pagination and responsive table
+- **Result management** (Results):
+  - Results list with dual filtering (Status + Flag)
+  - Display of parameter, value, unit, reference range
+  - Flag badges (NORMAL, LOW, HIGH, CRITICAL)
+  - Status badges (PENDING, REVIEWED, VALIDATED, etc.)
+  - Pagination for large datasets
+- **UI components**:
+  - Layout with header and navigation (Sidebar with 4 menu items)
+  - Card, Button, Input components
+  - Loading states and error handling
+  - Responsive design
+  - Modal-based CRUD workflows
+- **API integration**:
+  - Axios-based API client
+  - JWT Bearer Token interceptor
+  - CORS support
+  - Error handling with backend message extraction
+- **Files**:
+  - `frontend/` - Complete React frontend project
+  - `frontend/src/services/` - API services (auth, samples, orders, results)
+  - `frontend/src/context/AuthContext.tsx` - Auth state management
+  - `frontend/src/pages/` - Pages (Login, Dashboard, Samples, Orders, Results)
+  - `frontend/src/components/` - UI components (Modals, Common, Layout)
 
-#### 🆕 TLS/HTTPS-Unterstützung
-- **OpenSSL-Integration** für verschlüsselte Verbindungen:
-  - TLS 1.2+ mit modernen Cipher Suites
-  - Zertifikat- und Private-Key-Loading
-  - SSL-Handshake mit Client-Verbindungen
-  - Optionaler TLS-Modus (aktivierbar/deaktivierbar)
-- **TlsContext-Klasse** für SSL-Management:
-  - OpenSSL-Initialisierung
-  - SSL-Kontext-Konfiguration
-  - Fehlerbehandlung mit detaillierten Messages
-- **Dual-Mode-Server**: HTTP oder HTTPS je nach Konfiguration
-- **Dateien**:
-  - `include/api/TlsContext.h` - TLS-Kontext Header
-  - `src/api/TlsContext.cpp` - TLS-Implementierung
-  - `src/api/ApiServer.cpp` - TLS-Integration in handleClientTls()
+#### 🆕 TLS/HTTPS support
+- **OpenSSL integration** for encrypted connections:
+  - TLS 1.2+ with modern cipher suites
+  - Certificate and private key loading
+  - SSL handshake with client connections
+  - Optional TLS mode (enable/disable)
+- **TlsContext class** for SSL management:
+  - OpenSSL initialization
+  - SSL context configuration
+  - Error handling with detailed messages
+- **Dual-mode server**: HTTP or HTTPS depending on configuration
+- **Files**:
+  - `include/api/TlsContext.h` - TLS context header
+  - `src/api/TlsContext.cpp` - TLS implementation
+  - `src/api/ApiServer.cpp` - TLS integration in handleClientTls()
 
-#### 🆕 REST API Erweiterungen
-- **DELETE-Endpoints** für vollständige CRUD-Operationen:
-  - DELETE `/api/v1/samples/:sample_id` - Probe löschen
-  - DELETE `/api/v1/orders/:order_id` - Auftrag löschen
-  - DELETE `/api/v1/results/:result_id` - Ergebnis löschen
-  - Ressourcen-Existenzprüfung vor Löschung (404 bei nicht gefunden)
-  - 204 No Content bei erfolgreicher Löschung
-  - Audit-Logging mit Actor-Tracking
-- **CORS-Support** für Frontend-Integration:
+#### 🆕 REST API extensions
+- **DELETE endpoints** for complete CRUD operations:
+  - DELETE `/api/v1/samples/:sample_id` - Delete sample
+  - DELETE `/api/v1/orders/:order_id` - Delete order
+  - DELETE `/api/v1/results/:result_id` - Delete result
+  - Resource existence check before deletion (404 if not found)
+  - 204 No Content on successful deletion
+  - Audit logging with actor tracking
+- **CORS support** for frontend integration:
   - Access-Control-Allow-Origin: http://localhost:5173
   - Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
   - Access-Control-Allow-Headers: Content-Type, X-API-Key, Authorization
-  - OPTIONS Preflight-Handling
-- **Verbesserte Fehlerbehandlung**:
-  - Konsistente JSON-Fehlerantworten
-  - HTTP-Statuscodes nach REST-Konventionen
-  - Backend-Error-Message-Extraktion im Frontend
+  - OPTIONS preflight handling
+- **Improved error handling**:
+  - Consistent JSON error responses
+  - HTTP status codes following REST conventions
+  - Backend error message extraction in frontend
 
-### Verbesserungen
+### Improvements
 
-- **Build-System**: CMake-Integration für jwt-cpp und OpenSSL
-- **Dokumentation**:
-  - HTTPS_QUICK_START.md - TLS-Setup-Anleitung
-  - frontend/README.md - Frontend-Dokumentation
-  - frontend/DEVELOPMENT.md - Entwickler-Guide
-  - frontend/QUICK_START.md - Frontend-Schnellstart
-- **Code-Qualität**:
-  - TypeScript für Type-Safety im Frontend
-  - ESLint-Konfiguration
-  - Konsistente Error-Handling-Patterns
-- **Sicherheit**:
-  - JWT-Token-basierte Authentifizierung
-  - TLS/HTTPS-Verschlüsselung
-  - Passwort-Hashing (DJB2 mit Salt)
-  - Input-Validierung in API und Frontend
+- **Build system**: CMake integration for jwt-cpp and OpenSSL
+- **Documentation**:
+  - HTTPS_QUICK_START.md - TLS setup guide
+  - frontend/README.md - Frontend documentation
+  - frontend/DEVELOPMENT.md - Developer guide
+  - frontend/QUICK_START.md - Frontend quick start
+- **Code quality**:
+  - TypeScript for type safety in frontend
+  - ESLint configuration
+  - Consistent error-handling patterns
+- **Security**:
+  - JWT token-based authentication
+  - TLS/HTTPS encryption
+  - Password hashing (DJB2 with salt)
+  - Input validation in API and frontend
 
-### Breaking Changes
+### Breaking changes
 
-- **Authentifizierung**: API-Key wird durch JWT-Tokens ersetzt (mit Rückwärtskompatibilität)
-- **Frontend**: Neue React-basierte UI anstelle CLI-only
+- **Authentication**: API key replaced by JWT tokens (with backward compatibility)
+- **Frontend**: New React-based UI instead of CLI-only
 
-### Technische Details
+### Technical details
 
-- **Frontend-Stack**: React 18, TypeScript, Vite, TailwindCSS, React Router, Axios
-- **Backend-Dependencies**: jwt-cpp v0.7.0, OpenSSL 3.x
-- **API-Version**: v1 (keine Breaking Changes in bestehenden Endpoints)
-- **Browser-Kompatibilität**: Moderne Browser mit ES2020+ Support
+- **Frontend stack**: React 18, TypeScript, Vite, TailwindCSS, React Router, Axios
+- **Backend dependencies**: jwt-cpp v0.7.0, OpenSSL 3.x
+- **API version**: v1 (no breaking changes in existing endpoints)
+- **Browser compatibility**: Modern browsers with ES2020+ support
 
 ## [0.2.0] - 2026-01-02
 
-### Neue Features
+### New features
 
-#### 🆕 Auftragsverwaltung (Order-Modul)
-- **Order-Datenmodell** mit Status-Workflow:
+#### 🆕 Order management (Order module)
+- **Order data model** with status workflow:
   - Status: REQUESTED → IN_PROGRESS → COMPLETED → VALIDATED → CANCELLED
-  - Priorität: NORMAL, URGENT, EMERGENCY
-  - Verknüpfung zu Proben via sampleId
-- **CRUD-Operationen** für Orders in Database
-- **CLI-Integration**: Menüpunkte 20-26 für Order-Verwaltung
-- **Dateien**:
-  - `include/core/Order.h` - Order-Datenmodell
-  - `src/core/Order.cpp` - Implementierung
-  - `test/unit/test_order.cpp` - Unit-Tests (8 Tests)
+  - Priority: NORMAL, URGENT, EMERGENCY
+  - Link to samples via sampleId
+- **CRUD operations** for Orders in Database
+- **CLI integration**: Menu items 20–26 for order management
+- **Files**:
+  - `include/core/Order.h` - Order data model
+  - `src/core/Order.cpp` - Implementation
+  - `test/unit/test_order.cpp` - Unit tests (8 tests)
 
-#### 🆕 Ergebniseingabe (TestResult-Modul)
-- **TestResult-Datenmodell** mit Validierungs-Workflow:
+#### 🆕 Result entry (TestResult module)
+- **TestResult data model** with validation workflow:
   - Status: PENDING → REVIEWED → VALIDATED → REJECTED → AMENDED
   - Flags: NORMAL, ABNORMAL, CRITICAL, INCONCLUSIVE
-  - Referenzbereiche (minValue, maxValue) mit automatischer Flag-Berechnung
-- **CRUD-Operationen** für TestResults in Database
-- **CLI-Integration**: Menüpunkte 30-36 für Ergebnis-Verwaltung
-- **Dateien**:
-  - `include/core/TestResult.h` - TestResult-Datenmodell
-  - `src/core/TestResult.cpp` - Implementierung
-  - `test/unit/test_testresult.cpp` - Unit-Tests (10 Tests)
+  - Reference ranges (minValue, maxValue) with automatic flag calculation
+- **CRUD operations** for TestResults in Database
+- **CLI integration**: Menu items 30–36 for result management
+- **Files**:
+  - `include/core/TestResult.h` - TestResult data model
+  - `src/core/TestResult.cpp` - Implementation
+  - `test/unit/test_testresult.cpp` - Unit tests (10 tests)
 
-#### 🆕 Gerätedatenschnittstelle (CSV-Ergebnisimport)
-- **CsvResultImport-Klasse** für Laborgerätedaten:
-  - Import von Analysegeräte-Ergebnissen im CSV-Format
-  - Automatische Flag-Berechnung basierend auf Referenzbereichen
-  - Verknüpfung mit bestehenden Orders
+#### 🆕 Device data interface (CSV result import)
+- **CsvResultImport class** for lab device data:
+  - Import of analyzer results in CSV format
+  - Automatic flag calculation based on reference ranges
+  - Link to existing orders
 - **Format**: `order_id,parameter,value,unit,min_value,max_value`
-- **Fehlertolerantes Parsing** mit detaillierter Statistik
-- **Dateien**:
+- **Fault-tolerant parsing** with detailed statistics
+- **Files**:
   - `include/utils/CsvResultImport.h` - Header
-  - `src/utils/CsvResultImport.cpp` - Implementierung
-  - `test/unit/test_csvresultimport.cpp` - Unit-Tests (5 Tests)
+  - `src/utils/CsvResultImport.cpp` - Implementation
+  - `test/unit/test_csvresultimport.cpp` - Unit tests (5 tests)
 
-#### 🆕 Audit-Trail (rudimentär)
-- **AuditEntry-Datenmodell** für lückenlose Protokollierung:
+#### 🆕 Audit trail (rudimentary)
+- **AuditEntry data model** for complete traceability:
   - EntityType: SAMPLE, ORDER, RESULT, USER, SYSTEM
   - ActionType: CREATE, UPDATE, DELETE, VIEW, VALIDATE, LOGIN, LOGOUT
-  - Zeitstempel, Benutzer, Details
-- **Automatisches Logging** bei allen CRUD-Operationen
-- **CLI-Integration**: Menüpunkte 50-51 für Audit-Anzeige
-- **Dateien**:
-  - `include/core/AuditEntry.h` - AuditEntry-Datenmodell
-  - `src/core/AuditEntry.cpp` - Implementierung
+  - Timestamp, user, details
+- **Automatic logging** on all CRUD operations
+- **CLI integration**: Menu items 50–51 for audit display
+- **Files**:
+  - `include/core/AuditEntry.h` - AuditEntry data model
+  - `src/core/AuditEntry.cpp` - Implementation
 
-#### 🆕 Benutzer-Authentifizierung
-- **User-Datenmodell** mit Rollen-System:
-  - Rollen: ADMIN, OPERATOR, VIEWER
-  - Aktiv/Inaktiv-Status
-  - Passwort-Hashing (DJB2 mit Salt)
-- **Authentifizierung** mit Login/Logout
-- **Berechtigungsprüfung** im CLI:
-  - Admin: Vollzugriff inkl. Benutzerverwaltung
-  - Operator: Erstellen, Bearbeiten, Löschen
-  - Viewer: Nur Lesezugriff
-- **CLI-Integration**: Menüpunkte 40-46 für Benutzerverwaltung
-- **Dateien**:
-  - `include/core/User.h` - User-Datenmodell
-  - `src/core/User.cpp` - Implementierung
+#### 🆕 User authentication
+- **User data model** with role system:
+  - Roles: ADMIN, OPERATOR, VIEWER
+  - Active/inactive status
+  - Password hashing (DJB2 with salt)
+- **Authentication** with login/logout
+- **Permission checks** in CLI:
+  - Admin: Full access including user management
+  - Operator: Create, edit, delete
+  - Viewer: Read-only access
+- **CLI integration**: Menu items 40–46 for user management
+- **Files**:
+  - `include/core/User.h` - User data model
+  - `src/core/User.cpp` - Implementation
 
-### Kritische Bugfixes
+### Critical bug fixes
 
 #### 🔴 HIGH - SQLite Foreign Key Enforcement
-- **Problem**: SQLite Foreign Keys waren definiert aber nicht aktiviert
-- **Lösung**: `PRAGMA foreign_keys = ON` nach Datenbankverbindung
-- **Datei**: `src/db/Database.cpp`
+- **Problem**: SQLite foreign keys were defined but not enabled
+- **Fix**: `PRAGMA foreign_keys = ON` after database connection
+- **File**: `src/db/Database.cpp`
 
-### Verbesserungen
+### Improvements
 
-- **Test-Suite erweitert**: Von 18 auf 62 Tests
-- **CLI um 26 neue Menüpunkte** erweitert
-- **Datenbank-Schema** um 4 neue Tabellen erweitert (orders, test_results, audit_log, users)
-- **Namespace-Struktur** beibehalten (opensylab::core, opensylab::db, opensylab::utils)
+- **Test suite extended**: From 18 to 62 tests
+- **CLI extended** with 26 new menu items
+- **Database schema** extended with 4 new tables (orders, test_results, audit_log, users)
+- **Namespace structure** retained (opensylab::core, opensylab::db, opensylab::utils)
 
 ## [0.1.1] - 2025-11-25
 
-### Kritische Bugfixes
+### Critical bug fixes
 
-#### 🔴 HIGH - Automatisierte Tests hinzugefügt
-- **Problem**: Keine automatisierten Tests vorhanden; fehlender Regressionsschutz
-- **Lösung**:
-  - Einfaches Test-Framework ohne externe Abhängigkeiten implementiert
-  - Unit-Tests für Sample-Klasse (6 Tests)
-  - Unit-Tests für Database-Klasse (7 Tests)
-  - Unit-Tests für CsvImport-Klasse (5 Tests)
-  - Test-Runner mit farbiger Ausgabe
-  - Gesamt: 18 automatisierte Tests
-- **Dateien**:
-  - `test/CMakeLists.txt` - Test-Konfiguration
-  - `test/unit/test_runner.cpp` - Test-Framework
-  - `test/unit/test_sample.cpp` - Sample-Tests
-  - `test/unit/test_database.cpp` - Database-Tests
-  - `test/unit/test_csvimport.cpp` - CSV-Import-Tests
-  - `test_and_build.sh` - Build & Test-Skript
+#### 🔴 HIGH - Automated tests added
+- **Problem**: No automated tests present; missing regression protection
+- **Fix**:
+  - Simple test framework implemented without external dependencies
+  - Unit tests for Sample class (6 tests)
+  - Unit tests for Database class (7 tests)
+  - Unit tests for CsvImport class (5 tests)
+  - Test runner with colored output
+  - Total: 18 automated tests
+- **Files**:
+  - `test/CMakeLists.txt` - Test configuration
+  - `test/unit/test_runner.cpp` - Test framework
+  - `test/unit/test_sample.cpp` - Sample tests
+  - `test/unit/test_database.cpp` - Database tests
+  - `test/unit/test_csvimport.cpp` - CSV import tests
+  - `test_and_build.sh` - Build & test script
 
-#### 🟡 MEDIUM - Eingabevalidierung in CLI
-- **Problem**: CLI akzeptiert leere/whitespace-belegte IDs; Datenbank enthält unbrauchbare Datensätze
-- **Lösung**:
-  - `readValidatedInput()` Funktion mit Pflichtfeldprüfung
-  - `trim()` Funktion entfernt führende/nachfolgende Whitespaces
-  - `isValidId()` prüft auf gültige Zeichen (alphanumerisch, -, _)
-  - `isEmpty()` erkennt leere/whitespace-Strings
-  - Benutzerfreundliche Fehlermeldungen mit Wiederholungsschleife
-- **Dateien**:
-  - `include/utils/CliInterface.h` - Neue Validierungsmethoden
-  - `src/utils/CliInterface.cpp` - Implementierung
+#### 🟡 MEDIUM - Input validation in CLI
+- **Problem**: CLI accepts empty/whitespace-only IDs; database contains unusable records
+- **Fix**:
+  - `readValidatedInput()` function with required-field check
+  - `trim()` function removes leading/trailing whitespace
+  - `isValidId()` checks for valid characters (alphanumeric, -, _)
+  - `isEmpty()` detects empty/whitespace strings
+  - User-friendly error messages with retry loop
+- **Files**:
+  - `include/utils/CliInterface.h` - New validation methods
+  - `src/utils/CliInterface.cpp` - Implementation
 
-#### 🟡 MEDIUM - CSV-Import Pflichtfeldprüfung
-- **Problem**: CSV-Import akzeptiert Zeilen ohne Pflichtfelder; signalisiert Fehler nur über STDERR
-- **Lösung**:
-  - Pflichtfeldvalidierung für `sample_id` und `patient_id`
-  - Whitespace-Prüfung mit `std::invalid_argument` Exception
-  - Detaillierte Fehlerstatistik (✓ Erfolgreich / ✗ Fehler)
-  - Klare Unterscheidung zwischen "keine Daten" und "Fehler aufgetreten"
-  - Fehlerbehandlung mit Zeilennummern
-- **Dateien**:
-  - `src/utils/CsvImport.cpp` - Verbesserte Validierung
+#### 🟡 MEDIUM - CSV import required-field validation
+- **Problem**: CSV import accepts rows without required fields; signals errors only via stderr
+- **Fix**:
+  - Required-field validation for `sample_id` and `patient_id`
+  - Whitespace check with `std::invalid_argument` exception
+  - Detailed error statistics (✓ Success / ✗ Error)
+  - Clear distinction between "no data" and "error occurred"
+  - Error handling with line numbers
+- **Files**:
+  - `src/utils/CsvImport.cpp` - Improved validation
 
-#### 🟡 MEDIUM - Database::getAllSamples Fehlerbehandlung
-- **Problem**: Bei SQL-Fehlern wird leerer Vektor zurückgegeben; CLI meldet fälschlich "Keine Proben"
-- **Lösung**:
-  - `hasError()` Methode zur Fehlererkennung
-  - `clearError()` Methode zum Zurücksetzen des Fehlerzustands
-  - CLI prüft nun `hasError()` vor Anzeige
-  - Unterscheidung zwischen leerem Ergebnis und Fehler
-  - Exception-Handling beim Iterieren über Ergebnisse
-- **Dateien**:
-  - `include/db/Database.h` - Neue Fehlerbehandlungsmethoden
-  - `src/db/Database.cpp` - Verbesserte getAllSamples()
-  - `src/utils/CliInterface.cpp` - Fehlerprüfung in handleListSamples() und handleStatistics()
+#### 🟡 MEDIUM - Database::getAllSamples error handling
+- **Problem**: On SQL errors an empty vector is returned; CLI incorrectly reports "No samples"
+- **Fix**:
+  - `hasError()` method for error detection
+  - `clearError()` method to reset error state
+  - CLI now checks `hasError()` before display
+  - Distinction between empty result and error
+  - Exception handling when iterating over results
+- **Files**:
+  - `include/db/Database.h` - New error-handling methods
+  - `src/db/Database.cpp` - Improved getAllSamples()
+  - `src/utils/CliInterface.cpp` - Error check in handleListSamples() and handleStatistics()
 
-### Verbesserte Benutzerfreundlichkeit
-- Konsistente Unicode-Symbole (✓ ✗ ℹ) für bessere Lesbarkeit
-- Klare Fehler- und Erfolgsmeldungen in allen Modulen
-- Verbesserte Ausgabe mit Formatierung
+### Improved usability
+- Consistent Unicode symbols (✓ ✗ ℹ) for better readability
+- Clear error and success messages in all modules
+- Improved output with formatting
 
-### Entwickler-Tools
-- Neues Skript: `test_and_build.sh` - Kompiliert und testet in einem Schritt
-- Aktualisiertes `build.sh` - Vereinfachter Build-Prozess
+### Developer tools
+- New script: `test_and_build.sh` - Compiles and tests in one step
+- Updated `build.sh` - Simplified build process
 
 ## [0.1.0] - 2025-11-24
 
 ### Initial Release
-- Grundlegende Projektstruktur
-- C++17-basierte Implementierung
-- SQLite-Datenbank-Integration
-- CLI-Interface
-- CSV-Import-Funktion
-- Probenverwaltung (CRUD)
-- Modulare Architektur
-- CMake Build-System
-- Basis-Dokumentation
+- Basic project structure
+- C++17-based implementation
+- SQLite database integration
+- CLI interface
+- CSV import function
+- Sample management (CRUD)
+- Modular architecture
+- CMake build system
+- Basic documentation

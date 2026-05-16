@@ -1,107 +1,109 @@
-1. Konzept: "Neo-Clinical Industrialism"
+1. Concept: "Neo-Clinical Industrialism"
 
-Vergiss "User Delight". Wir zielen auf "User Competence".
+Forget "User Delight". We aim for "User Competence".
 
-    Für die Ärzte: Es wirkt vertraut, weil es die Ästhetik von gedruckten Laborberichten und teuren Medizingeräten zitiert. Hoher Kontrast, keine versteckten Menüs.
+    For physicians: It feels familiar, because it references the aesthetics of printed laboratory reports and expensive medical devices. High contrast, no hidden menus.
 
-    Für den Freshness-Faktor: Wir nutzen Mikro-Interaktionen, Monospace-Fonts und ein striktes Grid-System, das sich anfühlt wie das HUD eines Kampfjets oder eine Terminal-Schnittstelle aus der Zukunft.
+    For the freshness factor: We use micro-interactions, monospace fonts, and a strict grid system that feels like the HUD of a fighter jet or a terminal interface from the future.
 
-2. Die Farbpalette: "Sterile & Slate"
+2. Color Palette: "Sterile & Slate"
 
-Kein reines Schwarz (#000), kein reines Weiß (#FFF). Das blendet oder wirkt billig. Wir nutzen "Off-White" und "Deep Industrial Grey".
+No pure black (#000), no pure white (#FFF). These either blind or look cheap. We use "Off-White" and "Deep Industrial Grey".
 
-    Basis (Light Mode - Standard für Ärzte):
+    Base (Light Mode — default for physicians):
 
-        Background: #F4F5F7 (Ganz leichtes Grau, nimmt den Schmerz aus den Augen).
+        Background: #F4F5F7 (Very light grey, takes the pain out of your eyes).
 
-        Surface (Cards/Tables): #FFFFFF (Reinweiß für Fokusbereiche).
+        Surface (Cards/Tables): #FFFFFF (Pure white for focus areas).
 
-        Text Primary: #1A1C20 (Fast Schwarz, hoher Kontrast).
+        Text Primary: #1A1C20 (Near black, high contrast).
 
-        Text Secondary: #5E6C84 (Technisches Grau für Labels).
+        Text Secondary: #5E6C84 (Technical grey for labels).
 
-    Akzente (max 10%):
+    Accents (max 10%):
 
-        Bio-Hazard Green: #CCFF00 oder #10B981 (Für "Success" oder "Validiert"). Extrem sparsam nutzen.
+        Bio-Hazard Green: #CCFF00 or #10B981 (For "Success" or "Validated"). Use extremely sparingly.
 
-        Critical Alert: #FF3B30 (Nur für echte Fehler).
+        Critical Alert: #FF3B30 (Only for genuine errors).
 
-        System Blue: #0055FF (Für primäre Aktionen/Buttons). Wirkt seriös, aber elektrisch.
+        System Blue: #0055FF (For primary actions/buttons). Looks serious, but electric.
 
     Dark Mode:
 
-        Background: #0D0E12 (Tiefes Anthrazit).
+        Background: #0D0E12 (Deep anthracite).
 
         Surface: #16181D.
 
         Text: #E0E0E0.
 
-3. Typografie: "Data is King"
+3. Typography: "Data is King"
 
-Wir trennen Interface und Daten strikt. Das schafft Ordnung im Chaos.
+We strictly separate interface and data. This creates order in the chaos.
 
-    UI-Font (Navigation, Headlines): Inter oder Helvetica Now. Sachlich, Schweizer Stil. Kein Schnörkel.
+    UI Font (Navigation, Headlines): Inter or Helvetica Now. Matter-of-fact, Swiss style. No flourishes.
 
-        Fett und Groß für Überschriften (z.B. "Sample ID").
+        Bold and large for headings (e.g. "Sample ID").
 
-    Data-Font (Werte, IDs, Ergebnisse): JetBrains Mono oder Roboto Mono.
+    Data Font (values, IDs, results): JetBrains Mono or Roboto Mono.
 
-        Warum? Tabellarische Ziffern (Zahlen stehen genau untereinander). Das lieben Ärzte, weil es Fehler beim Überfliegen verhindert. Es sieht aus wie Code, ist aber extrem lesbar.
+        Why? Tabular figures (numbers align precisely in columns). Physicians love this because it prevents errors when scanning. It looks like code, but is extremely readable.
 
-4. Layout & Komponenten-Architektur
+4. Layout & Component Architecture
 
-Wir nutzen das "Bento Box" Grid. Alles ist in klar definierten Containern. Keine schwebenden Elemente.
-A. Die Navigation (Sidebar)
+We use the "Bento Box" grid. Everything lives in clearly defined containers. No floating elements.
 
-    Aktuell: Links klebt eine blaue Textwüste.
+A. Navigation (Sidebar)
 
-    Neu: Eine schmale, dunkelgraue Leiste ("Anthrazit"). Nur Icons (medizinisch/technisch) + Tooltips.
+    Current: A blue wall of text stuck to the left.
 
-    Erweitert sich beim Hover. Das spart Platz für das Wesentliche: Die Daten.
+    New: A narrow, dark-grey bar ("Anthracite"). Icons only (medical/technical) + tooltips.
 
-B. Tabellen (Das Herzstück)
+    Expands on hover. This saves space for what matters: the data.
 
-    Zeilenhöhe: Reduziere White-Space ("Cozy", nicht "Spacious"). Ärzte wollen Dichte.
+B. Tables (The Core)
 
-    Zebra-Striping: Ja, aber extrem subtil (Grau auf Weiß). Führt das Auge.
+    Row height: Reduce white space ("Cozy", not "Spacious"). Physicians want density.
 
-    Status-Badges: Keine runden, weichen Buttons. Rechteckige Tags mit 2px Border-Radius.
+    Zebra striping: Yes, but extremely subtle (grey on white). Guides the eye.
 
-        Z.B. [PENDING] in Gelb mit schwarzer Schrift (Baustellen-Optik).
+    Status badges: No rounded, soft buttons. Rectangular tags with 2px border-radius.
 
-        Z.B. [VALIDATED] in Grün-Outline.
+        E.g. [PENDING] in yellow with black text (construction-site aesthetic).
 
-    Action Buttons: Rechtsbündig. "Edit" und "Delete" sind keine Textlinks mehr, sondern Icons mit klarem Hover-State (Mechanisches Feedback).
+        E.g. [VALIDATED] in green outline.
 
-C. Eingabemasken (Create Sample)
+    Action buttons: Right-aligned. "Edit" and "Delete" are no longer text links — they are icons with a clear hover state (mechanical feedback).
 
-    Aktuell: Eine vertikale Liste des Grauens.
+C. Input Forms (Create Sample)
 
-    Neu: Grouped Fields.
+    Current: A vertical list of misery.
+
+    New: Grouped fields.
 
         Box 1: "Patient Context" (ID, Name).
 
-        Box 2: "Sample Meta" (Typ, Datum).
+        Box 2: "Sample Meta" (Type, Date).
 
-        Nutze den gesamten Bildschirm. Ein Arzt hat einen 24-Zoll Monitor, kein Handy. Nutze das Grid (2- oder 3-Spaltig).
+        Use the full screen. A physician has a 24-inch monitor, not a phone. Use the grid (2 or 3 columns).
 
-        Input-Felder haben keine weichen Schatten. Harte 1px Borders in Grau (#E2E8F0). Bei Fokus wird der Border #0055FF und dicker.
+        Input fields have no soft shadows. Hard 1px borders in grey (#E2E8F0). On focus the border becomes #0055FF and thicker.
 
-5. Der "Trick" für die Ärzte (Die Brücke)
+5. The "Trick" for Physicians (The Bridge)
 
-Du verkaufst ihnen das Design nicht als "modern", sondern als "Fehlerreduzierend".
+You don't sell them the design as "modern" — you sell it as "error-reducing".
 
-    Hoher Kontrast = "Sicherheit".
+    High contrast = "Safety".
 
-    Monospace Font = "Präzision".
+    Monospace font = "Precision".
 
-    Keine Animationen, die länger als 0.2s dauern = "Geschwindigkeit".
+    No animations lasting longer than 0.2s = "Speed".
 
-Das System darf sich nicht "weich" anfühlen. Es muss "klicken". Jeder Klick ist eine definitive Entscheidung.
-Visuelle Referenz (Mental Image)
+The system must not feel "soft". It must "click". Every click is a definitive decision.
 
-Stell dir vor, Braun (Design) und Palantir (Tech) hätten ein Kind, das in einem Berliner Bunker Techno hört, aber tagsüber als Chirurg arbeitet.
+Visual Reference (Mental Image)
 
-    Ecken: Leicht abgerundet (4px). Nicht 0px (zu aggressiv), nicht 12px (zu verspielt).
+Imagine Braun (design) and Palantir (tech) had a child who listens to techno in a Berlin bunker, but works as a surgeon by day.
 
-    Schatten: Fast keine. Wir arbeiten mit Borders und Layern. "Flat", aber mit Hierarchie durch Graustufen.
+    Corners: Slightly rounded (4px). Not 0px (too aggressive), not 12px (too playful).
+
+    Shadows: Almost none. We work with borders and layers. "Flat", but with hierarchy through grey scales.

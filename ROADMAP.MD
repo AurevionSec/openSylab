@@ -1,230 +1,227 @@
 # 🚀 OpenSylab Roadmap
 
-OpenSylab entwickelt sich von einer leistungsfähigen
-Open-Source-LIMS-Lösung hin zu einer professionellen, cloud-fähigen
-Plattform mit klarer Trennung zwischen Self-Host-Edition und zukünftiger
-Cloud-Edition.
+OpenSylab is evolving from a capable open-source LIMS solution into a
+professional, cloud-ready platform with a clear separation between the
+Self-Host Edition and a future Cloud Edition.
 
-Diese Roadmap beschreibt die geplanten Entwicklungsschritte von v0.7 bis
-v1.5.
+This roadmap describes the planned development steps from v0.7 to v1.5.
 
 ------------------------------------------------------------------------
 
 # v0.7 -- Workflow Completeness & UI
-**Ziel:** Vollständige Abbildung des Labor-Workflows im Frontend
+**Goal:** Complete coverage of the laboratory workflow in the frontend
 
 ## Frontend
--   Vollständige CRUD-Operationen für Samples, Orders und Results
--   Result Entry Form mit Validierung gegen Referenzbereiche
--   Barcode-Scanner-Integration für schnelles Erfassen
--   Daten-Visualisierung (Charts) im Dashboard
--   CSV Import UI im Frontend
+-   Full CRUD operations for Samples, Orders, and Results
+-   Result Entry Form with validation against reference ranges
+-   Barcode scanner integration for rapid data capture
+-   Data visualization (charts) in the dashboard
+-   CSV Import UI in the frontend
 
-## API & Dokumentation
--   Abschluss aller benötigten DELETE-Endpoints
--   Swagger UI & OpenAPI 3.0 Spezifikation für Entwickler
--   Fortführung der Integration von Laborgeräten
+## API & Documentation
+-   Completion of all required DELETE endpoints
+-   Swagger UI & OpenAPI 3.0 specification for developers
+-   Continued integration of laboratory instruments
 
 ------------------------------------------------------------------------
 
 # v0.8 -- Security & Engineering Stabilization
 
-**Ziel:** Technische Vertrauensbasis schaffen
+**Goal:** Establish a solid technical trust foundation
 
 ## Security Improvements
 
--   Entfernung aller Default-Secrets
--   Erzwungene Secret-Generierung beim ersten Start
--   Passwort-Hashing mit Argon2
--   Session-Hardening
--   Basis Rate-Limiting
+-   Removal of all default secrets
+-   Enforced secret generation on first start
+-   Password hashing with Argon2
+-   Session hardening
+-   Basic rate limiting
 
 ## Engineering & Quality
 
--   CI/CD Pipeline
--   Unit-Test Coverage Reporting
--   Static Code Analysis (Backend & Frontend)
--   Dependency Security Scanning
--   Automatisch generierte OpenAPI-Spezifikation
+-   CI/CD pipeline
+-   Unit test coverage reporting
+-   Static code analysis (backend & frontend)
+-   Dependency security scanning
+-   Auto-generated OpenAPI specification
 
 ## Documentation
 
--   Architekturdiagramm
--   Security Hardening Guide
--   Deployment Guide für Self-Hosting
+-   Architecture diagram
+-   Security hardening guide
+-   Deployment guide for self-hosting
 
 ------------------------------------------------------------------------
 
-# v0.9 -- Architektur-Modernisierung
+# v0.9 -- Architecture Modernization
 
-**Ziel:** Codebasis für Skalierung und Cloud-Readiness vorbereiten
+**Goal:** Prepare the codebase for scaling and cloud readiness
 
-## Datenbank
+## Database
 
--   Offizielle PostgreSQL-Unterstützung
--   Datenbank-Migrationsframework
--   Saubere DB-Abstraktionsschicht
+-   Official PostgreSQL support
+-   Database migration framework
+-   Clean DB abstraction layer
 
 ## Logging & Audit
 
--   Manipulationssichere Audit-Logs (Hash-Chain)
--   Strukturierte JSON-Logs
+-   Tamper-proof audit logs (hash chain)
+-   Structured JSON logs
 
-## Konfiguration
+## Configuration
 
--   Environment-basierte Konfiguration
--   Vorbereitung für externes Secret-Management (Vault/KMS)
+-   Environment-based configuration
+-   Preparation for external secret management (Vault/KMS)
 
 ## API
 
--   Versionierte REST-API
--   Erste SDK-Unterstützung (Python)
+-   Versioned REST API
+-   Initial SDK support (Python)
 
 ------------------------------------------------------------------------
 
 # v1.0 -- Stable Open-Source Edition
 
-**Ziel:** Produktionsreife Self-Host-Version (Research Use)
+**Goal:** Production-ready self-host version (research use)
 
-## Sicherheit
+## Security
 
--   Erweiterte RBAC
--   Optionale Multi-Factor-Authentication
--   Verbessertes Session-Management
+-   Extended RBAC
+-   Optional multi-factor authentication
+-   Improved session management
 
 ## Reporting
 
--   Audit-Report-Export (PDF)
--   Benutzer- und Probenexport
+-   Audit report export (PDF)
+-   User and sample export
 
 ## Integration
 
--   Stabilisierung der HL7-Unterstützung
--   Verbesserter CSV-Import
--   Vollständige API-Dokumentation
+-   Stabilization of HL7 support
+-   Improved CSV import
+-   Complete API documentation
 
-## Betrieb
+## Operations
 
--   Dokumentierte Backup-Strategie
--   Getestete Restore-Anleitung
-
-------------------------------------------------------------------------
-
-# v1.1 -- Multi-Tenant Grundlagen
-
-**Ziel:** Mandantenfähigkeit vorbereiten
-
-## Architektur
-
--   Tenant-ID auf Datenebene
--   Option für isolierte Datenbanken pro Tenant
--   Tenant-spezifische Konfiguration
-
-## Sicherheit
-
--   Vorbereitung für Tenant-spezifische Encryption Keys
--   Storage-Abstraktion (S3-kompatibel)
+-   Documented backup strategy
+-   Tested restore procedure
 
 ------------------------------------------------------------------------
 
-# v1.2 -- Compliance & Datenschutz
+# v1.1 -- Multi-Tenant Foundations
 
-**Ziel:** Vorbereitung für regulatorische Nutzung im deutschen Markt
+**Goal:** Prepare multi-tenancy
 
-## Datenschutz
+## Architecture
 
--   Datenexport gemäß DSGVO (Art. 15)
--   Löschkonzept
--   Konfigurierbare Logging-Retention
+-   Tenant ID at the data layer
+-   Option for isolated databases per tenant
+-   Tenant-specific configuration
 
-## Sicherheit
+## Security
 
--   TLS-Zwang
--   Login-Versuchsüberwachung
--   Optionale IP-Whitelist
+-   Preparation for tenant-specific encryption keys
+-   Storage abstraction (S3-compatible)
 
-## Dokumentation
+------------------------------------------------------------------------
 
--   Technische & organisatorische Maßnahmen (TOM) Vorlage
--   Bedrohungsmodell
--   Risikoanalyse
+# v1.2 -- Compliance & Data Protection
+
+**Goal:** Preparation for regulatory use in the German market
+
+## Data Protection
+
+-   Data export in accordance with GDPR (Art. 15)
+-   Deletion concept
+-   Configurable logging retention
+
+## Security
+
+-   Enforced TLS
+-   Login attempt monitoring
+-   Optional IP whitelist
+
+## Documentation
+
+-   Technical and organizational measures (TOM) template
+-   Threat model
+-   Risk analysis
 
 ------------------------------------------------------------------------
 
 # v1.3 -- Cloud Edition Technical Foundation
 
-**Ziel:** Technische Basis für zukünftige Cloud-Version
+**Goal:** Technical foundation for the future cloud version
 
 ## Tenant Lifecycle
 
--   Tenant-Erstellung & Verwaltung
--   Tenant-spezifische Limits
+-   Tenant creation & management
+-   Tenant-specific limits
 
 ## Monitoring
 
--   Health Dashboard
--   System-Metriken
+-   Health dashboard
+-   System metrics
 
 ## Backup
 
--   Automatisierte Backups
--   Dokumentierte Wiederherstellung
+-   Automated backups
+-   Documented restore procedure
 
 ## Enterprise Security
 
--   OIDC / SSO Integration
--   Verpflichtende MFA für Admins
+-   OIDC / SSO integration
+-   Mandatory MFA for admins
 
 ------------------------------------------------------------------------
 
-# v1.4 -- Cloud Mehrwert & Skalierung
+# v1.4 -- Cloud Value & Scaling
 
-**Ziel:** Cloud-Version bietet funktionalen Mehrwert
+**Goal:** Cloud version delivers tangible functional value
 
 ## Performance
 
--   Read Replicas
--   Query-Optimierung
+-   Read replicas
+-   Query optimization
 
-## Benutzererfahrung
+## User Experience
 
--   Onboarding Wizard
--   Tenant Setup Assistent
+-   Onboarding wizard
+-   Tenant setup assistant
 
 ## Enterprise Features
 
--   SLA Monitoring
--   Audit Dashboard
--   Erweiterte Rollenprofile
+-   SLA monitoring
+-   Audit dashboard
+-   Extended role profiles
 
 ------------------------------------------------------------------------
 
-# v1.5 -- Monetarisierbare Erweiterungen
+# v1.5 -- Monetizable Extensions
 
-**Ziel:** Nachhaltiges Geschäftsmodell ermöglichen
+**Goal:** Enable a sustainable business model
 
-## Premium-Funktionen
+## Premium Features
 
--   Gerätehersteller-spezifische Integrationen
--   Compliance Toolkit (ISO-Unterstützung)
--   Erweiterte Analytik
--   Support-Portal Integration
+-   Device manufacturer-specific integrations
+-   Compliance toolkit (ISO support)
+-   Advanced analytics
+-   Support portal integration
 
-## Strategisch
+## Strategic
 
--   Definition eines Dual-Lizenz-Modells
--   SLA-Struktur
--   Preisstrategie für Cloud-Edition
+-   Definition of a dual-license model
+-   SLA structure
+-   Pricing strategy for the Cloud Edition
 
 ------------------------------------------------------------------------
 
-# Langfristige Vision
+# Long-Term Vision
 
-OpenSylab verfolgt eine klare Strategie:
+OpenSylab pursues a clear strategy:
 
--   Voll funktionsfähige Open-Source-Self-Host-Version
--   Cloud-Version mit erweiterten Sicherheits-, Compliance- und
-    Betriebsfunktionen
--   Fokus auf Transparenz, Sicherheit und Skalierbarkeit
--   Klare Trennung zwischen Core-Funktionalität und optionalen
-    Enterprise-Erweiterungen
+-   Fully functional open-source self-host version
+-   Cloud version with extended security, compliance, and operations features
+-   Focus on transparency, security, and scalability
+-   Clear separation between core functionality and optional enterprise
+    extensions
