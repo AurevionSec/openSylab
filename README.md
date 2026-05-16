@@ -355,6 +355,12 @@ MIT — see [LICENSE](LICENSE)
 
 ---
 
+## Built with
+
+Developed with [Claude Code](https://claude.ai/code) (Anthropic).
+
+---
+
 ## Changelog
 
 Full version history: [CHANGELOG.md](CHANGELOG.md)
