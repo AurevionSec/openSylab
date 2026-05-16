@@ -35,6 +35,8 @@ Highlights: Rate Limiting · Erzwungener Passwort-Wechsel · HTTPS erzwingen · 
       Credential Stuffing (single-threaded, kein Login-Counter)
 - [x] **API-Key-Fallback entfernen oder härten** — X-API-Key-Auth bypassed RBAC
       vollständig (wird als OPERATOR behandelt, keine Rollen-Prüfung möglich)
+- [ ] **Socket-Timeouts implementieren** — Fehlendes `SO_RCVTIMEO` / `SO_SNDTIMEO`
+      im `ApiServer` macht das System anfällig für Slowloris-DoS-Angriffe.
 
 ### P1 — Fehlende Kernfeatures
 
@@ -86,8 +88,10 @@ Highlights: Rate Limiting · Erzwungener Passwort-Wechsel · HTTPS erzwingen · 
       Frontend-Container startet ggf. vor dem Backend
 - [x] **CORS-Duplikation** — `getenv("OPENSYLAB_CORS_ORIGIN")` wird in
       `handleClientTls()` und `handleClientPlain()` separat gelesen (2 Stellen)
-- [ ] **Single-threaded Server** — `serveLoop()` verarbeitet Verbindungen
-      sequenziell; ein langsamer Client blockiert alle anderen
+- [ ] **Multi-threaded Server / Concurrency** — Aktuelle `serveLoop()` ist
+      sequenziell/blockierend; ein langsamer/böswilliger Client blockiert
+      die gesamte API für alle anderen Benutzer. Umstellung auf Thread-Pool
+      oder Thread-per-Connection erforderlich.
 - [ ] **Geheimer Schlüssel-Rotation** — kein dokumentierter Prozess zum
       Rotieren von JWT-Secret ohne Server-Neustart
 
@@ -97,11 +101,11 @@ Highlights: Rate Limiting · Erzwungener Passwort-Wechsel · HTTPS erzwingen · 
 
 | Kategorie | Items | Aufwand (geschätzt) |
 |-----------|-------|---------------------|
-| P0 Sicherheit | 5 | ~2 Wochen |
+| P0 Sicherheit | 6 | ~2.5 Wochen |
 | P1 Kernfeatures | 8 | ~4 Wochen |
 | P2 UI/UX | 10 | ~2 Wochen |
-| P3 Infrastruktur | 5 | ~1 Woche |
-| **Gesamt** | **28** | **~9 Wochen** |
+| P3 Infrastruktur | 5 | ~1.5 Wochen |
+| **Gesamt** | **29** | **~10 Wochen** |
 
 **Empfohlener MVP-Scope für v0.8.0** (fokussiert auf Production-Readiness):
 P0 komplett + Health-Endpoint + HL7/FHIR-Endpoints + Breadcrumb-Fix + TESTING.md
@@ -115,6 +119,8 @@ P0 komplett + Health-Endpoint + HL7/FHIR-Endpoints + Breadcrumb-Fix + TESTING.md
 - Test-Runner nutzt eigenes Macro-Framework statt Catch2/GoogleTest → kein
   Standard-CI-Output ohne Custom-Skripte
 - Keine E2E/Integration-Tests (Playwright/Cypress)
+- **JSON-Parser Einschränkungen** — Handgeschriebener Parser in `ApiServer.cpp`
+  unterstützt keine Arrays oder verschachtelten Objekte; erschwert API-Ausbau.
 
 ---
 

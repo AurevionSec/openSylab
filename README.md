@@ -1,6 +1,6 @@
 # OpenSylab LIMS
 
-**Open Source Laboratory Information Management System**
+**High-Performance, Clinical-Grade Laboratory Information Management System**
 
 [![Version](https://img.shields.io/badge/version-0.8.2-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-green)](#lizenz)
@@ -10,8 +10,19 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue)](frontend/src/)
 [![Security](https://img.shields.io/badge/security-PBKDF2%20%7C%20JWT%20%7C%20TOTP-red)](#sicherheit)
 
-OpenSylab ist ein modernes, quelloffenes LIMS für medizinische Diagnostiklabore.  
-Es verwaltet Proben, Aufträge und Testergebnisse mit vollständigem Audit-Trail nach ISO 15189.
+OpenSylab ist eine moderne, native LIMS-Plattform für die medizinische Diagnostik. Entwickelt für maximale Zuverlässigkeit, Geschwindigkeit und kompromisslose Datensicherheit, bietet es eine schlanke Alternative zu überladenen Enterprise-Systemen.
+
+---
+
+## Warum OpenSylab?
+
+OpenSylab bricht mit der Trägheit klassischer Laborsysteme durch radikales Engineering:
+
+*   🚀 **Native Performance:** Ein C++17 Core ohne schwerfällige Frameworks ermöglicht Latenzen im Millisekundenbereich und minimalen Ressourcenverbrauch — ideal für High-Throughput-Umgebungen und Edge-Computing direkt am Analysegerät.
+*   🛡️ **Security by Default:** Militärische Sicherheitsstandards sind fest integriert. PBKDF2-Hashing, JWT-Authentifizierung und MFA (TOTP) schützen Patientendaten ab dem ersten Byte.
+*   ⚖️ **ISO 15189 Ready:** Ein unveränderlicher, revisionssicherer Audit-Trail auf Datenbankebene sorgt für lückenlose Nachvollziehbarkeit — Compliance ist kein Feature, sondern das Fundament.
+*   ⚡ **Precision Engineering UI:** Ein "Neo-Clinical Industrial" Interface, das auf maximale Lesbarkeit und Fehlervermeidung in Stresssituationen optimiert ist. Keine Spielereien, nur produktiver Fokus.
+*   🔌 **Seamless Interop:** Native, hocheffiziente Parser für HL7 v2.5.1 und FHIR R4 ermöglichen eine reibungslose Integration in bestehende Krankenhaus-Informationssysteme (KIS).
 
 ---
 
