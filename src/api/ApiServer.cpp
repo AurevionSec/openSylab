@@ -14,6 +14,7 @@
 #include <fstream>
 #include <sstream>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <unistd.h>
 #include "utils/Hl7.h"
 #include "utils/Fhir.h"
@@ -3177,6 +3178,13 @@ void ApiServer::serveLoop() {
       break;
     }
 
+    struct timeval tv{30, 0};
+    if (setsockopt(clientFd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0 ||
+        setsockopt(clientFd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)) < 0) {
+      close(clientFd);
+      continue;
+    }
+
     if (isTlsEnabled()) {
       handleClientTls(clientFd);
     } else {
@@ -3283,6 +3291,10 @@ void ApiServer::handleClientTls(int clientFd) {
       rlOut << "HTTP/1.1 429 Too Many Requests\r\n"
             << "Content-Type: application/json\r\n"
             << "Access-Control-Allow-Origin: " << corsOrigin_ << "\r\n"
+            << "X-Content-Type-Options: nosniff\r\n"
+            << "X-Frame-Options: DENY\r\n"
+            << "X-XSS-Protection: 1; mode=block\r\n"
+            << "Strict-Transport-Security: max-age=31536000\r\n"
             << "Content-Length: " << rlBody.size() << "\r\n\r\n"
             << rlBody;
       const std::string rlStr = rlOut.str();
@@ -3303,6 +3315,10 @@ void ApiServer::handleClientTls(int clientFd) {
   out << "Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\n";
   out << "Access-Control-Allow-Headers: Content-Type, X-API-Key, Authorization\r\n";
   out << "Access-Control-Max-Age: 3600\r\n";
+  out << "X-Content-Type-Options: nosniff\r\n";
+  out << "X-Frame-Options: DENY\r\n";
+  out << "X-XSS-Protection: 1; mode=block\r\n";
+  out << "Strict-Transport-Security: max-age=31536000\r\n";
   out << "Connection: close\r\n\r\n";
   out << response.body;
 
@@ -3391,6 +3407,9 @@ void ApiServer::handleClientPlain(int clientFd) {
       rlOut << "HTTP/1.1 429 Too Many Requests\r\n"
             << "Content-Type: application/json\r\n"
             << "Access-Control-Allow-Origin: " << corsOrigin_ << "\r\n"
+            << "X-Content-Type-Options: nosniff\r\n"
+            << "X-Frame-Options: DENY\r\n"
+            << "X-XSS-Protection: 1; mode=block\r\n"
             << "Content-Length: " << rlBody.size() << "\r\n\r\n"
             << rlBody;
       const std::string rlStr = rlOut.str();
@@ -3410,6 +3429,9 @@ void ApiServer::handleClientPlain(int clientFd) {
   out << "Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\n";
   out << "Access-Control-Allow-Headers: Content-Type, X-API-Key, Authorization\r\n";
   out << "Access-Control-Max-Age: 3600\r\n";
+  out << "X-Content-Type-Options: nosniff\r\n";
+  out << "X-Frame-Options: DENY\r\n";
+  out << "X-XSS-Protection: 1; mode=block\r\n";
   out << "Connection: close\r\n\r\n";
   out << response.body;
 
