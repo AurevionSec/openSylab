@@ -79,13 +79,6 @@ Designphilosophie: "User Competence statt User Delight." Monospace-Datenfont fü
 ![Result Create](docs/screenshots/result_create.png)
 *Ergebniseingabe mit automatischer Flag-Berechnung bei Abweichung vom Referenzbereich*
 
-### Login & MFA
-<!-- SCREENSHOT: Login-Seite, dann TOTP-Eingabe-Step -->
-<!-- Aufnahme: 2 Screenshots nebeneinander oder als GIF: Credentials → TOTP-Code -->
-<!-- Zeigt: Zweistufiger Login-Flow mit TOTP-Feld -->
-![Login](docs/screenshots/login.png)
-*JWT-Login mit optionalem TOTP-Zweifaktor (RFC 6238, Google Authenticator kompatibel)*
-
 ### Audit-Log
 <!-- SCREENSHOT: Seite /audit-log mit mehreren Einträgen, Filter-Panel oben -->
 <!-- Aufnahme: Mindestens CREATE, UPDATE, DELETE Aktionen sichtbar; Export-Button sichtbar -->
@@ -93,19 +86,6 @@ Designphilosophie: "User Competence statt User Delight." Monospace-Datenfont fü
 ![Audit](docs/screenshots/audit.png)
 *Vollständiger ISO-15189-konformer Audit-Trail mit Filterung und CSV-Export*
 
-### Import (CSV / HL7 / FHIR)
-<!-- SCREENSHOT: Import-Seite, Tab "HL7 v2.5.1" aktiv, Datei geladen -->
-<!-- Aufnahme: Zeige alle drei Tabs (CSV / HL7 / FHIR), HL7-Tab mit Datei ausgewählt -->
-<!-- Zeigt: Tab-Leiste, Dateiname, Import-Button -->
-![Import](docs/screenshots/import.png)
-*Batch-Import für CSV-Proben, HL7 v2.5.1 (ORU^R01) und FHIR R4 Bundles*
-
-### Benutzerverwaltung
-<!-- SCREENSHOT: Seite /users (nur als ADMIN sichtbar) -->
-<!-- Aufnahme: Tabelle mit mind. 3 Benutzern verschiedener Rollen (ADMIN, OPERATOR, VIEWER) -->
-<!-- Zeigt: Rollen-Badges, Aktiv/Inaktiv-Status, Edit-Button -->
-![Users](docs/screenshots/users.png)
-*RBAC-Rollenverwaltung: ADMIN / OPERATOR / VIEWER / CUSTOM*
 
 ### Dark Mode 
 <!-- SCREENSHOT: Dashboard im Dark Mode (sudo-Tastenkombination aktiviert) -->
