@@ -342,6 +342,19 @@ bool Database::open() {
     return false;
   }
 
+  // WAL-Modus aktivieren für bessere Concurrency
+  char *walErrMsg = nullptr;
+  rc = sqlite3_exec(db_, "PRAGMA journal_mode=WAL;", nullptr, nullptr,
+                    &walErrMsg);
+  if (rc != SQLITE_OK) {
+    std::cerr << "Warnung: WAL-Modus konnte nicht aktiviert werden";
+    if (walErrMsg) {
+      std::cerr << ": " << walErrMsg;
+      sqlite3_free(walErrMsg);
+    }
+    std::cerr << std::endl;
+  }
+
   // Foreign Key Constraints aktivieren (SQLite hat sie standardmäßig aus)
   char *fkErrMsg = nullptr;
   rc = sqlite3_exec(db_, "PRAGMA foreign_keys = ON;", nullptr, nullptr,

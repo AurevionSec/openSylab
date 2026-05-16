@@ -23,10 +23,10 @@ export type ResultFlag =
 
 export type ResultStatus =
   | 'PENDING'
-  | 'REVIEWED'
+  | 'ENTERED'
   | 'VALIDATED'
   | 'REJECTED'
-  | 'AMENDED';
+  | 'REPEATED';
 
 export interface ResultFilter {
   status?: string;

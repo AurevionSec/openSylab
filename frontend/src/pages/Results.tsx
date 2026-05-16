@@ -196,7 +196,7 @@ export const Results = () => {
                           <span className={`px-2 py-1 text-[10px] font-bold uppercase tracking-wider border inline-block ${
                             result.status === 'PENDING' ? 'bg-yellow-50 text-yellow-800 border-yellow-200' :
                             result.status === 'VALIDATED' ? 'bg-green-50 text-green-700 border-green-200' :
-                            result.status === 'REVIEWED' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                            result.status === 'ENTERED' ? 'bg-blue-50 text-blue-700 border-blue-200' :
                             result.status === 'REJECTED' ? 'bg-red-50 text-red-700 border-red-200' :
                             'bg-gray-100 text-gray-600 border-gray-300'
                           }`}>

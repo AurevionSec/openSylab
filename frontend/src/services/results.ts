@@ -28,19 +28,15 @@ interface BackendResult {
 const mapStatus = (backendStatus: string): TestResult['status'] => {
   const statusMap: Record<string, TestResult['status']> = {
     'Ausstehend': 'PENDING',
-    'Eingegeben': 'REVIEWED',  // Backend uses "Eingegeben" for entered results
-    'Geprüft': 'REVIEWED',
+    'Eingegeben': 'ENTERED',
     'Validiert': 'VALIDATED',
     'Abgelehnt': 'REJECTED',
-    'Korrigiert': 'AMENDED',
-    'Wiederholung': 'AMENDED',  // Backend uses "Wiederholung" for repeat tests
+    'Wiederholung': 'REPEATED',
     'PENDING': 'PENDING',
-    'REVIEWED': 'REVIEWED',
+    'ENTERED': 'ENTERED',
     'VALIDATED': 'VALIDATED',
     'REJECTED': 'REJECTED',
-    'AMENDED': 'AMENDED',
-    'ENTERED': 'REVIEWED',
-    'REPEATED': 'AMENDED',
+    'REPEATED': 'REPEATED',
   };
   return statusMap[backendStatus] || 'PENDING';
 };
@@ -88,11 +84,7 @@ const transformResult = (backendResult: BackendResult): TestResult => {
 };
 
 const mapStatusToBackend = (status: string): string => {
-  const statusMap: Record<string, string> = {
-    'REVIEWED': 'ENTERED',
-    'AMENDED': 'REPEATED',
-  };
-  return statusMap[status] ?? status;
+  return status;
 };
 
 export const getResults = async (filters?: ResultFilter): Promise<ResultListResponse> => {

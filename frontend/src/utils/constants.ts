@@ -44,18 +44,18 @@ export const ORDER_PRIORITY_COLORS = {
 
 export const RESULT_STATUSES = {
   PENDING: 'Pending',
-  REVIEWED: 'Reviewed',
+  ENTERED: 'Erfasst',
   VALIDATED: 'Validated',
   REJECTED: 'Rejected',
-  AMENDED: 'Amended',
+  REPEATED: 'Wiederholt',
 } as const;
 
 export const RESULT_STATUS_COLORS = {
   PENDING: 'bg-gray-100 text-gray-800',
-  REVIEWED: 'bg-blue-100 text-blue-800',
+  ENTERED: 'bg-blue-100 text-blue-800',
   VALIDATED: 'bg-green-100 text-green-800',
   REJECTED: 'bg-red-100 text-red-800',
-  AMENDED: 'bg-yellow-100 text-yellow-800',
+  REPEATED: 'bg-yellow-100 text-yellow-800',
 } as const;
 
 export const RESULT_FLAGS = {
@@ -99,9 +99,9 @@ export const ORDER_TRANSITIONS: Record<string, string[]> = {
 };
 
 export const RESULT_TRANSITIONS: Record<string, string[]> = {
-  PENDING:   ['REVIEWED', 'REJECTED'],
-  REVIEWED:  ['VALIDATED', 'REJECTED', 'AMENDED'],
-  AMENDED:   ['REVIEWED', 'VALIDATED', 'REJECTED'],
+  PENDING:   ['ENTERED', 'REJECTED'],
+  ENTERED:   ['VALIDATED', 'REJECTED', 'REPEATED'],
+  REPEATED:  ['ENTERED', 'VALIDATED', 'REJECTED'],
   VALIDATED: [],
   REJECTED:  [],
 };

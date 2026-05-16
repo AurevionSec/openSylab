@@ -23,7 +23,7 @@ const STATUS_COLORS: Record<string, string> = {
   COMPLETED: '#22C55E',
   CANCELLED: '#EF4444',
   PENDING: '#EAB308',
-  REVIEWED: '#60A5FA',
+  ENTERED: '#60A5FA',
   REJECTED: '#EF4444',
 };
 
