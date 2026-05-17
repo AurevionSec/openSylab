@@ -13,6 +13,7 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <optional>
 #include <openssl/ssl.h>
 
@@ -57,6 +58,8 @@ private:
 
   std::shared_ptr<db::Database> database_;
   std::unique_ptr<auth::JwtAuth> jwtAuth_;
+  mutable std::unordered_set<std::string> tokenBlacklist_;
+  mutable std::mutex blacklistMutex_;
 };
 
 class ApiServer {

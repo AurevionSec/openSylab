@@ -34,6 +34,27 @@ std::string maskPathForAudit(const std::string &path) {
   }
 }
 
+// RFC 4648 Base32 decode — standard authenticator apps encode TOTP secrets in Base32
+static std::string base32Decode(const std::string& input) {
+  static const std::string kAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  std::string output;
+  int buf = 0;
+  int bitsLeft = 0;
+  for (unsigned char c : input) {
+    if (c == '=') break;
+    c = static_cast<unsigned char>(std::toupper(static_cast<int>(c)));
+    const size_t val = kAlphabet.find(static_cast<char>(c));
+    if (val == std::string::npos) continue;
+    buf = (buf << 5) | static_cast<int>(val);
+    bitsLeft += 5;
+    if (bitsLeft >= 8) {
+      output += static_cast<char>((buf >> (bitsLeft - 8)) & 0xFF);
+      bitsLeft -= 8;
+    }
+  }
+  return output;
+}
+
 // RFC 6238 TOTP (Time-Based One-Time Password) using HMAC-SHA1
 // This is the INDUSTRY STANDARD for 2FA/MFA tokens (used by Google Authenticator, etc.)
 int computeMfaCode(const std::string &secret, std::time_t now) {

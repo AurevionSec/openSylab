@@ -809,6 +809,12 @@ ApiRouter::extractAndValidateJwt(
   }
 
   const std::string token = trim(authValue.substr(bearerPrefix.size()));
+  {
+    std::lock_guard<std::mutex> lock(blacklistMutex_);
+    if (tokenBlacklist_.count(token)) {
+      return std::nullopt;
+    }
+  }
   if (token.empty()) {
     return std::nullopt;
   }
@@ -846,6 +852,21 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       << "\"service\":\"opensylab-lims\""
       << "}";
     return ApiResponse{200, h.str(), "application/json"};
+  }
+
+  // Route: POST /api/v1/auth/logout
+  if (method == "post" && path == "/api/v1/auth/logout") {
+    auto authIt = request.headers.find("authorization");
+    if (authIt != request.headers.end()) {
+      const std::string prefix = "bearer ";
+      std::string authVal = toLower(authIt->second);
+      if (authVal.size() > prefix.size() && authVal.substr(0, prefix.size()) == prefix) {
+        const std::string token = trim(authIt->second.substr(prefix.size()));
+        std::lock_guard<std::mutex> lock(blacklistMutex_);
+        tokenBlacklist_.insert(token);
+      }
+    }
+    return ApiResponse{200, R"({"message":"Logged out successfully"})", "application/json"};
   }
 
   // Route: POST /api/v1/auth/login (no authentication required)
@@ -3219,7 +3240,19 @@ void ApiServer::handleClientTls(int clientFd) {
   }
   buffer[readBytes] = '\0';
 
-  std::istringstream requestStream{std::string(buffer)};
+  std::string rawRequest(buffer, static_cast<size_t>(readBytes));
+  constexpr size_t kMaxHeaderSize = 65536;
+  while (rawRequest.find("\r\n\r\n") == std::string::npos && rawRequest.size() < kMaxHeaderSize) {
+    const int hMore = SSL_read(ssl, buffer, sizeof(buffer) - 1);
+    if (hMore <= 0) break;
+    rawRequest.append(buffer, static_cast<size_t>(hMore));
+  }
+  if (rawRequest.find("\r\n\r\n") == std::string::npos) {
+    TlsContext::freeSslConnection(ssl);
+    return;
+  }
+
+  std::istringstream requestStream{rawRequest};
   std::string requestLine;
   if (!std::getline(requestStream, requestLine)) {
     TlsContext::freeSslConnection(ssl);
@@ -3336,7 +3369,16 @@ void ApiServer::handleClientPlain(int clientFd) {
   }
   buffer[readBytes] = '\0';
 
-  std::istringstream requestStream{std::string(buffer)};
+  std::string rawRequest(buffer, static_cast<size_t>(readBytes));
+  constexpr size_t kMaxHeaderSize = 65536;
+  while (rawRequest.find("\r\n\r\n") == std::string::npos && rawRequest.size() < kMaxHeaderSize) {
+    const ssize_t hMore = recv(clientFd, buffer, sizeof(buffer) - 1, 0);
+    if (hMore <= 0) break;
+    rawRequest.append(buffer, static_cast<size_t>(hMore));
+  }
+  if (rawRequest.find("\r\n\r\n") == std::string::npos) return;
+
+  std::istringstream requestStream{rawRequest};
   std::string requestLine;
   if (!std::getline(requestStream, requestLine)) {
     return;
