@@ -137,20 +137,24 @@ P0 complete + health endpoint + HL7/FHIR endpoints + breadcrumb fix + TESTING.md
       write blocks all concurrent reads. During a batch CSV import the server is
       blocked for all other users for the duration of the import.
       Fix: `PRAGMA journal_mode=WAL;` in `Database::initializeSchema()`.
-- [ ] **HTTP header truncation at >8192 bytes** — `handleClientPlain` /
+- [x] **HTTP header truncation at >8192 bytes** — `handleClientPlain` /
       `handleClientTls` read exactly 8192 bytes in the first `recv`/`SSL_read`.
       Very long Authorization headers (e.g. large JWTs, many cookies) are silently
       truncated — auth then fails without an explainable error.
-      Fix: header accumulation analogous to body accumulation via Content-Length.
+      Fix: header accumulation loop until `\r\n\r\n` found (max 64 KB).
 - [x] **No security headers in HTTP responses** — No `Strict-Transport-Security`,
       no `X-Content-Type-Options`, no `X-Frame-Options` in API responses.
       Especially relevant for the plain HTTP path and browser clients.
-- [ ] **No JWT token blacklisting after logout** — Tokens remain valid until expiry
+- [x] **No JWT token blacklisting after logout** — Tokens remain valid until expiry
       (60 min). With compromised credentials the attacker is authorized for that
-      window. Fix: Redis-based blacklist or short-lived tokens + refresh token rotation.
-- [ ] **No TOTP Base32 enrollment flow documented** — TOTP secrets appear to be stored
-      as raw strings. Verify compatibility with standard authenticator apps
-      (Google Authenticator, Authy) via QR code enrollment.
+      window. Fix: in-memory blacklist in ApiRouter + `POST /api/v1/auth/logout`.
+- [ ] **TOTP Base32 enrollment flow** — Secrets stored as raw strings are incompatible
+      with standard authenticator apps (Google Authenticator, Authy) that expect
+      Base32-encoded secrets for QR code enrollment. `base32Decode()` utility added
+      to `Database.cpp`. Proper fix requires: (1) new MFA enrollment API endpoint
+      that generates a Base32 secret and returns a `otpauth://` URI for QR display,
+      (2) DB migration to re-encode existing raw secrets as Base32,
+      (3) update `computeMfaCode` to decode Base32 before HMAC.
 
 ### Architecture debt (medium to long term)
 
@@ -174,10 +178,10 @@ P0 complete + health endpoint + HL7/FHIR endpoints + breadcrumb fix + TESTING.md
 ### v0.9.0 — Architecture modernization (priority proposal)
 
 - [ ] **Thread pool / thread-per-connection** (→ existing in P3, prioritized here)
-- [ ] **Socket timeouts** `SO_RCVTIMEO` / `SO_SNDTIMEO` (→ existing in P0)
+- [x] **Socket timeouts** `SO_RCVTIMEO` / `SO_SNDTIMEO` (→ done)
 - [ ] **Integrate nlohmann/json** (→ new, see above)
-- [ ] **SQLite WAL mode** (→ new, see above)
-- [ ] **Status enum mismatch** frontend/backend (→ new, see above)
+- [x] **SQLite WAL mode** (→ done)
+- [x] **Status enum mismatch** frontend/backend (→ done)
 - [ ] **Hash-chain audit trail** — Cryptographically chained audit entries: each
       hash includes the hash of the previous entry. A tampered entry breaks the
       entire chain — mathematically provable. Optional: RFC 3161-qualified
