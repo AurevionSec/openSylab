@@ -70,13 +70,14 @@ export const login = async (username: string, password: string, mfaCode?: string
  * Logout - clear all authentication data
  */
 export const logout = (): void => {
+  // Best-effort: notify the backend so it can blacklist the token.
+  // Fire-and-forget — the UI must not block on this call.
+  api.post('/auth/logout').catch(() => {});
+
   localStorage.removeItem(JWT_TOKEN_STORAGE_KEY);
   localStorage.removeItem(USER_INFO_STORAGE_KEY);
   localStorage.removeItem('opensylab_token_expiry');
-
-  // Also remove legacy API key if present
   localStorage.removeItem(API_KEY_STORAGE_KEY);
-
 };
 
 /**

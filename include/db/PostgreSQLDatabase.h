@@ -214,9 +214,15 @@ public:
   // API keys
   // -----------------------------------------------------------------------
   [[nodiscard]] bool upsertApiKey(const std::string &key, bool active = true,
-                                  const std::string &role = "OPERATOR") override;
+                                  const std::string &role = "OPERATOR",
+                                  const std::string &actor = "") override;
   [[nodiscard]] std::optional<std::string>
   isApiKeyValid(const std::string &key) override;
+  bool persistBlacklistedToken(const std::string &token,
+                               std::time_t expiresAt) override;
+  [[nodiscard]] std::vector<std::pair<std::string, std::time_t>>
+  loadActiveBlacklistedTokens() override;
+  void pruneExpiredBlacklistedTokens() override;
 
   // -----------------------------------------------------------------------
   // Retention
@@ -282,12 +288,18 @@ public:
   [[nodiscard]] std::string
   getMfaEnrollmentUri(const std::string &username,
                       const std::string &base32Secret) override;
-  [[nodiscard]] bool setUserMfaSecret(int userId,
-                                      const std::string &base32Secret) override;
-  [[nodiscard]] bool disableUserMfa(int userId) override;
+  [[nodiscard]] bool setUserMfaSecret(int userId, const std::string &base32Secret,
+                                      int64_t initialUsedStep = -1) override;
+  [[nodiscard]] bool disableUserMfa(int userId,
+                                    const std::string &actor = "") override;
   [[nodiscard]] bool
   verifyMfaCodeForEnrollment(const std::string &base32Secret,
-                              const std::string &code) override;
+                              const std::string &code,
+                              int64_t &matchedStep) override;
+  [[nodiscard]] bool verifyAndConsumeMfaCode(const std::string &username,
+                                             const std::string &secret,
+                                             const std::string &code) override;
+  [[nodiscard]] std::time_t getPasswordChangedAt(int userId) override;
 
   // -----------------------------------------------------------------------
   // Session tracking
@@ -305,6 +317,7 @@ public:
   getSessionById(int sessionId) override;
   [[nodiscard]] std::optional<SessionInfo>
   getLatestSessionForUser(int userId) override;
+  int expireStaleSessionsOlderThan(int maxLifetimeSeconds) override;
 
   // -----------------------------------------------------------------------
   // Authentication
@@ -319,7 +332,7 @@ public:
   // -----------------------------------------------------------------------
   // Error handling
   // -----------------------------------------------------------------------
-  [[nodiscard]] const std::string &getLastError() const override;
+  [[nodiscard]] std::string getLastError() const override;
   [[nodiscard]] bool hasError() const override;
   void clearError() override;
 

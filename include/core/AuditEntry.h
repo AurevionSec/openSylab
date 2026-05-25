@@ -22,8 +22,9 @@ public:
     CREATE,  // Neuer Datensatz erstellt
     UPDATE,  // Datensatz aktualisiert
     DELETE,  // Datensatz gelöscht
-    LOGIN,   // Benutzer angemeldet
-    LOGOUT,  // Benutzer abgemeldet
+    LOGIN,        // Benutzer erfolgreich angemeldet
+    LOGIN_FAILED, // Anmeldeversuch fehlgeschlagen
+    LOGOUT,       // Benutzer abgemeldet
     VALIDATE, // Ergebnis validiert
     EXPORT,   // Daten exportiert
     ACCESS    // Zugriff (z.B. Support)

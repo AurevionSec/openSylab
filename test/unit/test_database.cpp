@@ -1158,12 +1158,15 @@ bool test_database_CreateSamplesBatch_DuplicateIds() {
   Sample s2("S_DUP", "P2");
   std::vector<Sample> samples = {s1, s2};
 
+  // Permissive semantics: in-batch duplicate is skipped, first occurrence wins.
   auto batch = db.createSamplesBatch(samples, "tester");
   ASSERT_EQ(batch.inserted, static_cast<size_t>(1));
   ASSERT_EQ(batch.failures.size(), static_cast<size_t>(1));
 
+  // First sample committed — S_DUP must exist with patient P1.
   auto stored = db.getSampleByBarcode("S_DUP");
   ASSERT_NOT_NULL(stored);
+  ASSERT_EQ(stored->getPatientId(), std::string("P1"));
 
   db.close();
   std::remove(dbPath.c_str());
@@ -1191,12 +1194,14 @@ bool test_database_CreateResultsBatch_DuplicateIds() {
   r2.setUnit("mg/L");
   std::vector<TestResult> results = {r1, r2};
 
+  // Atomic semantics: second item fails → entire batch rolled back.
   auto batch = db.createTestResultsBatch(results, "tester");
-  ASSERT_EQ(batch.inserted, static_cast<size_t>(1));
+  ASSERT_EQ(batch.inserted, static_cast<size_t>(0));
   ASSERT_EQ(batch.failures.size(), static_cast<size_t>(1));
 
+  // Nothing committed — R_DUP must not exist.
   auto stored = db.getTestResultByResultId("R_DUP");
-  ASSERT_NOT_NULL(stored);
+  ASSERT_NULL(stored);
 
   db.close();
   std::remove(dbPath.c_str());
@@ -1703,7 +1708,7 @@ bool test_database_LdapAuthenticationRejectsWrongPassword() {
   auto entries =
       db.getAuditLogByEntity(AuditEntry::EntityType::USER, username);
   const AuditEntry *entry =
-      findAuditEntry(entries, AuditEntry::ActionType::UPDATE,
+      findAuditEntry(entries, AuditEntry::ActionType::LOGIN_FAILED,
                      AuditEntry::EntityType::USER, username, username);
   ASSERT_NOT_NULL(entry);
   ASSERT_NE(entry->getDetails().find("LDAP"), std::string::npos);
@@ -1879,7 +1884,7 @@ bool test_database_MfaRequiredLogsAuditOnMissingCode() {
   auto entries =
       db.getAuditLogByEntity(AuditEntry::EntityType::USER, username);
   const AuditEntry *entry =
-      findAuditEntry(entries, AuditEntry::ActionType::UPDATE,
+      findAuditEntry(entries, AuditEntry::ActionType::LOGIN_FAILED,
                      AuditEntry::EntityType::USER, username, username);
   ASSERT_NOT_NULL(entry);
   ASSERT_NE(entry->getDetails().find("MFA erforderlich"), std::string::npos);
@@ -2579,12 +2584,15 @@ bool test_database_VerifyMfaCodeForEnrollment_WorksWithBase32() {
   ASSERT_NE(code, -1);
   const std::string codeStr = std::to_string(code);
 
-  // verifyMfaCodeForEnrollment must accept the valid code
-  ASSERT_TRUE(db.verifyMfaCodeForEnrollment(b32secret, codeStr));
+  // verifyMfaCodeForEnrollment must accept the valid code and return the step
+  int64_t matchedStep = -1;
+  ASSERT_TRUE(db.verifyMfaCodeForEnrollment(b32secret, codeStr, matchedStep));
+  ASSERT_TRUE(matchedStep >= static_cast<int64_t>(0));
 
   // Wrong code must be rejected
   const std::string wrongCode = (code == 0) ? "999999" : "000000";
-  ASSERT_FALSE(db.verifyMfaCodeForEnrollment(b32secret, wrongCode));
+  int64_t badStep = -1;
+  ASSERT_FALSE(db.verifyMfaCodeForEnrollment(b32secret, wrongCode, badStep));
 
   db.close();
   std::remove(dbPath.c_str());
@@ -2607,6 +2615,105 @@ bool test_database_AssignUserRole_LastAdminProtected() {
   auto still = db.getUserByUsername("admin");
   ASSERT_NOT_NULL(still);
   ASSERT_EQ(still->getRole(), User::Role::ADMIN);
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_database_CreateOrder_NonExistentSampleRejected() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  Order order("ORD_NOEX", "NONEXISTENT_SAMPLE", "Blutbild");
+  ASSERT_FALSE(db.createOrder(order, "tester"));
+  ASSERT_FALSE(db.getLastError().empty());
+
+  auto stored = db.getOrderByOrderId("ORD_NOEX");
+  ASSERT_NULL(stored);
+
+  auto entries = db.getAuditLog();
+  ASSERT_TRUE(entries.empty());
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_database_CreateUser_MustChangePasswordPersisted() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  User user("mcp_user", User::hashPassword("testpass"), User::Role::OPERATOR);
+  user.setMustChangePassword(true);
+  ASSERT_TRUE(db.createUser(user));
+
+  auto stored = db.getUserByUsername("mcp_user");
+  ASSERT_NOT_NULL(stored);
+  ASSERT_TRUE(stored->mustChangePassword());
+
+  User user2("nomcp_user", User::hashPassword("testpass2"), User::Role::VIEWER);
+  user2.setMustChangePassword(false);
+  ASSERT_TRUE(db.createUser(user2));
+
+  auto stored2 = db.getUserByUsername("nomcp_user");
+  ASSERT_NOT_NULL(stored2);
+  ASSERT_FALSE(stored2->mustChangePassword());
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_database_ExpireStaleSessionsOlderThan_ExpiresAndAudits() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  const std::string username = "expire_user";
+  User user(username, User::hashPassword("secret"), User::Role::OPERATOR);
+  ASSERT_TRUE(db.createUser(user));
+
+  auto auth = db.authenticateUser(username, "secret");
+  ASSERT_NOT_NULL(auth);
+  const int userId = auth->getId();
+  ASSERT_EQ(db.getActiveSessionCount(userId), 1);
+
+  // Back-date login_ts so the session looks 2h old (threshold: 1h)
+  {
+    sqlite3 *rawDb = nullptr;
+    ASSERT_EQ(sqlite3_open(dbPath.c_str(), &rawDb), SQLITE_OK);
+    const char *updateSql =
+        "UPDATE sessions SET login_ts = login_ts - 7200 WHERE logout_ts IS NULL;";
+    sqlite3_stmt *rawStmt = nullptr;
+    ASSERT_EQ(sqlite3_prepare_v2(rawDb, updateSql, -1, &rawStmt, nullptr),
+              SQLITE_OK);
+    sqlite3_step(rawStmt);
+    sqlite3_finalize(rawStmt);
+    sqlite3_close(rawDb);
+  }
+
+  const int expired = db.expireStaleSessionsOlderThan(3600);
+  ASSERT_EQ(expired, 1);
+  ASSERT_EQ(db.getActiveSessionCount(userId), 0);
+
+  auto entries = db.getAuditLogByEntity(AuditEntry::EntityType::USER,
+                                        std::to_string(userId));
+  bool found = false;
+  for (const auto &e : entries) {
+    if (e && e->getAction() == AuditEntry::ActionType::UPDATE &&
+        e->getUser() == "system" &&
+        e->getDetails().find("expired") != std::string::npos) {
+      found = true;
+      break;
+    }
+  }
+  ASSERT_TRUE(found);
 
   db.close();
   std::remove(dbPath.c_str());
@@ -2750,4 +2857,10 @@ void registerDatabaseTests() {
                test_database_SetUserMfaSecret_PersistsAndDisables);
   registerTest("Database::VerifyMfaCodeForEnrollment_WorksWithBase32",
                test_database_VerifyMfaCodeForEnrollment_WorksWithBase32);
+  registerTest("Database::CreateOrder_NonExistentSampleRejected",
+               test_database_CreateOrder_NonExistentSampleRejected);
+  registerTest("Database::CreateUser_MustChangePasswordPersisted",
+               test_database_CreateUser_MustChangePasswordPersisted);
+  registerTest("Database::ExpireStaleSessionsOlderThan_ExpiresAndAudits",
+               test_database_ExpireStaleSessionsOlderThan_ExpiresAndAudits);
 }

@@ -7,6 +7,7 @@ import {
   getStoredUser,
   type User,
 } from '../services/auth';
+import { USER_INFO_STORAGE_KEY } from '../utils/constants';
 
 interface AuthContextType {
   isAuthenticated: boolean;
@@ -32,13 +33,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setIsAuthenticated(authenticated);
 
     if (authenticated) {
-      // Load user info from storage
+      // Load user info from storage — derive mustChangePassword from the user
+      // object, not from a separate localStorage key that can be trivially bypassed.
       const storedUser = getStoredUser();
       setUser(storedUser);
-      setMustChangePassword(localStorage.getItem('opensylab_must_change_pw') === 'true');
+      setMustChangePassword(storedUser?.must_change_password === true);
     }
 
     setLoading(false);
+
+    // React to token expiry/401 events fired by the axios interceptor (api.ts).
+    // Using an event avoids window.location.href which breaks React Router history.
+    const handleAuthExpired = () => {
+      setIsAuthenticated(false);
+      setUser(null);
+      setMustChangePassword(false);
+    };
+    window.addEventListener('opensylab:auth-expired', handleAuthExpired);
+    return () => {
+      window.removeEventListener('opensylab:auth-expired', handleAuthExpired);
+    };
   }, []);
 
   const login = async (username: string, password: string, mfaCode?: string): Promise<{ success: boolean; error?: string; mfaRequired?: boolean; mustChangePassword?: boolean }> => {
@@ -49,7 +63,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUser(result.user);
       const mcp = result.user.must_change_password === true;
       setMustChangePassword(mcp);
-      localStorage.setItem('opensylab_must_change_pw', mcp ? 'true' : 'false');
       return { success: true, mustChangePassword: mcp };
     }
 
@@ -58,7 +71,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const clearMustChangePassword = () => {
     setMustChangePassword(false);
-    localStorage.setItem('opensylab_must_change_pw', 'false');
+    // Update the stored user object so the flag persists correctly across reloads
+    const storedUser = getStoredUser();
+    if (storedUser) {
+      storedUser.must_change_password = false;
+      localStorage.setItem(USER_INFO_STORAGE_KEY, JSON.stringify(storedUser));
+    }
   };
 
   const logout = () => {
@@ -66,7 +84,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setIsAuthenticated(false);
     setUser(null);
     setMustChangePassword(false);
-    localStorage.removeItem('opensylab_must_change_pw');
   };
 
   return (

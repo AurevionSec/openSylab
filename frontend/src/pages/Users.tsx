@@ -8,10 +8,14 @@ import type { User, CreateUserPayload, UpdateUserPayload, UserRole } from '../ty
 import { USER_ROLES, ROLE_COLORS } from '../types/user';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { ErrorBanner } from '../components/common/ErrorBanner';
+import { useAuth } from '../context/AuthContext';
 
 export const Users = () => {
   useDocumentTitle({ module: 'User Management' });
+  const { user: currentUser } = useAuth();
+  const isAdmin = currentUser?.role === 'ADMIN';
   const [users, setUsers] = useState<User[]>([]);
+  const [deletingUserId, setDeletingUserId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -70,12 +74,15 @@ export const Users = () => {
 
   const handleDeleteUser = async (userId: number) => {
     if (!confirm('Are you sure you want to delete this user?')) return;
-    
+    if (deletingUserId !== null) return;
+    setDeletingUserId(userId);
     try {
       await deleteUser(userId);
       await fetchUsers();
     } catch (err: unknown) {
       setError((err && typeof err === 'object' && 'response' in err ? (err as {response?: {data?: {error?: {message?: string}}}}).response?.data?.error?.message : undefined) || 'Failed to delete user');
+    } finally {
+      setDeletingUserId(null);
     }
   };
 
@@ -100,9 +107,11 @@ export const Users = () => {
             <h2 className="text-3xl font-bold text-gray-900">User Management</h2>
             <p className="text-gray-600 mt-1">Manage system users and their roles</p>
           </div>
-          <Button onClick={() => setIsCreateModalOpen(true)}>
-            + Create User
-          </Button>
+          {isAdmin && (
+            <Button onClick={() => setIsCreateModalOpen(true)}>
+              + Create User
+            </Button>
+          )}
         </div>
 
         <ErrorBanner message={error || null} />
@@ -161,18 +170,23 @@ export const Users = () => {
                       {user.last_login ? new Date(user.last_login * 1000).toLocaleDateString() : 'Never'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
-                      <button
-                        onClick={() => setEditingUser(user)}
-                        className="text-blue-600 hover:text-blue-900"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDeleteUser(user.id)}
-                        className="text-red-600 hover:text-red-900"
-                      >
-                        Delete
-                      </button>
+                      {isAdmin && (
+                        <>
+                          <button
+                            onClick={() => setEditingUser(user)}
+                            className="text-blue-600 hover:text-blue-900"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeleteUser(user.id)}
+                            disabled={deletingUserId === user.id}
+                            className="text-red-600 hover:text-red-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {deletingUserId === user.id ? 'Deleting...' : 'Delete'}
+                          </button>
+                        </>
+                      )}
                     </td>
                   </tr>
                 ))}

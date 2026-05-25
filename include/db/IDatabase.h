@@ -56,7 +56,7 @@ public:
     std::optional<std::string> entityId;
     std::optional<std::time_t> fromTime;
     std::optional<std::time_t> toTime;
-    int limit = 100;
+    int limit = 1000;
   };
 
   struct DiagnosticsFilter {
@@ -253,7 +253,7 @@ public:
   [[nodiscard]] virtual bool verifyAuditChain(std::string &firstBrokenAt) = 0;
   virtual void setAuditHmacKey(const std::string &key) = 0;
   [[nodiscard]] virtual std::vector<std::unique_ptr<core::AuditEntry>>
-  getAuditLog(int limit = 100) = 0;
+  getAuditLog(int limit = 1000) = 0;
   [[nodiscard]] virtual std::vector<std::unique_ptr<core::AuditEntry>>
   getAuditLogByEntity(core::AuditEntry::EntityType entity,
                       const std::string &entityId) = 0;
@@ -309,9 +309,15 @@ public:
 
   [[nodiscard]] virtual bool upsertApiKey(const std::string &key,
                                           bool active = true,
-                                          const std::string &role = "OPERATOR") = 0;
+                                          const std::string &role = "OPERATOR",
+                                          const std::string &actor = "") = 0;
   [[nodiscard]] virtual std::optional<std::string>
   isApiKeyValid(const std::string &key) = 0;
+  virtual bool persistBlacklistedToken(const std::string &token,
+                                       std::time_t expiresAt) = 0;
+  [[nodiscard]] virtual std::vector<std::pair<std::string, std::time_t>>
+  loadActiveBlacklistedTokens() = 0;
+  virtual void pruneExpiredBlacklistedTokens() = 0;
 
   // -----------------------------------------------------------------------
   // Retention
@@ -387,12 +393,23 @@ public:
   [[nodiscard]] virtual std::string
   getMfaEnrollmentUri(const std::string &username,
                       const std::string &base32Secret) = 0;
-  [[nodiscard]] virtual bool setUserMfaSecret(int userId,
-                                              const std::string &base32Secret) = 0;
-  [[nodiscard]] virtual bool disableUserMfa(int userId) = 0;
+  [[nodiscard]] virtual bool setUserMfaSecret(
+      int userId, const std::string &base32Secret,
+      int64_t initialUsedStep = -1) = 0;
+  [[nodiscard]] virtual bool disableUserMfa(int userId,
+                                           const std::string &actor = "") = 0;
+  // Verify a TOTP code against a raw Base32 secret (for enrollment).
+  // Sets matchedStep to the consumed time-step on success so the caller can
+  // pass it to setUserMfaSecret, preventing replay of the enrollment code.
   [[nodiscard]] virtual bool
   verifyMfaCodeForEnrollment(const std::string &base32Secret,
-                              const std::string &code) = 0;
+                              const std::string &code,
+                              int64_t &matchedStep) = 0;
+  // Verify TOTP code with replay prevention (for login — updates last-used step)
+  [[nodiscard]] virtual bool
+  verifyAndConsumeMfaCode(const std::string &username,
+                           const std::string &secret,
+                           const std::string &code) = 0;
 
   // -----------------------------------------------------------------------
   // Session tracking
@@ -412,6 +429,7 @@ public:
   getSessionById(int sessionId) = 0;
   [[nodiscard]] virtual std::optional<SessionInfo>
   getLatestSessionForUser(int userId) = 0;
+  virtual int expireStaleSessionsOlderThan(int maxLifetimeSeconds) = 0;
 
   // -----------------------------------------------------------------------
   // Authentication
@@ -428,7 +446,9 @@ public:
   // Error handling
   // -----------------------------------------------------------------------
 
-  [[nodiscard]] virtual const std::string &getLastError() const = 0;
+  [[nodiscard]] virtual std::time_t getPasswordChangedAt(int userId) = 0;
+
+  [[nodiscard]] virtual std::string getLastError() const = 0;
   [[nodiscard]] virtual bool hasError() const = 0;
   virtual void clearError() = 0;
 };

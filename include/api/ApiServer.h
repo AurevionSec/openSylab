@@ -13,7 +13,6 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
-#include <unordered_set>
 #include <optional>
 #include <openssl/ssl.h>
 
@@ -36,6 +35,7 @@ struct ApiResponse {
   int status = 200;
   std::string body;
   std::string contentType = "application/json";
+  std::unordered_map<std::string, std::string> extraHeaders{};
 };
 
 class ApiRouter {
@@ -58,8 +58,19 @@ private:
 
   std::shared_ptr<db::IDatabase> database_;
   std::unique_ptr<auth::JwtAuth> jwtAuth_;
-  mutable std::unordered_set<std::string> tokenBlacklist_;
+  // Token blacklist: maps token → expiry time_point.
+  // Expired entries are pruned on every logout to prevent unbounded growth.
+  mutable std::unordered_map<std::string, std::chrono::steady_clock::time_point> tokenBlacklist_;
   mutable std::mutex blacklistMutex_;
+
+  // Server-side TOTP enrollment sessions: userId → (secret, expiry).
+  // The client never supplies the secret at verify time — only the 6-digit code.
+  struct PendingEnrollment {
+    std::string secret;
+    std::chrono::steady_clock::time_point expiry;
+  };
+  mutable std::unordered_map<int, PendingEnrollment> pendingEnrollments_;
+  mutable std::mutex enrollmentMutex_;
 };
 
 class ApiServer {

@@ -103,7 +103,7 @@ bool test_api_ReadSamplesReturnsJson() {
   auto db = std::make_shared<Database>(dbPath);
   ASSERT_TRUE(db->open());
   ASSERT_TRUE(db->initializeSchema());
-  ASSERT_TRUE(db->upsertApiKey("testkey", true));
+  ASSERT_TRUE(db->upsertApiKey("testkey-000000000000000000000000000", true));
 
   Sample sample("S_API_LIST", "P2");
   ASSERT_TRUE(db->createSample(sample));
@@ -114,7 +114,7 @@ bool test_api_ReadSamplesReturnsJson() {
   ApiRequest req;
   req.method = "GET";
   req.path = "/api/v1/samples";
-  req.headers["x-api-key"] = "testkey";
+  req.headers["x-api-key"] = "testkey-000000000000000000000000000";
 
   ApiResponse res = router.handleRequest(req);
   ASSERT_EQ(res.status, 200);
@@ -132,13 +132,13 @@ bool test_api_ReadSamplesInvalidStatus() {
   auto db = std::make_shared<Database>(dbPath);
   ASSERT_TRUE(db->open());
   ASSERT_TRUE(db->initializeSchema());
-  ASSERT_TRUE(db->upsertApiKey("testkey", true));
+  ASSERT_TRUE(db->upsertApiKey("testkey-000000000000000000000000000", true));
 
   ApiRouter router(db);
   ApiRequest req;
   req.method = "GET";
   req.path = "/api/v1/samples?status=NOPE";
-  req.headers["x-api-key"] = "testkey";
+  req.headers["x-api-key"] = "testkey-000000000000000000000000000";
 
   ApiResponse res = router.handleRequest(req);
   ASSERT_EQ(res.status, 400);
@@ -153,13 +153,13 @@ bool test_api_ReadSamplesInvalidPagination() {
   auto db = std::make_shared<Database>(dbPath);
   ASSERT_TRUE(db->open());
   ASSERT_TRUE(db->initializeSchema());
-  ASSERT_TRUE(db->upsertApiKey("testkey", true));
+  ASSERT_TRUE(db->upsertApiKey("testkey-000000000000000000000000000", true));
 
   ApiRouter router(db);
   ApiRequest req;
   req.method = "GET";
   req.path = "/api/v1/samples?offset=10";
-  req.headers["x-api-key"] = "testkey";
+  req.headers["x-api-key"] = "testkey-000000000000000000000000000";
 
   ApiResponse res = router.handleRequest(req);
   ASSERT_EQ(res.status, 400);
@@ -174,7 +174,7 @@ bool test_api_ReadSampleByIdAudits() {
   auto db = std::make_shared<Database>(dbPath);
   ASSERT_TRUE(db->open());
   ASSERT_TRUE(db->initializeSchema());
-  ASSERT_TRUE(db->upsertApiKey("testkey", true));
+  ASSERT_TRUE(db->upsertApiKey("testkey-000000000000000000000000000", true));
 
   Sample sample("S_API_GET", "P3");
   ASSERT_TRUE(db->createSample(sample));
@@ -186,7 +186,7 @@ bool test_api_ReadSampleByIdAudits() {
   ApiRequest req;
   req.method = "GET";
   req.path = "/api/v1/samples/S_API_GET";
-  req.headers["x-api-key"] = "testkey";
+  req.headers["x-api-key"] = "testkey-000000000000000000000000000";
 
   ApiResponse res = router.handleRequest(req);
   ASSERT_EQ(res.status, 200);
@@ -205,7 +205,7 @@ bool test_api_ReadOrdersReturnsJson() {
   auto db = std::make_shared<Database>(dbPath);
   ASSERT_TRUE(db->open());
   ASSERT_TRUE(db->initializeSchema());
-  ASSERT_TRUE(db->upsertApiKey("testkey", true));
+  ASSERT_TRUE(db->upsertApiKey("testkey-000000000000000000000000000", true));
 
   Sample sample("S_API_ORDER", "P9");
   ASSERT_TRUE(db->createSample(sample));
@@ -218,7 +218,7 @@ bool test_api_ReadOrdersReturnsJson() {
   ApiRequest req;
   req.method = "GET";
   req.path = "/api/v1/orders";
-  req.headers["x-api-key"] = "testkey";
+  req.headers["x-api-key"] = "testkey-000000000000000000000000000";
 
   ApiResponse res = router.handleRequest(req);
   ASSERT_EQ(res.status, 200);
@@ -236,20 +236,20 @@ bool test_api_ReadOrdersInvalidFilters() {
   auto db = std::make_shared<Database>(dbPath);
   ASSERT_TRUE(db->open());
   ASSERT_TRUE(db->initializeSchema());
-  ASSERT_TRUE(db->upsertApiKey("testkey", true));
+  ASSERT_TRUE(db->upsertApiKey("testkey-000000000000000000000000000", true));
 
   ApiRouter router(db);
   ApiRequest badStatus;
   badStatus.method = "GET";
   badStatus.path = "/api/v1/orders?status=BAD";
-  badStatus.headers["x-api-key"] = "testkey";
+  badStatus.headers["x-api-key"] = "testkey-000000000000000000000000000";
   ApiResponse resStatus = router.handleRequest(badStatus);
   ASSERT_EQ(resStatus.status, 400);
 
   ApiRequest badPriority;
   badPriority.method = "GET";
   badPriority.path = "/api/v1/orders?priority=BAD";
-  badPriority.headers["x-api-key"] = "testkey";
+  badPriority.headers["x-api-key"] = "testkey-000000000000000000000000000";
   ApiResponse resPriority = router.handleRequest(badPriority);
   ASSERT_EQ(resPriority.status, 400);
 
@@ -263,7 +263,7 @@ bool test_api_ReadOrderByIdAudits() {
   auto db = std::make_shared<Database>(dbPath);
   ASSERT_TRUE(db->open());
   ASSERT_TRUE(db->initializeSchema());
-  ASSERT_TRUE(db->upsertApiKey("testkey", true));
+  ASSERT_TRUE(db->upsertApiKey("testkey-000000000000000000000000000", true));
 
   Sample sample("S_API_ORDER_GET", "P10");
   ASSERT_TRUE(db->createSample(sample));
@@ -277,7 +277,7 @@ bool test_api_ReadOrderByIdAudits() {
   ApiRequest req;
   req.method = "GET";
   req.path = "/api/v1/orders/O_API_GET";
-  req.headers["x-api-key"] = "testkey";
+  req.headers["x-api-key"] = "testkey-000000000000000000000000000";
 
   ApiResponse res = router.handleRequest(req);
   ASSERT_EQ(res.status, 200);
@@ -296,7 +296,7 @@ bool test_api_ReadResultsReturnsJson() {
   auto db = std::make_shared<Database>(dbPath);
   ASSERT_TRUE(db->open());
   ASSERT_TRUE(db->initializeSchema());
-  ASSERT_TRUE(db->upsertApiKey("testkey", true));
+  ASSERT_TRUE(db->upsertApiKey("testkey-000000000000000000000000000", true));
 
   Sample sample("S_API_RES", "P11");
   ASSERT_TRUE(db->createSample(sample));
@@ -318,7 +318,7 @@ bool test_api_ReadResultsReturnsJson() {
   std::ostringstream path;
   path << "/api/v1/results?order_id=" << createdOrder->getId();
   req.path = path.str();
-  req.headers["x-api-key"] = "testkey";
+  req.headers["x-api-key"] = "testkey-000000000000000000000000000";
 
   ApiResponse res = router.handleRequest(req);
   ASSERT_EQ(res.status, 200);
@@ -336,13 +336,13 @@ bool test_api_ReadResultsInvalidPagination() {
   auto db = std::make_shared<Database>(dbPath);
   ASSERT_TRUE(db->open());
   ASSERT_TRUE(db->initializeSchema());
-  ASSERT_TRUE(db->upsertApiKey("testkey", true));
+  ASSERT_TRUE(db->upsertApiKey("testkey-000000000000000000000000000", true));
 
   ApiRouter router(db);
   ApiRequest req;
   req.method = "GET";
   req.path = "/api/v1/results?limit=-1";
-  req.headers["x-api-key"] = "testkey";
+  req.headers["x-api-key"] = "testkey-000000000000000000000000000";
   ApiResponse res = router.handleRequest(req);
   ASSERT_EQ(res.status, 400);
 
@@ -356,7 +356,7 @@ bool test_api_ReadResultByIdAudits() {
   auto db = std::make_shared<Database>(dbPath);
   ASSERT_TRUE(db->open());
   ASSERT_TRUE(db->initializeSchema());
-  ASSERT_TRUE(db->upsertApiKey("testkey", true));
+  ASSERT_TRUE(db->upsertApiKey("testkey-000000000000000000000000000", true));
 
   Sample sample("S_API_RES_GET", "P12");
   ASSERT_TRUE(db->createSample(sample));
@@ -377,7 +377,7 @@ bool test_api_ReadResultByIdAudits() {
   ApiRequest req;
   req.method = "GET";
   req.path = "/api/v1/results/R_API_GET";
-  req.headers["x-api-key"] = "testkey";
+  req.headers["x-api-key"] = "testkey-000000000000000000000000000";
 
   ApiResponse res = router.handleRequest(req);
   ASSERT_EQ(res.status, 200);
@@ -385,6 +385,136 @@ bool test_api_ReadResultByIdAudits() {
             std::string::npos);
   ASSERT_EQ(auditCount(*db, AuditEntry::EntityType::RESULT, "R_API_GET"),
             before + 1);
+
+  db->close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_api_ResultsInvalidStatusFilterRejected() {
+  std::string dbPath = uniqueDbPath();
+  auto db = std::make_shared<Database>(dbPath);
+  ASSERT_TRUE(db->open());
+  ASSERT_TRUE(db->initializeSchema());
+  ASSERT_TRUE(db->upsertApiKey("testkey-000000000000000000000000000", true));
+
+  ApiRouter router(db);
+  ApiRequest req;
+  req.method = "GET";
+  req.path = "/api/v1/results?status=BADVALUE";
+  req.headers["x-api-key"] = "testkey-000000000000000000000000000";
+
+  ApiResponse res = router.handleRequest(req);
+  ASSERT_EQ(res.status, 400);
+  ASSERT_NE(res.body.find("validation_error"), std::string::npos);
+
+  db->close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_api_ResultsInvalidFlagFilterRejected() {
+  std::string dbPath = uniqueDbPath();
+  auto db = std::make_shared<Database>(dbPath);
+  ASSERT_TRUE(db->open());
+  ASSERT_TRUE(db->initializeSchema());
+  ASSERT_TRUE(db->upsertApiKey("testkey-000000000000000000000000000", true));
+
+  ApiRouter router(db);
+  ApiRequest req;
+  req.method = "GET";
+  req.path = "/api/v1/results?flag=SUPERSONIC";
+  req.headers["x-api-key"] = "testkey-000000000000000000000000000";
+
+  ApiResponse res = router.handleRequest(req);
+  ASSERT_EQ(res.status, 400);
+  ASSERT_NE(res.body.find("validation_error"), std::string::npos);
+
+  db->close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_api_ViewerRoleBlockedOnWrite() {
+  std::string dbPath = uniqueDbPath();
+  auto db = std::make_shared<Database>(dbPath);
+  ASSERT_TRUE(db->open());
+  ASSERT_TRUE(db->initializeSchema());
+  ASSERT_TRUE(db->upsertApiKey("viewerkey-0000000000000000000000000", true, "VIEWER"));
+
+  ApiRouter router(db);
+  ApiRequest req;
+  req.method = "POST";
+  req.path = "/api/v1/samples";
+  req.headers["x-api-key"] = "viewerkey-0000000000000000000000000";
+  req.body = R"({"sample_id":"S_VIEWER","patient_id":"P_VIEWER"})";
+
+  ApiResponse res = router.handleRequest(req);
+  ASSERT_EQ(res.status, 403);
+
+  db->close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_api_CustomRoleBlockedOnWrite() {
+  std::string dbPath = uniqueDbPath();
+  auto db = std::make_shared<Database>(dbPath);
+  ASSERT_TRUE(db->open());
+  ASSERT_TRUE(db->initializeSchema());
+  ASSERT_TRUE(db->upsertApiKey("customkey-0000000000000000000000000", true, "CUSTOM"));
+
+  ApiRouter router(db);
+  ApiRequest req;
+  req.method = "PUT";
+  req.path = "/api/v1/samples/S_SOME";
+  req.headers["x-api-key"] = "customkey-0000000000000000000000000";
+  req.body = R"({"status":"IN_PROGRESS"})";
+
+  ApiResponse res = router.handleRequest(req);
+  ASSERT_EQ(res.status, 403);
+
+  db->close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_api_OperatorRoleBlockedOnAdminUserList() {
+  std::string dbPath = uniqueDbPath();
+  auto db = std::make_shared<Database>(dbPath);
+  ASSERT_TRUE(db->open());
+  ASSERT_TRUE(db->initializeSchema());
+  ASSERT_TRUE(db->upsertApiKey("operatorkey-000000000000000000000000", true, "OPERATOR"));
+
+  ApiRouter router(db);
+  ApiRequest req;
+  req.method = "GET";
+  req.path = "/api/v1/users";
+  req.headers["x-api-key"] = "operatorkey-000000000000000000000000";
+
+  ApiResponse res = router.handleRequest(req);
+  ASSERT_EQ(res.status, 403);
+
+  db->close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_api_OperatorRoleBlockedOnAuditLog() {
+  std::string dbPath = uniqueDbPath();
+  auto db = std::make_shared<Database>(dbPath);
+  ASSERT_TRUE(db->open());
+  ASSERT_TRUE(db->initializeSchema());
+  ASSERT_TRUE(db->upsertApiKey("operatorkey-000000000000000000000000", true, "OPERATOR"));
+
+  ApiRouter router(db);
+  ApiRequest req;
+  req.method = "GET";
+  req.path = "/api/v1/audit";
+  req.headers["x-api-key"] = "operatorkey-000000000000000000000000";
+
+  ApiResponse res = router.handleRequest(req);
+  ASSERT_EQ(res.status, 403);
 
   db->close();
   std::remove(dbPath.c_str());
@@ -416,13 +546,13 @@ bool test_api_InactiveApiKeyRejected() {
   auto db = std::make_shared<Database>(dbPath);
   ASSERT_TRUE(db->open());
   ASSERT_TRUE(db->initializeSchema());
-  ASSERT_TRUE(db->upsertApiKey("testkey", false));
+  ASSERT_TRUE(db->upsertApiKey("testkey-000000000000000000000000000", false));
 
   ApiRouter router(db);
   ApiRequest req;
   req.method = "GET";
   req.path = "/api/v1/samples";
-  req.headers["x-api-key"] = "testkey";
+  req.headers["x-api-key"] = "testkey-000000000000000000000000000";
 
   ApiResponse res = router.handleRequest(req);
   ASSERT_EQ(res.status, 401);
@@ -437,13 +567,14 @@ bool test_api_WriteInvalidJsonPayload() {
   auto db = std::make_shared<Database>(dbPath);
   ASSERT_TRUE(db->open());
   ASSERT_TRUE(db->initializeSchema());
-  ASSERT_TRUE(db->upsertApiKey("testkey", true));
+  ASSERT_TRUE(db->upsertApiKey("testkey-000000000000000000000000000", true));
 
   ApiRouter router(db);
   ApiRequest req;
   req.method = "POST";
   req.path = "/api/v1/samples";
-  req.headers["x-api-key"] = "testkey";
+  req.headers["x-api-key"] = "testkey-000000000000000000000000000";
+  req.headers["content-type"] = "application/json";
   req.body = "{bad json}";
 
   ApiResponse res = router.handleRequest(req);
@@ -461,13 +592,14 @@ bool test_api_WriteSampleMissingFields() {
   auto db = std::make_shared<Database>(dbPath);
   ASSERT_TRUE(db->open());
   ASSERT_TRUE(db->initializeSchema());
-  ASSERT_TRUE(db->upsertApiKey("testkey", true));
+  ASSERT_TRUE(db->upsertApiKey("testkey-000000000000000000000000000", true));
 
   ApiRouter router(db);
   ApiRequest req;
   req.method = "POST";
   req.path = "/api/v1/samples";
-  req.headers["x-api-key"] = "testkey";
+  req.headers["x-api-key"] = "testkey-000000000000000000000000000";
+  req.headers["content-type"] = "application/json";
   req.body = "{}";
 
   ApiResponse res = router.handleRequest(req);
@@ -485,13 +617,14 @@ bool test_api_WriteOrderMissingFields() {
   auto db = std::make_shared<Database>(dbPath);
   ASSERT_TRUE(db->open());
   ASSERT_TRUE(db->initializeSchema());
-  ASSERT_TRUE(db->upsertApiKey("testkey", true));
+  ASSERT_TRUE(db->upsertApiKey("testkey-000000000000000000000000000", true));
 
   ApiRouter router(db);
   ApiRequest req;
   req.method = "POST";
   req.path = "/api/v1/orders";
-  req.headers["x-api-key"] = "testkey";
+  req.headers["x-api-key"] = "testkey-000000000000000000000000000";
+  req.headers["content-type"] = "application/json";
   req.body = "{\"order_id\":\"O-1\"}";
 
   ApiResponse res = router.handleRequest(req);
@@ -509,13 +642,14 @@ bool test_api_WriteResultMissingFields() {
   auto db = std::make_shared<Database>(dbPath);
   ASSERT_TRUE(db->open());
   ASSERT_TRUE(db->initializeSchema());
-  ASSERT_TRUE(db->upsertApiKey("testkey", true));
+  ASSERT_TRUE(db->upsertApiKey("testkey-000000000000000000000000000", true));
 
   ApiRouter router(db);
   ApiRequest req;
   req.method = "POST";
   req.path = "/api/v1/results";
-  req.headers["x-api-key"] = "testkey";
+  req.headers["x-api-key"] = "testkey-000000000000000000000000000";
+  req.headers["content-type"] = "application/json";
   req.body = "{\"result_id\":\"R-1\",\"order_id\":1}";
 
   ApiResponse res = router.handleRequest(req);
@@ -533,13 +667,14 @@ bool test_api_WriteSampleCreateAndUpdate() {
   auto db = std::make_shared<Database>(dbPath);
   ASSERT_TRUE(db->open());
   ASSERT_TRUE(db->initializeSchema());
-  ASSERT_TRUE(db->upsertApiKey("testkey", true));
+  ASSERT_TRUE(db->upsertApiKey("testkey-000000000000000000000000000", true));
 
   ApiRouter router(db);
   ApiRequest createReq;
   createReq.method = "POST";
   createReq.path = "/api/v1/samples";
-  createReq.headers["x-api-key"] = "testkey";
+  createReq.headers["x-api-key"] = "testkey-000000000000000000000000000";
+  createReq.headers["content-type"] = "application/json";
   createReq.body =
       "{\"sample_id\":\"S_API_WRITE\",\"patient_id\":\"P1\",\"patient_name\":\""
       "Alice\"}";
@@ -552,7 +687,8 @@ bool test_api_WriteSampleCreateAndUpdate() {
   ApiRequest updateReq;
   updateReq.method = "PUT";
   updateReq.path = "/api/v1/samples/S_API_WRITE";
-  updateReq.headers["x-api-key"] = "testkey";
+  updateReq.headers["x-api-key"] = "testkey-000000000000000000000000000";
+  updateReq.headers["content-type"] = "application/json";
   updateReq.body = "{\"patient_id\":\"P2\",\"patient_name\":\"Bob\"}";
 
   ApiResponse updateRes = router.handleRequest(updateReq);
@@ -573,7 +709,7 @@ bool test_api_WriteOrderCreateAndUpdate() {
   auto db = std::make_shared<Database>(dbPath);
   ASSERT_TRUE(db->open());
   ASSERT_TRUE(db->initializeSchema());
-  ASSERT_TRUE(db->upsertApiKey("testkey", true));
+  ASSERT_TRUE(db->upsertApiKey("testkey-000000000000000000000000000", true));
 
   Sample sample("S_API_ORDER", "P9");
   ASSERT_TRUE(db->createSample(sample));
@@ -582,7 +718,8 @@ bool test_api_WriteOrderCreateAndUpdate() {
   ApiRequest createReq;
   createReq.method = "POST";
   createReq.path = "/api/v1/orders";
-  createReq.headers["x-api-key"] = "testkey";
+  createReq.headers["x-api-key"] = "testkey-000000000000000000000000000";
+  createReq.headers["content-type"] = "application/json";
   createReq.body =
       "{\"order_id\":\"O_API_WRITE\",\"sample_id\":\"S_API_ORDER\",\"test_type\":\""
       "PCR\"}";
@@ -595,7 +732,8 @@ bool test_api_WriteOrderCreateAndUpdate() {
   ApiRequest updateReq;
   updateReq.method = "PUT";
   updateReq.path = "/api/v1/orders/O_API_WRITE";
-  updateReq.headers["x-api-key"] = "testkey";
+  updateReq.headers["x-api-key"] = "testkey-000000000000000000000000000";
+  updateReq.headers["content-type"] = "application/json";
   updateReq.body =
       "{\"sample_id\":\"S_API_ORDER\",\"test_type\":\"ELISA\"}";
 
@@ -616,7 +754,7 @@ bool test_api_WriteResultCreateAndUpdate() {
   auto db = std::make_shared<Database>(dbPath);
   ASSERT_TRUE(db->open());
   ASSERT_TRUE(db->initializeSchema());
-  ASSERT_TRUE(db->upsertApiKey("testkey", true));
+  ASSERT_TRUE(db->upsertApiKey("testkey-000000000000000000000000000", true));
 
   Sample sample("S_API_RES", "P3");
   ASSERT_TRUE(db->createSample(sample));
@@ -631,7 +769,8 @@ bool test_api_WriteResultCreateAndUpdate() {
   ApiRequest createReq;
   createReq.method = "POST";
   createReq.path = "/api/v1/results";
-  createReq.headers["x-api-key"] = "testkey";
+  createReq.headers["x-api-key"] = "testkey-000000000000000000000000000";
+  createReq.headers["content-type"] = "application/json";
   std::ostringstream payload;
   payload << "{\"result_id\":\"R_API_WRITE\",\"order_id\":"
           << createdOrder->getId()
@@ -646,7 +785,8 @@ bool test_api_WriteResultCreateAndUpdate() {
   ApiRequest updateReq;
   updateReq.method = "PUT";
   updateReq.path = "/api/v1/results/R_API_WRITE";
-  updateReq.headers["x-api-key"] = "testkey";
+  updateReq.headers["x-api-key"] = "testkey-000000000000000000000000000";
+  updateReq.headers["content-type"] = "application/json";
   updateReq.body =
       "{\"test_parameter\":\"GLU\",\"value\":\"2.4\",\"unit\":\"mg/L\"}";
 
@@ -678,7 +818,15 @@ void registerApiTests() {
   registerTest("Api::ReadResultsReturnsJson", test_api_ReadResultsReturnsJson);
   registerTest("Api::ReadResultsInvalidPagination",
                test_api_ReadResultsInvalidPagination);
+  registerTest("Api::ResultsInvalidStatusFilterRejected",
+               test_api_ResultsInvalidStatusFilterRejected);
+  registerTest("Api::ResultsInvalidFlagFilterRejected",
+               test_api_ResultsInvalidFlagFilterRejected);
   registerTest("Api::ReadResultByIdAudits", test_api_ReadResultByIdAudits);
+  registerTest("Api::ViewerRoleBlockedOnWrite", test_api_ViewerRoleBlockedOnWrite);
+  registerTest("Api::CustomRoleBlockedOnWrite", test_api_CustomRoleBlockedOnWrite);
+  registerTest("Api::OperatorRoleBlockedOnAdminUserList", test_api_OperatorRoleBlockedOnAdminUserList);
+  registerTest("Api::OperatorRoleBlockedOnAuditLog", test_api_OperatorRoleBlockedOnAuditLog);
   registerTest("Api::WriteAuthRequired", test_api_WriteAuthRequired);
   registerTest("Api::InactiveApiKeyRejected", test_api_InactiveApiKeyRejected);
   registerTest("Api::WriteInvalidJsonPayload", test_api_WriteInvalidJsonPayload);

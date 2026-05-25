@@ -94,7 +94,7 @@ export const AuditLog = () => {
                   })
                   .catch(err => {
                     console.error('Export failed:', err);
-                    if (mountedRef.current) setExportError(`Export fehlgeschlagen: ${err?.response?.status === 403 ? 'Keine Berechtigung' : 'Unbekannter Fehler'}`);
+                    if (mountedRef.current) setExportError(`Export fehlgeschlagen: ${extractMsg(err)}`);
                   });
               }}
               className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 transition-colors"

@@ -35,6 +35,7 @@ export const Orders = () => {
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [orderToDelete, setOrderToDelete] = useState<Order | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const itemsPerPage = 20;
 
   const { data: orders, total: totalOrders, loading, error, refetch } = useEntityList(
@@ -76,8 +77,15 @@ export const Orders = () => {
 
   const handleDeleteConfirm = async () => {
     if (!orderToDelete) return;
-    await deleteOrder(orderToDelete.order_id);
-    try { refetch(); } catch { /* list refresh failed, delete succeeded */ }
+    setDeleteError(null);
+    try {
+      await deleteOrder(orderToDelete.order_id);
+      setIsDeleteDialogOpen(false);
+      setOrderToDelete(null);
+      refetch();
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Delete failed');
+    }
   };
 
   return (
@@ -151,7 +159,7 @@ export const Orders = () => {
               </div>
             </div>
 
-            <ErrorBanner message={error || null} />
+            <ErrorBanner message={deleteError || error || null} />
 
             {loading ? (
               <div className="flex items-center justify-center py-12">
@@ -400,6 +408,7 @@ export const Orders = () => {
         onClose={() => {
           setIsDeleteDialogOpen(false);
           setOrderToDelete(null);
+          setDeleteError(null);
         }}
         onConfirm={handleDeleteConfirm}
         title="Delete Order"

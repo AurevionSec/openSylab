@@ -345,6 +345,12 @@ void CliInterface::handleNewSample() {
   printSeparator();
   std::cout << "\n";
 
+  if (!canEdit()) {
+    std::cout << "✗ Keine Berechtigung. Bitte anmelden.\n";
+    waitForEnter();
+    return;
+  }
+
   // Pflichtfelder mit Validierung einlesen
   std::string sampleId = readValidatedInput("Proben-ID (Barcode)", "Proben-ID");
   if (!running_)
@@ -951,6 +957,12 @@ void CliInterface::handleImportCsv() {
   std::cout << "                CSV-IMPORT\n";
   printSeparator();
   std::cout << "\n";
+
+  if (!canEdit()) {
+    std::cout << "✗ Keine Berechtigung. Bitte anmelden.\n";
+    waitForEnter();
+    return;
+  }
 
   std::string filePath = readInput("CSV-Datei Pfad");
   if (!running_)
@@ -2908,8 +2920,9 @@ void CliInterface::handleUpdateResult() {
     return;
   }
 
-  if (result->getStatus() == core::TestResult::Status::REJECTED) {
-    std::cout << "\n✗ Abgelehnte Ergebnisse koennen nicht mehr geaendert werden (Terminalzustand).\n";
+  if (result->getStatus() == core::TestResult::Status::REJECTED ||
+      result->getStatus() == core::TestResult::Status::VALIDATED) {
+    std::cout << "\n✗ Validierte und abgelehnte Ergebnisse koennen nicht mehr geaendert werden (Terminalzustand).\n";
     waitForEnter();
     return;
   }
@@ -2966,8 +2979,8 @@ void CliInterface::handleValidateResult() {
   printSeparator();
   std::cout << "\n";
 
-  if (!canEdit()) {
-    std::cout << "✗ Keine Berechtigung. Bitte anmelden.\n";
+  if (!isAdmin()) {
+    std::cout << "✗ Keine Berechtigung. Nur Administratoren dürfen Ergebnisse validieren (ISO 15189).\n";
     waitForEnter();
     return;
   }
@@ -3035,9 +3048,10 @@ void CliInterface::handleValidateResult() {
       std::cout << "  " << database_->getLastError() << "\n";
     }
   } else {
-    // Enforce terminal-state: REJECTED results cannot be re-transitioned
-    if (result->getStatus() == core::TestResult::Status::REJECTED) {
-      std::cout << "\n✗ Abgelehnte Ergebnisse koennen nicht mehr geaendert werden (Terminalzustand).\n";
+    // Enforce terminal-state: VALIDATED and REJECTED results cannot be re-transitioned
+    if (result->getStatus() == core::TestResult::Status::REJECTED ||
+        result->getStatus() == core::TestResult::Status::VALIDATED) {
+      std::cout << "\n✗ Validierte und abgelehnte Ergebnisse koennen nicht mehr geaendert werden (Terminalzustand).\n";
       waitForEnter();
       return;
     }
@@ -4097,10 +4111,22 @@ void CliInterface::handleChangePassword() {
   if (!running_)
     return;
 
-  if (newPassword.length() < 4) {
-    std::cout << "\n✗ Passwort muss mindestens 4 Zeichen haben.\n";
+  if (newPassword.length() < 8) {
+    std::cout << "\n✗ Passwort muss mindestens 8 Zeichen haben.\n";
     waitForEnter();
     return;
+  }
+  {
+    bool hasLetter = false, hasDigit = false;
+    for (char ch : newPassword) {
+      if (std::isalpha(static_cast<unsigned char>(ch))) hasLetter = true;
+      if (std::isdigit(static_cast<unsigned char>(ch))) hasDigit = true;
+    }
+    if (!hasLetter || !hasDigit) {
+      std::cout << "\n✗ Passwort muss Buchstaben und Ziffern enthalten.\n";
+      waitForEnter();
+      return;
+    }
   }
 
   std::string confirmPassword = readInput("Neues Passwort bestätigen");
@@ -4155,10 +4181,22 @@ void CliInterface::handleCreateUser() {
   if (!running_)
     return;
 
-  if (password.length() < 4) {
-    std::cout << "\n✗ Passwort muss mindestens 4 Zeichen haben.\n";
+  if (password.length() < 8) {
+    std::cout << "\n✗ Passwort muss mindestens 8 Zeichen haben.\n";
     waitForEnter();
     return;
+  }
+  {
+    bool hasLetter = false, hasDigit = false;
+    for (char ch : password) {
+      if (std::isalpha(static_cast<unsigned char>(ch))) hasLetter = true;
+      if (std::isdigit(static_cast<unsigned char>(ch))) hasDigit = true;
+    }
+    if (!hasLetter || !hasDigit) {
+      std::cout << "\n✗ Passwort muss Buchstaben und Ziffern enthalten.\n";
+      waitForEnter();
+      return;
+    }
   }
 
   auto roles = database_->getAllRoles();
@@ -4355,10 +4393,22 @@ void CliInterface::handleUpdateUser() {
     std::string newPassword = readInput("Neues Passwort");
     if (!running_)
       return;
-    if (newPassword.length() < 4) {
-      std::cout << "\n✗ Passwort muss mindestens 4 Zeichen haben.\n";
+    if (newPassword.length() < 8) {
+      std::cout << "\n✗ Passwort muss mindestens 8 Zeichen haben.\n";
       waitForEnter();
       return;
+    }
+    {
+      bool hasLetter = false, hasDigit = false;
+      for (char ch : newPassword) {
+        if (std::isalpha(static_cast<unsigned char>(ch))) hasLetter = true;
+        if (std::isdigit(static_cast<unsigned char>(ch))) hasDigit = true;
+      }
+      if (!hasLetter || !hasDigit) {
+        std::cout << "\n✗ Passwort muss Buchstaben und Ziffern enthalten.\n";
+        waitForEnter();
+        return;
+      }
     }
     user->setPassword(newPassword);
     break;

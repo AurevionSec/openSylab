@@ -898,12 +898,13 @@ components:
         default: 1
 
     PageSizeParam:
-      name: page_size
+      name: limit
       in: query
+      description: Maximum number of records to return (capped at 1000 server-side)
       schema:
         type: integer
         minimum: 1
-        maximum: 500
+        maximum: 1000
         default: 50
 
   responses:

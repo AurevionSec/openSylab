@@ -1,6 +1,8 @@
 #include "utils/Fhir.h"
 #include <cctype>
 #include <ctime>
+#include <functional>
+#include <nlohmann/json.hpp>
 #include <sstream>
 
 namespace opensylab {
@@ -8,6 +10,7 @@ namespace utils {
 namespace {
 
 constexpr size_t kMaxImportBytes = 10 * 1024 * 1024;
+constexpr size_t kMaxResultsPerImport = 10000;
 
 bool isWhitespace(char ch) { return std::isspace(static_cast<unsigned char>(ch)); }
 
@@ -183,68 +186,42 @@ std::string findNumberOrStringValue(const std::string &json,
   return extractNumberValue(json, pos);
 }
 
-size_t findObjectStart(const std::string &json, size_t pos) {
-  for (size_t i = pos; i-- > 0;) {
-    if (json[i] == '{') {
-      return i;
-    }
-  }
-  return std::string::npos;
-}
-
-std::string extractObject(const std::string &json, size_t start) {
-  if (start == std::string::npos || start >= json.size() ||
-      json[start] != '{') {
-    return "";
-  }
-  int depth = 0;
-  bool inString = false;
-  bool escape = false;
-  for (size_t i = start; i < json.size(); ++i) {
-    char ch = json[i];
-    if (inString) {
-      if (escape) {
-        escape = false;
-      } else if (ch == '\\') {
-        escape = true;
-      } else if (ch == '"') {
-        inString = false;
-      }
-      continue;
-    }
-    if (ch == '"') {
-      inString = true;
-      continue;
-    }
-    if (ch == '{') {
-      depth++;
-    } else if (ch == '}') {
-      depth--;
-      if (depth == 0) {
-        return json.substr(start, i - start + 1);
-      }
-    }
-  }
-  return "";
-}
-
-std::vector<std::string> extractResources(const std::string &json,
+// Extract all JSON objects from a FHIR bundle that have the given resourceType.
+// Uses nlohmann/json to avoid string-based injection vulnerabilities (the old
+// findObjectStart scanner did not handle '{' inside string values, allowing
+// crafted string fields to inject false resource boundaries).
+std::vector<std::string> extractResources(const std::string &jsonStr,
                                           const std::string &resourceType) {
   std::vector<std::string> resources;
-  const std::string needle = "\"resourceType\":\"" + resourceType + "\"";
-  size_t pos = 0;
-  while ((pos = json.find(needle, pos)) != std::string::npos) {
-    size_t start = findObjectStart(json, pos);
-    std::string obj = extractObject(json, start);
-    // Validate that the extracted object actually contains the expected resourceType
-    // (findObjectStart may return a wrong '{' if a preceding string value contains '{')
-    if (!obj.empty() && obj.find(needle) != std::string::npos) {
-      resources.push_back(obj);
-      pos = start + obj.size();
-    } else {
-      pos += needle.size();
-    }
+  nlohmann::json root;
+  try {
+    root = nlohmann::json::parse(jsonStr);
+  } catch (const nlohmann::json::exception &) {
+    return resources;
   }
+  std::function<void(const nlohmann::json &)> collect =
+      [&](const nlohmann::json &node) {
+        if (!node.is_object()) {
+          return;
+        }
+        const auto typeIt = node.find("resourceType");
+        if (typeIt != node.end() && typeIt->is_string() &&
+            typeIt->get<std::string>() == resourceType) {
+          resources.push_back(node.dump());
+        }
+        for (const auto &[key, val] : node.items()) {
+          if (val.is_object()) {
+            collect(val);
+          } else if (val.is_array()) {
+            for (const auto &elem : val) {
+              if (elem.is_object()) {
+                collect(elem);
+              }
+            }
+          }
+        }
+      };
+  collect(root);
   return resources;
 }
 
@@ -460,11 +437,70 @@ bool FhirExchange::importBundle(const std::string &payload,
     return false;
   }
 
+  // Field-length validation (mirrors API layer limits for DB consistency)
+  auto fhirFieldTooLong = [&](const std::string &field, const std::string &name,
+                               size_t maxLen, const std::string &path) -> bool {
+    if (field.size() > maxLen) {
+      FhirParser::Error err;
+      err.path = path;
+      err.code = "validation_error";
+      err.message = name + " exceeds maximum length of " + std::to_string(maxLen);
+      summary.errors.push_back(err);
+      return true;
+    }
+    return false;
+  };
+
+  if (fhirFieldTooLong(mapped.sample.sampleId, "sample_id", 64, "Specimen.identifier") ||
+      fhirFieldTooLong(mapped.sample.patientId, "patient_id", 64, "Patient.identifier") ||
+      fhirFieldTooLong(mapped.sample.patientName, "patient_name", 255, "Patient.name") ||
+      fhirFieldTooLong(mapped.order.orderId, "order_id", 64, "ServiceRequest.identifier") ||
+      fhirFieldTooLong(mapped.order.testType, "test_type", 255, "ServiceRequest.code")) {
+    logErrors(summary.errors, actor);
+    summary.operationOutcome = buildOperationOutcome(summary.errors);
+    summary.lastError = "Field exceeds maximum allowed length";
+    return false;
+  }
+
   core::Sample sample(mapped.sample.sampleId, mapped.sample.patientId);
   sample.setPatientName(mapped.sample.patientName);
   sample.setDescription(mapped.sample.description);
   sample.setStatus(core::Sample::Status::REGISTERED);
 
+  if (mapped.results.size() > kMaxResultsPerImport) {
+    FhirParser::Error err;
+    err.path = "Observation";
+    err.code = "too_many_results";
+    err.message = "Import exceeds maximum of " +
+                  std::to_string(kMaxResultsPerImport) + " observations per bundle";
+    summary.errors.push_back(err);
+    logErrors(summary.errors, actor);
+    summary.lastError = "Too many Observation resources in FHIR bundle";
+    return false;
+  }
+
+  // Pre-validate all observations before any DB writes to prevent orphaned samples/orders
+  for (const auto &resultData : mapped.results) {
+    if (resultData.parameter.empty() || resultData.value.empty()) {
+      FhirParser::Error err;
+      err.path = "Observation";
+      err.code = "validation_error";
+      err.message = "Missing observation parameter/value";
+      summary.errors.push_back(err);
+    } else {
+      fhirFieldTooLong(resultData.parameter, "parameter", 255, "Observation.code");
+      fhirFieldTooLong(resultData.value, "value", 255, "Observation.value");
+      fhirFieldTooLong(resultData.unit, "unit", 255, "Observation.unit");
+    }
+  }
+  if (!summary.errors.empty()) {
+    logErrors(summary.errors, actor);
+    summary.operationOutcome = buildOperationOutcome(summary.errors);
+    summary.lastError = "FHIR import aborted: observation validation failed";
+    return false;
+  }
+
+  bool sampleCreatedNow = false;
   if (!database_->createSample(sample, actor)) {
     auto existing = database_->getSampleByBarcode(mapped.sample.sampleId);
     if (!existing) {
@@ -472,6 +508,7 @@ bool FhirExchange::importBundle(const std::string &payload,
       return false;
     }
   } else {
+    sampleCreatedNow = true;
     summary.samplesCreated++;
   }
 
@@ -484,6 +521,16 @@ bool FhirExchange::importBundle(const std::string &payload,
   if (!database_->createOrder(order, actor)) {
     auto existing = database_->getOrderByOrderId(mapped.order.orderId);
     if (!existing) {
+      // Compensate: remove the sample we just created so no orphan is left
+      if (sampleCreatedNow) {
+        auto s = database_->getSampleByBarcode(mapped.sample.sampleId);
+        if (s && !database_->deleteSample(s->getId(), actor)) {
+          summary.lastError =
+              "createOrder failed AND compensating deleteSample failed: " +
+              database_->getLastError();
+          return false;
+        }
+      }
       summary.lastError = database_->getLastError();
       return false;
     }
@@ -502,18 +549,12 @@ bool FhirExchange::importBundle(const std::string &payload,
   results.reserve(mapped.results.size());
 
   for (const auto &resultData : mapped.results) {
-    if (resultData.parameter.empty() || resultData.value.empty()) {
-      FhirParser::Error err;
-      err.path = "Observation";
-      err.code = "validation_error";
-      err.message = "Missing observation parameter/value";
-      summary.errors.push_back(err);
-      continue;
-    }
-
     std::string resultId = resultData.resultId;
     if (resultId.empty()) {
       resultId = mapped.order.orderId + "-" + resultData.parameter;
+    }
+    if (resultId.size() > 64) {
+      resultId = resultId.substr(0, 64);
     }
 
     core::TestResult result(resultId, orderDbId, resultData.parameter);

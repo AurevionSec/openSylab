@@ -217,6 +217,35 @@ bool test_hl7_ExportEscapesSpecialChars() {
   return true;
 }
 
+bool test_hl7_ImportPartialObservationValidationAbortsAllWrites() {
+  std::string dbPath = uniqueDbPath();
+  auto db = std::make_shared<opensylab::db::Database>(dbPath);
+  ASSERT_TRUE(db->open());
+  ASSERT_TRUE(db->initializeSchema());
+
+  // Valid PID/OBR, two OBX: first valid, second missing value (field 5 empty)
+  const std::string message =
+      "MSH|^~\\&|LAB|HOSP|LIS|HOSP|202401011200||ORU^R01|MSG_PAR|P|2.5.1\r"
+      "PID|1||SAMP_PAR||Partial^Patient\r"
+      "OBR|1|ORD_PAR|SAMP_PAR|HB^Hemoglobin\r"
+      "OBX|1|NM|HB||12.1|g/dL|11-15\r"
+      "OBX|2|NM|GLU||||\r";  // missing value triggers validation error
+
+  Hl7Exchange exchange(db);
+  Hl7Exchange::ImportSummary summary;
+  ASSERT_FALSE(exchange.importOruR01Message(message, "tester", summary));
+  ASSERT_FALSE(summary.errors.empty());
+  ASSERT_EQ(summary.resultsCreated, 0);
+
+  // No sample, no order must have been written (pre-validation must abort all writes)
+  ASSERT_NULL(db->getSampleByBarcode("SAMP_PAR"));
+  ASSERT_NULL(db->getOrderByOrderId("ORD_PAR"));
+
+  db->close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
 void registerHl7Tests() {
   registerTest("HL7::ParseValidOruR01", test_hl7_ParseValidOruR01);
   registerTest("HL7::MissingSegmentReported", test_hl7_MissingSegmentReported);
@@ -227,4 +256,6 @@ void registerHl7Tests() {
                test_hl7_ExportMessageContainsSegments);
   registerTest("HL7::ExportEscapesSpecialChars",
                test_hl7_ExportEscapesSpecialChars);
+  registerTest("HL7::ImportPartialObservationValidationAbortsAllWrites",
+               test_hl7_ImportPartialObservationValidationAbortsAllWrites);
 }

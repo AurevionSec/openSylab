@@ -90,8 +90,8 @@ bool test_migrations_AfterInitSchemaVersionIsThree() {
   db.close();
   std::remove(dbPath.c_str());
 
-  ASSERT_EQ(maxVersion, 3);
-  ASSERT_EQ(rowCount, 3);
+  ASSERT_EQ(maxVersion, 9);
+  ASSERT_EQ(rowCount, 9);
   return true;
 }
 
@@ -116,8 +116,8 @@ bool test_migrations_Idempotent() {
   db.close();
   std::remove(dbPath.c_str());
 
-  ASSERT_EQ(rowCount, 3);
-  ASSERT_EQ(maxVersion, 3);
+  ASSERT_EQ(rowCount, 9);
+  ASSERT_EQ(maxVersion, 9);
   return true;
 }
 
@@ -155,7 +155,7 @@ bool test_migrations_AppliedInOrder() {
   std::remove(dbPath.c_str());
 
   ASSERT_TRUE(ordered);
-  ASSERT_EQ(prev, 3);
+  ASSERT_EQ(prev, 9);
   return true;
 }
 

@@ -424,7 +424,8 @@ bool PostgreSQLDatabase::logResultRetryImport(
 
 bool PostgreSQLDatabase::upsertApiKey(const std::string & /*key*/,
                                       bool /*active*/,
-                                      const std::string & /*role*/) {
+                                      const std::string & /*role*/,
+                                      const std::string & /*actor*/) {
   setNotImplemented();
   return false;
 }
@@ -600,20 +601,51 @@ std::string PostgreSQLDatabase::getMfaEnrollmentUri(
 }
 
 bool PostgreSQLDatabase::setUserMfaSecret(int /*userId*/,
-                                          const std::string & /*base32Secret*/) {
+                                          const std::string & /*base32Secret*/,
+                                          int64_t /*initialUsedStep*/) {
   setNotImplemented();
   return false;
 }
 
-bool PostgreSQLDatabase::disableUserMfa(int /*userId*/) {
+bool PostgreSQLDatabase::disableUserMfa(int /*userId*/,
+                                       const std::string & /*actor*/) {
   setNotImplemented();
   return false;
 }
 
 bool PostgreSQLDatabase::verifyMfaCodeForEnrollment(
-    const std::string & /*base32Secret*/, const std::string & /*code*/) {
+    const std::string & /*base32Secret*/, const std::string & /*code*/,
+    int64_t & /*matchedStep*/) {
   setNotImplemented();
   return false;
+}
+
+bool PostgreSQLDatabase::verifyAndConsumeMfaCode(
+    const std::string & /*username*/, const std::string & /*secret*/,
+    const std::string & /*code*/) {
+  setNotImplemented();
+  return false;
+}
+
+bool PostgreSQLDatabase::persistBlacklistedToken(const std::string & /*token*/,
+                                                  std::time_t /*expiresAt*/) {
+  setNotImplemented();
+  return false;
+}
+
+std::vector<std::pair<std::string, std::time_t>>
+PostgreSQLDatabase::loadActiveBlacklistedTokens() {
+  setNotImplemented();
+  return {};
+}
+
+void PostgreSQLDatabase::pruneExpiredBlacklistedTokens() {
+  setNotImplemented();
+}
+
+std::time_t PostgreSQLDatabase::getPasswordChangedAt(int /*userId*/) {
+  setNotImplemented();
+  return 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -667,6 +699,11 @@ PostgreSQLDatabase::getLatestSessionForUser(int /*userId*/) {
   return std::nullopt;
 }
 
+int PostgreSQLDatabase::expireStaleSessionsOlderThan(int /*maxLifetimeSeconds*/) {
+  setNotImplemented();
+  return 0;
+}
+
 // ---------------------------------------------------------------------------
 // Authentication
 // ---------------------------------------------------------------------------
@@ -692,7 +729,7 @@ PostgreSQLDatabase::authenticateUser(
 // Error handling
 // ---------------------------------------------------------------------------
 
-const std::string &PostgreSQLDatabase::getLastError() const {
+std::string PostgreSQLDatabase::getLastError() const {
   return lastError_;
 }
 

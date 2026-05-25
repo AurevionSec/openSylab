@@ -55,7 +55,8 @@ public:
    * @param filePath Pfad zur CSV-Datei
    * @return Anzahl erfolgreich gespeicherter Ergebnisse
    */
-  int importAndStore(const std::string &filePath);
+  int importAndStore(const std::string &filePath,
+                     const std::string &actor = "");
 
   /**
    * @brief Setzt das Trennzeichen für CSV-Parsing

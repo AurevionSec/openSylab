@@ -2,6 +2,7 @@
 #define OPENSYLAB_DATABASE_H
 
 #include "db/IDatabase.h"
+#include <mutex>
 
 // Forward declaration für SQLite
 struct sqlite3;
@@ -161,9 +162,15 @@ public:
 
   // API Keys
   [[nodiscard]] bool upsertApiKey(const std::string &key, bool active = true,
-                                  const std::string &role = "OPERATOR") override;
+                                  const std::string &role = "OPERATOR",
+                                  const std::string &actor = "") override;
   [[nodiscard]] std::optional<std::string>
   isApiKeyValid(const std::string &key) override;
+  bool persistBlacklistedToken(const std::string &token,
+                               std::time_t expiresAt) override;
+  [[nodiscard]] std::vector<std::pair<std::string, std::time_t>>
+  loadActiveBlacklistedTokens() override;
+  void pruneExpiredBlacklistedTokens() override;
 
   // Retention
   [[nodiscard]] int getRetentionDays() override;
@@ -245,12 +252,16 @@ public:
   [[nodiscard]] std::string generateMfaSecret() override;
   [[nodiscard]] std::string getMfaEnrollmentUri(const std::string &username,
                                                 const std::string &base32Secret) override;
-  [[nodiscard]] bool setUserMfaSecret(int userId,
-                                      const std::string &base32Secret) override;
-  [[nodiscard]] bool disableUserMfa(int userId) override;
-  // Verify a TOTP code against a raw Base32 secret (for enrollment confirmation)
+  [[nodiscard]] bool setUserMfaSecret(int userId, const std::string &base32Secret,
+                                      int64_t initialUsedStep = -1) override;
+  [[nodiscard]] bool disableUserMfa(int userId,
+                                    const std::string &actor = "") override;
   [[nodiscard]] bool verifyMfaCodeForEnrollment(const std::string &base32Secret,
-                                                const std::string &code) override;
+                                                const std::string &code,
+                                                int64_t &matchedStep) override;
+  [[nodiscard]] bool verifyAndConsumeMfaCode(const std::string &username,
+                                             const std::string &secret,
+                                             const std::string &code) override;
 
   // Sitzungsverfolgung
   [[nodiscard]] bool startSession(int userId, const std::string &username,
@@ -265,6 +276,7 @@ public:
   [[nodiscard]] std::optional<SessionInfo> getSessionById(int sessionId) override;
   [[nodiscard]] std::optional<SessionInfo>
   getLatestSessionForUser(int userId) override;
+  int expireStaleSessionsOlderThan(int maxLifetimeSeconds) override;
 
   // Authentifizierung
   [[nodiscard]] AuthResult
@@ -274,15 +286,27 @@ public:
   authenticateUser(const std::string &username, const std::string &password,
                    const std::optional<std::string> &mfaCode = std::nullopt) override;
 
+  [[nodiscard]] std::time_t getPasswordChangedAt(int userId) override;
+
   // Fehlerbehandlung
-  const std::string &getLastError() const override { return lastError_; }
-  bool hasError() const override { return !lastError_.empty(); }
-  void clearError() override { lastError_.clear(); }
+  std::string getLastError() const override {
+    std::lock_guard<std::mutex> lg(errorMutex_);
+    return lastError_;
+  }
+  bool hasError() const override {
+    std::lock_guard<std::mutex> lg(errorMutex_);
+    return !lastError_.empty();
+  }
+  void clearError() override {
+    std::lock_guard<std::mutex> lg(errorMutex_);
+    lastError_.clear();
+  }
 
 private:
   std::string dbPath_;
   sqlite3 *db_ = nullptr;
   bool isOpen_ = false;
+  mutable std::mutex errorMutex_;
   std::string lastError_;
   std::string auditHmacKey_;
 
