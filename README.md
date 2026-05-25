@@ -2,13 +2,13 @@
 
 **Open-source LIMS for medical diagnostics — ISO 15189-compliant, self-hosted, MIT-licensed.**
 
-[![Version](https://img.shields.io/badge/version-0.8.2-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.9.0-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-green)](#license)
-[![Tests](https://img.shields.io/badge/tests-181%20passing-brightgreen)](#tests)
+[![Tests](https://img.shields.io/badge/tests-228%20passing-brightgreen)](#tests)
 [![C++](https://img.shields.io/badge/C%2B%2B-17-orange)](src/)
 [![React](https://img.shields.io/badge/React-18-61dafb)](frontend/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue)](frontend/src/)
-[![Security](https://img.shields.io/badge/security-PBKDF2%20%7C%20JWT%20%7C%20TOTP-red)](#security)
+[![Security](https://img.shields.io/badge/security-PBKDF2%20%7C%20JWT%20%7C%20TOTP%20%7C%20HMAC--chain-red)](#security)
 
 OpenSylab is a LIMS for small to medium diagnostic laboratories that want to run a complete, ISO 15189-capable system — without enterprise license costs, without US-cloud dependencies, without a database server.
 
@@ -110,7 +110,7 @@ OpenSylab is **not** suitable for: high-throughput laboratories with >100 concur
 
 ---
 
-## Features — v0.8.2
+## Features — v0.9.0
 
 ### Laboratory Data Management
 | Feature | Description |
@@ -120,8 +120,10 @@ OpenSylab is **not** suitable for: high-throughput laboratories with >100 concur
 | **Result entry** | Auto-flag on input: NORMAL / LOW / HIGH / **CRITICAL** (margin-based: 50 % of the reference interval) — manual override possible |
 | **Soft-delete** | Samples → ARCHIVED, orders → CANCELLED, results → REJECTED — rows are retained for the audit trail |
 | **Reference ranges** | Per result `reference_low` / `reference_high`, flag recalculated on every update |
-| **Pagination** | Server-side pagination on all list endpoints (limit / offset) |
+| **Pagination** | Server-side pagination on all list endpoints (limit / offset, capped at 1 000) |
 | **Global search** | Header search bar navigates via `?q=` to samples or orders |
+| **Migration framework** | Versioned DB schema migrations with checksums, run at startup |
+| **OpenAPI spec** | Machine-readable spec served at `GET /api/v1/openapi.yaml` |
 
 ### Data Import / Export
 | Feature | Description |
@@ -145,6 +147,7 @@ OpenSylab is **not** suitable for: high-throughput laboratories with >100 concur
 | **Last-admin protection** | `updateUser`, `deleteUser`, `assignUserRole` block demotion of the last admin — transactional, no TOCTOU |
 | **Self-delete guard** | Admin cannot deactivate themselves |
 | **Audit on all writes** | Every CREATE / UPDATE / DELETE produces an AuditEntry with `user_id`, `action`, `entity`, `timestamp` |
+| **HMAC-SHA256 audit hash chain** | Every audit entry carries an HMAC over its content + previous hash; chain integrity verifiable via `GET /api/v1/audit/verify` |
 | **Error sanitization** | HTTP responses contain no SQLite internals |
 | **TLS/HTTPS** | `--tls-cert` / `--tls-key` flags; `--force-https` prevents HTTP operation in production |
 
@@ -158,17 +161,18 @@ OpenSylab is **not** suitable for: high-throughput laboratories with >100 concur
 | **useEntityList hook** | Universal paginated list hook with abort mechanism, race-condition-safe |
 | **MFA login flow** | Two-step login: credentials → TOTP code |
 | **Secure logout navigation** | Sidebar logout navigates immediately to `/login` |
-| **Health endpoint** | `GET /api/v1/health` — unauthenticated, returns `{"status":"ok","version":"0.8.2"}` |
+| **Health endpoint** | `GET /api/v1/health` — unauthenticated, returns `{"status":"ok","version":"0.9.0"}` |
 | **Version SSOT** | `CMakeLists.txt` → `include/version.h` (C++); `package.json` → `VITE_APP_VERSION` (frontend) |
+| **IDatabase interface** | Abstraction layer for testability; `Database` (SQLite) and `PostgreSQLDatabase` both implement `IDatabase` |
 
 ### Quality
 | Metric | Value |
 |--------|------|
-| **Unit tests** | 181 passing |
+| **Unit tests** | 228 passing |
 | **TypeScript** | strict mode, 0 errors |
 | **npm audit** | 0 vulnerabilities |
-| **Bug hunts** | 12 iterations (this session), 3 consecutive clean runs — 21 files, 30+ bugs fixed. v0.8.2: 4 regressions fixed |
-| **Total bug hunts** | 68 iterations total, 90+ bugs fixed |
+| **Bug hunts (v0.9.0)** | 36 waves, 3 consecutive APPROVED — 28 bugs fixed across 21 files |
+| **Total bug hunts** | 80+ waves total, 120+ bugs fixed |
 
 ---
 
@@ -178,7 +182,9 @@ OpenSylab is **not** suitable for: high-throughput laboratories with >100 concur
 - **Language**: C++17
 - **Database**: SQLite3 (embedded, no external server required)
 - **Auth**: PBKDF2-HMAC-SHA256 (passwords) · HMAC-SHA256 JWT · HMAC-SHA1 TOTP
-- **Cryptography**: OpenSSL
+- **Cryptography**: OpenSSL 3.x (EVP_MAC API)
+- **JSON**: nlohmann/json
+- **Logging**: spdlog
 - **Build**: CMake 3.15+
 
 ### Frontend
@@ -239,7 +245,8 @@ Detailed instructions: [docs/DOCKER.md](docs/DOCKER.md)
 
 | Environment variable | Default | Description |
 |-------------------|---------|-------------|
-| `OPENSYLAB_JWT_SECRET` | dev-secret | JWT signing key **(in production: generate randomly!)** |
+| `OPENSYLAB_JWT_SECRET` | dev-secret | JWT signing key **(in production: generate randomly, ≥32 chars!)** |
+| `OPENSYLAB_AUDIT_HMAC_KEY` | — | HMAC key for audit hash chain **(mandatory in production, ≥32 chars; generate with `openssl rand -hex 32`)** |
 | `OPENSYLAB_CORS_ORIGIN` | `http://localhost:5173` | Allowed frontend origin |
 | `OPENSYLAB_DB_PATH` | `opensylab.db` | Database path |
 | `OPENSYLAB_TLS_CERT` | — | Path to TLS certificate (PEM) |
@@ -305,6 +312,8 @@ OPENSYLAB_CORS_ORIGIN="https://lims.meinlabor.de" \
 | `POST` | `/api/v1/hl7/import` | HL7 v2.5.1 ORU^R01 import | OPERATOR+ |
 | `POST` | `/api/v1/fhir/import` | FHIR R4 Bundle import | OPERATOR+ |
 | `GET` | `/api/v1/stats` | Dashboard statistics (backend-aggregated) | JWT |
+| `GET` | `/api/v1/audit/verify` | Verify HMAC audit hash chain integrity | ADMIN |
+| `GET` | `/api/v1/openapi.yaml` | OpenAPI 3.0 specification | — |
 
 Full API documentation: [docs/API.md](docs/API.md)
 
@@ -323,7 +332,7 @@ cd frontend && npx tsc --noEmit
 timeout 60 ./build/bin/opensylab_tests
 ```
 
-**181 unit tests passing** — backend (C++): database, domain entities, API router, CSV import, HL7, FHIR, statistics, utils.
+**228 unit tests passing** — backend (C++): database, domain entities, API router, CSV import, HL7, FHIR, statistics, utils.
 
 Further details: [docs/TESTING.md](docs/TESTING.md)
 
@@ -365,4 +374,4 @@ Developed with [Claude Code](https://claude.ai/code) (Anthropic).
 
 Full version history: [CHANGELOG.md](CHANGELOG.md)
 
-**Current version: [0.8.2](CHANGELOG.md#082---2026-05-14)** — test regression fix: all 181 tests green (isValidStatusString refactor).
+**Current version: [0.9.0](CHANGELOG.md#090)** — architecture modernization: IDatabase interface, nlohmann/json, spdlog, migration framework, OpenAPI spec, HMAC audit hash chain, 228 tests passing.
