@@ -28,15 +28,39 @@ std::string uniqueDbPath() {
 }
 } // namespace
 
+// Base32 decode helper — mirrors Database.cpp anonymous-namespace function
+static std::string testBase32Decode(const std::string &input) {
+  static const std::string kAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  std::string output;
+  int buf = 0;
+  int bitsLeft = 0;
+  for (unsigned char c : input) {
+    if (c == '=') break;
+    c = static_cast<unsigned char>(std::toupper(static_cast<int>(c)));
+    const size_t val = kAlphabet.find(static_cast<char>(c));
+    if (val == std::string::npos) continue;
+    buf = (buf << 5) | static_cast<int>(val);
+    bitsLeft += 5;
+    if (bitsLeft >= 8) {
+      output += static_cast<char>((buf >> (bitsLeft - 8)) & 0xFF);
+      bitsLeft -= 8;
+    }
+  }
+  return output;
+}
+
+// computeMfaCode mirrors Database.cpp production logic: Base32-decode first.
 int computeMfaCode(const std::string &secret, std::time_t now) {
   if (secret.empty()) return -1;
+  const std::string decoded = testBase32Decode(secret);
+  if (decoded.empty()) return -1;
   uint64_t timeStep = static_cast<uint64_t>(now) / 30;
   unsigned char timeBytes[8];
   uint64_t ts = timeStep;
   for (int i = 7; i >= 0; i--) { timeBytes[i] = ts & 0xFF; ts >>= 8; }
   unsigned char hmac[20];
   unsigned int hmacLen = 20;
-  HMAC(EVP_sha1(), secret.c_str(), static_cast<int>(secret.length()),
+  HMAC(EVP_sha1(), decoded.c_str(), static_cast<int>(decoded.length()),
        timeBytes, sizeof(timeBytes), hmac, &hmacLen);
   int offset = hmac[19] & 0x0F;
   uint32_t trunc = ((hmac[offset] & 0x7F) << 24) | ((hmac[offset+1] & 0xFF) << 16)
@@ -1134,12 +1158,15 @@ bool test_database_CreateSamplesBatch_DuplicateIds() {
   Sample s2("S_DUP", "P2");
   std::vector<Sample> samples = {s1, s2};
 
+  // Permissive semantics: in-batch duplicate is skipped, first occurrence wins.
   auto batch = db.createSamplesBatch(samples, "tester");
   ASSERT_EQ(batch.inserted, static_cast<size_t>(1));
   ASSERT_EQ(batch.failures.size(), static_cast<size_t>(1));
 
+  // First sample committed — S_DUP must exist with patient P1.
   auto stored = db.getSampleByBarcode("S_DUP");
   ASSERT_NOT_NULL(stored);
+  ASSERT_EQ(stored->getPatientId(), std::string("P1"));
 
   db.close();
   std::remove(dbPath.c_str());
@@ -1167,12 +1194,14 @@ bool test_database_CreateResultsBatch_DuplicateIds() {
   r2.setUnit("mg/L");
   std::vector<TestResult> results = {r1, r2};
 
+  // Atomic semantics: second item fails → entire batch rolled back.
   auto batch = db.createTestResultsBatch(results, "tester");
-  ASSERT_EQ(batch.inserted, static_cast<size_t>(1));
+  ASSERT_EQ(batch.inserted, static_cast<size_t>(0));
   ASSERT_EQ(batch.failures.size(), static_cast<size_t>(1));
 
+  // Nothing committed — R_DUP must not exist.
   auto stored = db.getTestResultByResultId("R_DUP");
-  ASSERT_NOT_NULL(stored);
+  ASSERT_NULL(stored);
 
   db.close();
   std::remove(dbPath.c_str());
@@ -1679,7 +1708,7 @@ bool test_database_LdapAuthenticationRejectsWrongPassword() {
   auto entries =
       db.getAuditLogByEntity(AuditEntry::EntityType::USER, username);
   const AuditEntry *entry =
-      findAuditEntry(entries, AuditEntry::ActionType::UPDATE,
+      findAuditEntry(entries, AuditEntry::ActionType::LOGIN_FAILED,
                      AuditEntry::EntityType::USER, username, username);
   ASSERT_NOT_NULL(entry);
   ASSERT_NE(entry->getDetails().find("LDAP"), std::string::npos);
@@ -1697,7 +1726,8 @@ bool test_database_MfaRequiredFlowLocalUser() {
 
   const std::string username = "mfa_local";
   const std::string password = "secret";
-  const std::string secret = "LOCAL_MFA_SECRET";
+  // Use a valid RFC 4648 Base32 secret (32 chars = 20 decoded bytes)
+  const std::string secret = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PX";
 
   User user(username, User::hashPassword(password), User::Role::OPERATOR);
   ASSERT_TRUE(db.createUser(user));
@@ -1840,7 +1870,8 @@ bool test_database_MfaRequiredLogsAuditOnMissingCode() {
 
   const std::string username = "mfa_missing";
   const std::string password = "secret";
-  const std::string secret = "MISSING_MFA_SECRET";
+  // Valid Base32 secret so the code path reaches the "MFA required" check
+  const std::string secret = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PX";
 
   User user(username, User::hashPassword(password), User::Role::OPERATOR);
   ASSERT_TRUE(db.createUser(user));
@@ -1853,7 +1884,7 @@ bool test_database_MfaRequiredLogsAuditOnMissingCode() {
   auto entries =
       db.getAuditLogByEntity(AuditEntry::EntityType::USER, username);
   const AuditEntry *entry =
-      findAuditEntry(entries, AuditEntry::ActionType::UPDATE,
+      findAuditEntry(entries, AuditEntry::ActionType::LOGIN_FAILED,
                      AuditEntry::EntityType::USER, username, username);
   ASSERT_NOT_NULL(entry);
   ASSERT_NE(entry->getDetails().find("MFA erforderlich"), std::string::npos);
@@ -2459,6 +2490,115 @@ bool test_database_DeleteUser_LastAdminProtected() {
   return true;
 }
 
+// ============================================================================
+// MFA Enrollment tests
+// ============================================================================
+
+bool test_database_GenerateMfaSecret_ReturnsBase32() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  const std::string secret = db.generateMfaSecret();
+
+  // A 20-byte source encodes to 32 Base32 characters (no padding)
+  ASSERT_FALSE(secret.empty());
+  ASSERT_EQ(secret.size(), static_cast<size_t>(32));
+
+  // Every character must be in the RFC 4648 Base32 alphabet
+  static const std::string kAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  for (char c : secret) {
+    ASSERT_NE(kAlphabet.find(c), std::string::npos);
+  }
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_database_GetMfaEnrollmentUri_ContainsOtpauth() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  const std::string secret = "JBSWY3DPEHPK3PXP"; // well-known test vector
+  const std::string uri = db.getMfaEnrollmentUri("alice", secret);
+
+  ASSERT_NE(uri.find("otpauth://totp/"), std::string::npos);
+  ASSERT_NE(uri.find("OpenSylab:alice"), std::string::npos);
+  ASSERT_NE(uri.find(secret),            std::string::npos);
+  ASSERT_NE(uri.find("issuer=OpenSylab"), std::string::npos);
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_database_SetUserMfaSecret_PersistsAndDisables() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  // Create a test user
+  const std::string username = "mfa_enroll_user";
+  User user(username, User::hashPassword("pass1"), User::Role::OPERATOR);
+  ASSERT_TRUE(db.createUser(user));
+
+  auto stored = db.getUserByUsername(username);
+  ASSERT_NOT_NULL(stored);
+  const int uid = stored->getId();
+
+  // Use a valid Base32 secret (160-bit / 20-byte source → 32 chars)
+  const std::string b32secret = db.generateMfaSecret();
+  ASSERT_FALSE(b32secret.empty());
+
+  // setUserMfaSecret should succeed
+  ASSERT_TRUE(db.setUserMfaSecret(uid, b32secret));
+
+  // MFA should now be required for this user
+  ASSERT_TRUE(db.isMfaRequiredForUser(username, "OPERATOR"));
+
+  // disableUserMfa should clear it
+  ASSERT_TRUE(db.disableUserMfa(uid));
+  ASSERT_FALSE(db.isMfaRequiredForUser(username, "OPERATOR"));
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_database_VerifyMfaCodeForEnrollment_WorksWithBase32() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  const std::string b32secret = db.generateMfaSecret();
+  ASSERT_FALSE(b32secret.empty());
+
+  // Generate the correct TOTP code using the local computeMfaCode helper
+  const int code = computeMfaCode(b32secret, std::time(nullptr));
+  ASSERT_NE(code, -1);
+  const std::string codeStr = std::to_string(code);
+
+  // verifyMfaCodeForEnrollment must accept the valid code and return the step
+  int64_t matchedStep = -1;
+  ASSERT_TRUE(db.verifyMfaCodeForEnrollment(b32secret, codeStr, matchedStep));
+  ASSERT_TRUE(matchedStep >= static_cast<int64_t>(0));
+
+  // Wrong code must be rejected
+  const std::string wrongCode = (code == 0) ? "999999" : "000000";
+  int64_t badStep = -1;
+  ASSERT_FALSE(db.verifyMfaCodeForEnrollment(b32secret, wrongCode, badStep));
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
 bool test_database_AssignUserRole_LastAdminProtected() {
   std::string dbPath = uniqueDbPath();
   Database db(dbPath);
@@ -2475,6 +2615,105 @@ bool test_database_AssignUserRole_LastAdminProtected() {
   auto still = db.getUserByUsername("admin");
   ASSERT_NOT_NULL(still);
   ASSERT_EQ(still->getRole(), User::Role::ADMIN);
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_database_CreateOrder_NonExistentSampleRejected() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  Order order("ORD_NOEX", "NONEXISTENT_SAMPLE", "Blutbild");
+  ASSERT_FALSE(db.createOrder(order, "tester"));
+  ASSERT_FALSE(db.getLastError().empty());
+
+  auto stored = db.getOrderByOrderId("ORD_NOEX");
+  ASSERT_NULL(stored);
+
+  auto entries = db.getAuditLog();
+  ASSERT_TRUE(entries.empty());
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_database_CreateUser_MustChangePasswordPersisted() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  User user("mcp_user", User::hashPassword("testpass"), User::Role::OPERATOR);
+  user.setMustChangePassword(true);
+  ASSERT_TRUE(db.createUser(user));
+
+  auto stored = db.getUserByUsername("mcp_user");
+  ASSERT_NOT_NULL(stored);
+  ASSERT_TRUE(stored->mustChangePassword());
+
+  User user2("nomcp_user", User::hashPassword("testpass2"), User::Role::VIEWER);
+  user2.setMustChangePassword(false);
+  ASSERT_TRUE(db.createUser(user2));
+
+  auto stored2 = db.getUserByUsername("nomcp_user");
+  ASSERT_NOT_NULL(stored2);
+  ASSERT_FALSE(stored2->mustChangePassword());
+
+  db.close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+bool test_database_ExpireStaleSessionsOlderThan_ExpiresAndAudits() {
+  std::string dbPath = uniqueDbPath();
+  Database db(dbPath);
+  ASSERT_TRUE(db.open());
+  ASSERT_TRUE(db.initializeSchema());
+
+  const std::string username = "expire_user";
+  User user(username, User::hashPassword("secret"), User::Role::OPERATOR);
+  ASSERT_TRUE(db.createUser(user));
+
+  auto auth = db.authenticateUser(username, "secret");
+  ASSERT_NOT_NULL(auth);
+  const int userId = auth->getId();
+  ASSERT_EQ(db.getActiveSessionCount(userId), 1);
+
+  // Back-date login_ts so the session looks 2h old (threshold: 1h)
+  {
+    sqlite3 *rawDb = nullptr;
+    ASSERT_EQ(sqlite3_open(dbPath.c_str(), &rawDb), SQLITE_OK);
+    const char *updateSql =
+        "UPDATE sessions SET login_ts = login_ts - 7200 WHERE logout_ts IS NULL;";
+    sqlite3_stmt *rawStmt = nullptr;
+    ASSERT_EQ(sqlite3_prepare_v2(rawDb, updateSql, -1, &rawStmt, nullptr),
+              SQLITE_OK);
+    sqlite3_step(rawStmt);
+    sqlite3_finalize(rawStmt);
+    sqlite3_close(rawDb);
+  }
+
+  const int expired = db.expireStaleSessionsOlderThan(3600);
+  ASSERT_EQ(expired, 1);
+  ASSERT_EQ(db.getActiveSessionCount(userId), 0);
+
+  auto entries = db.getAuditLogByEntity(AuditEntry::EntityType::USER,
+                                        std::to_string(userId));
+  bool found = false;
+  for (const auto &e : entries) {
+    if (e && e->getAction() == AuditEntry::ActionType::UPDATE &&
+        e->getUser() == "system" &&
+        e->getDetails().find("expired") != std::string::npos) {
+      found = true;
+      break;
+    }
+  }
+  ASSERT_TRUE(found);
 
   db.close();
   std::remove(dbPath.c_str());
@@ -2610,4 +2849,18 @@ void registerDatabaseTests() {
                test_database_DeleteUser_LastAdminProtected);
   registerTest("Database::AssignUserRole_LastAdminProtected",
                test_database_AssignUserRole_LastAdminProtected);
+  registerTest("Database::GenerateMfaSecret_ReturnsBase32",
+               test_database_GenerateMfaSecret_ReturnsBase32);
+  registerTest("Database::GetMfaEnrollmentUri_ContainsOtpauth",
+               test_database_GetMfaEnrollmentUri_ContainsOtpauth);
+  registerTest("Database::SetUserMfaSecret_PersistsAndDisables",
+               test_database_SetUserMfaSecret_PersistsAndDisables);
+  registerTest("Database::VerifyMfaCodeForEnrollment_WorksWithBase32",
+               test_database_VerifyMfaCodeForEnrollment_WorksWithBase32);
+  registerTest("Database::CreateOrder_NonExistentSampleRejected",
+               test_database_CreateOrder_NonExistentSampleRejected);
+  registerTest("Database::CreateUser_MustChangePasswordPersisted",
+               test_database_CreateUser_MustChangePasswordPersisted);
+  registerTest("Database::ExpireStaleSessionsOlderThan_ExpiresAndAudits",
+               test_database_ExpireStaleSessionsOlderThan_ExpiresAndAudits);
 }

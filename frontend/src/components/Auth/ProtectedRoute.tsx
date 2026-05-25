@@ -36,9 +36,14 @@ export const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) 
     return <Navigate to="/profile?force_change=1" replace />;
   }
 
-  // Check role-based access if required
-  if (requiredRole && user.role !== requiredRole) {
-    return <Navigate to="/" replace />;
+  // Check role-based access using hierarchy (ADMIN > OPERATOR > VIEWER > CUSTOM)
+  if (requiredRole) {
+    const ROLE_LEVELS: Record<string, number> = { ADMIN: 4, OPERATOR: 3, VIEWER: 2, CUSTOM: 1 };
+    const required = ROLE_LEVELS[requiredRole] ?? 0;
+    const actual = ROLE_LEVELS[user.role] ?? 0;
+    if (actual < required) {
+      return <Navigate to="/" replace />;
+    }
   }
 
   return <>{children}</>;

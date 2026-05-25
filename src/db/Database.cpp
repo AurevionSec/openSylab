@@ -1,4 +1,6 @@
 #include "db/Database.h"
+#include "utils/Logger.h"
+#include <nlohmann/json.hpp>
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
@@ -8,10 +10,16 @@
 #include <sqlite3.h>
 #include <sstream>
 #include <vector>
-#include <openssl/hmac.h>
+#include <openssl/core_names.h>
+#include <openssl/evp.h>
+#include <openssl/rand.h>
 #include <cstring>
 
 namespace {
+
+// 24-hour tolerance for registration_date validation (accommodates clock skew)
+constexpr std::time_t kMaxFutureDateTolerance = 86400;
+
 // Stellt sicher, dass vorbereitete Statements immer finalisiert werden.
 using StatementPtr = std::unique_ptr<sqlite3_stmt, decltype(&sqlite3_finalize)>;
 
@@ -55,10 +63,40 @@ static std::string base32Decode(const std::string& input) {
   return output;
 }
 
+// RFC 4648 Base32 encode — used to generate otpauth:// enrollment URIs
+static std::string base32Encode(const std::vector<uint8_t>& data) {
+  static const char* kAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  std::string result;
+  result.reserve((data.size() * 8 + 4) / 5);
+
+  int buffer = 0;
+  int bitsLeft = 0;
+  for (uint8_t byte : data) {
+    buffer = (buffer << 8) | byte;
+    bitsLeft += 8;
+    while (bitsLeft >= 5) {
+      bitsLeft -= 5;
+      result += kAlphabet[(buffer >> bitsLeft) & 0x1F];
+    }
+  }
+  if (bitsLeft > 0) {
+    result += kAlphabet[(buffer << (5 - bitsLeft)) & 0x1F];
+  }
+  return result;
+}
+
 // RFC 6238 TOTP (Time-Based One-Time Password) using HMAC-SHA1
 // This is the INDUSTRY STANDARD for 2FA/MFA tokens (used by Google Authenticator, etc.)
 int computeMfaCode(const std::string &secret, std::time_t now) {
   if (secret.empty()) {
+    return -1;
+  }
+
+  // Secrets are stored Base32-encoded (RFC 4648) for compatibility with
+  // standard authenticator apps (Google Authenticator, Authy, etc.).
+  // Always decode from Base32 before HMAC computation.
+  const std::string decodedSecret = base32Decode(secret);
+  if (decodedSecret.empty()) {
     return -1;
   }
 
@@ -74,14 +112,34 @@ int computeMfaCode(const std::string &secret, std::time_t now) {
     timeStepCopy >>= 8;
   }
 
-  // Step 3: Compute HMAC-SHA1(secret, timeBytes)
-  unsigned char hmac[20]; // SHA1 produces 20 bytes
-  unsigned int hmacLen = 20;
-
-  HMAC(EVP_sha1(),
-       secret.c_str(), secret.length(),
-       timeBytes, sizeof(timeBytes),
-       hmac, &hmacLen);
+  // Step 3: Compute HMAC-SHA1(decodedSecret, timeBytes)
+  unsigned char hmac[20] = {};
+  size_t hmacLen = 0;
+  {
+    EVP_MAC *mac = EVP_MAC_fetch(nullptr, "HMAC", nullptr);
+    if (!mac) {
+      return -1;
+    }
+    EVP_MAC_CTX *ctx = EVP_MAC_CTX_new(mac);
+    EVP_MAC_free(mac);
+    if (!ctx) {
+      return -1;
+    }
+    OSSL_PARAM params[] = {
+        OSSL_PARAM_construct_utf8_string(OSSL_MAC_PARAM_DIGEST,
+                                         const_cast<char *>("SHA1"), 0),
+        OSSL_PARAM_END};
+    const bool ok =
+        EVP_MAC_init(ctx,
+                     reinterpret_cast<const unsigned char *>(decodedSecret.c_str()),
+                     decodedSecret.length(), params) == 1 &&
+        EVP_MAC_update(ctx, timeBytes, sizeof(timeBytes)) == 1 &&
+        EVP_MAC_final(ctx, hmac, &hmacLen, sizeof(hmac)) == 1;
+    EVP_MAC_CTX_free(ctx);
+    if (!ok || hmacLen < 20) {
+      return -1;
+    }
+  }
 
   // Step 4: Dynamic Truncation (RFC 6238 Section 5.3)
   // Offset = last nibble of HMAC
@@ -102,38 +160,28 @@ int computeMfaCode(const std::string &secret, std::time_t now) {
 
 // RFC 6238 TOTP verification with ±1 time window tolerance (90 seconds total)
 // This accounts for clock drift and network latency
-bool verifyMfaCode(const std::string &secret, const std::string &code) {
-  if (secret.empty() || code.empty()) {
-    return false;
-  }
-
-  int provided = -1;
-  try {
-    provided = std::stoi(code);
-  } catch (...) {
-    return false;
-  }
-
-  // Check current time window and ±1 adjacent windows (30 seconds each)
-  // This provides 90-second total acceptance window for better usability
-  const std::time_t now = std::time(nullptr);
-  for (int offset = -1; offset <= 1; ++offset) {
-    const std::time_t candidate = now + static_cast<std::time_t>(offset * 30);
-    if (computeMfaCode(secret, candidate) == provided) {
-      return true;
-    }
-  }
-  return false;
-}
 
 std::string escapeCsvField(const std::string &value) {
-  if (value.find_first_of(",\"\n\r") == std::string::npos) {
+  // Spreadsheet formula injection: prefix leading =, +, -, @ with a tab so
+  // Excel/LibreOffice treat the cell as text rather than executing it as a formula.
+  static constexpr const char kFormulaStarters[] = "=+-@";
+  const bool formulaLead = !value.empty() &&
+      std::strchr(kFormulaStarters, value[0]) != nullptr;
+
+  if (!formulaLead && value.find_first_of(",\"\n\r") == std::string::npos) {
     return value;
   }
 
+  // Build content: prepend tab before formula-starting characters.
+  const std::string content = formulaLead ? ("\t" + value) : value;
+
+  if (content.find_first_of(",\"\n\r") == std::string::npos) {
+    return content;
+  }
+
   std::string escaped;
-  escaped.reserve(value.size() + 2);
-  for (char ch : value) {
+  escaped.reserve(content.size() + 2);
+  for (char ch : content) {
     if (ch == '"') {
       escaped.push_back('"');
     }
@@ -337,6 +385,91 @@ std::unique_ptr<opensylab::core::User> userFromRow(sqlite3_stmt *stmt) {
   user->setEmail(columnText(stmt, 9));
   return user;
 }
+
+// Computes HMAC-SHA256 of a canonical JSON representation of the audit entry.
+// JSON prevents separator-collision attacks; HMAC key prevents hash re-computation
+// by an attacker who has gained write access to the database.
+// Returns a 64-character lowercase hex string.
+static std::string computeAuditHash(
+    const std::string &hmacKey,
+    const std::string &prevHash,
+    const std::string &action,
+    const std::string &entity,
+    const std::string &entityId,
+    const std::string &user,
+    const std::string &timestamp,
+    const std::string &details)
+{
+  using json = nlohmann::json;
+  const std::string input = json{
+      {"prev_hash",  prevHash},
+      {"action",     action},
+      {"entity",     entity},
+      {"entity_id",  entityId},
+      {"user",       user},
+      {"timestamp",  timestamp},
+      {"details",    details}
+  }.dump();
+
+  EVP_MAC *mac = EVP_MAC_fetch(nullptr, "HMAC", nullptr);
+  if (!mac) {
+    return "";
+  }
+  EVP_MAC_CTX *ctx = EVP_MAC_CTX_new(mac);
+  EVP_MAC_free(mac);
+  if (!ctx) {
+    return "";
+  }
+
+  OSSL_PARAM params[] = {
+      OSSL_PARAM_construct_utf8_string(OSSL_MAC_PARAM_DIGEST,
+                                       const_cast<char *>("SHA256"), 0),
+      OSSL_PARAM_END};
+
+  unsigned char hash[EVP_MAX_MD_SIZE] = {};
+  size_t hashLen = 0;
+  const bool ok =
+      EVP_MAC_init(ctx,
+                   reinterpret_cast<const unsigned char *>(hmacKey.data()),
+                   hmacKey.size(), params) == 1 &&
+      EVP_MAC_update(ctx,
+                     reinterpret_cast<const unsigned char *>(input.data()),
+                     input.size()) == 1 &&
+      EVP_MAC_final(ctx, hash, &hashLen, sizeof(hash)) == 1;
+  EVP_MAC_CTX_free(ctx);
+
+  if (!ok) {
+    return "";
+  }
+
+  std::string hex;
+  hex.reserve(hashLen * 2);
+  static const char *kHexChars = "0123456789abcdef";
+  for (size_t i = 0; i < hashLen; ++i) {
+    hex += kHexChars[(hash[i] >> 4) & 0xF];
+    hex += kHexChars[hash[i] & 0xF];
+  }
+  return hex;
+}
+
+// Compute lowercase hex-encoded SHA-256 of a string using OpenSSL.
+std::string sha256Hex(const std::string &input) {
+  unsigned char hash[EVP_MAX_MD_SIZE] = {};
+  unsigned int hashLen = 0;
+  if (EVP_Digest(input.data(), input.size(), hash, &hashLen, EVP_sha256(),
+                 nullptr) != 1) {
+    return "";
+  }
+  static constexpr const char kHexDigits[] = "0123456789abcdef";
+  std::string hex;
+  hex.reserve(hashLen * 2);
+  for (unsigned int i = 0; i < hashLen; ++i) {
+    hex += kHexDigits[hash[i] >> 4];
+    hex += kHexDigits[hash[i] & 0xF];
+  }
+  return hex;
+}
+
 } // namespace
 
 namespace opensylab {
@@ -368,12 +501,12 @@ bool Database::open() {
   rc = sqlite3_exec(db_, "PRAGMA journal_mode=WAL;", nullptr, nullptr,
                     &walErrMsg);
   if (rc != SQLITE_OK) {
-    std::cerr << "Warnung: WAL-Modus konnte nicht aktiviert werden";
     if (walErrMsg) {
-      std::cerr << ": " << walErrMsg;
+      LOG_WARN("Warnung: WAL-Modus konnte nicht aktiviert werden: {}", walErrMsg);
       sqlite3_free(walErrMsg);
+    } else {
+      LOG_WARN("Warnung: WAL-Modus konnte nicht aktiviert werden");
     }
-    std::cerr << std::endl;
   }
 
   // Foreign Key Constraints aktivieren (SQLite hat sie standardmäßig aus)
@@ -381,18 +514,280 @@ bool Database::open() {
   rc = sqlite3_exec(db_, "PRAGMA foreign_keys = ON;", nullptr, nullptr,
                     &fkErrMsg);
   if (rc != SQLITE_OK) {
-    std::cerr << "Warnung: Foreign Keys konnten nicht aktiviert werden";
     if (fkErrMsg) {
-      std::cerr << ": " << fkErrMsg;
+      LOG_WARN("Warnung: Foreign Keys konnten nicht aktiviert werden: {}", fkErrMsg);
       sqlite3_free(fkErrMsg);
+    } else {
+      LOG_WARN("Warnung: Foreign Keys konnten nicht aktiviert werden");
     }
-    std::cerr << std::endl;
   }
 
   isOpen_ = true;
-  std::cerr << "Datenbank erfolgreich geöffnet: " << dbPath_ << std::endl;
+
+  LOG_INFO("Datenbank erfolgreich geöffnet: {}", dbPath_);
   return true;
 }
+
+
+// ---------------------------------------------------------------------------
+// Migration helpers
+// ---------------------------------------------------------------------------
+
+// Returns true if `column` exists in `table` (uses PRAGMA table_info).
+// `table` must be a known internal table name — validated against a whitelist
+// to prevent injection via future user-supplied migration SQL.
+static bool columnExists(sqlite3 *db, const std::string &table,
+                          const std::string &column) {
+  static constexpr const char* kAllowedTables[] = {
+      "samples", "orders", "test_results", "audit_log", "users", "user_mfa",
+      "roles", "role_permissions", "user_roles", "auth_config", "api_keys",
+      "user_sessions", "schema_migrations",
+  };
+  bool allowed = false;
+  for (const char* t : kAllowedTables) {
+    if (table == t) { allowed = true; break; }
+  }
+  if (!allowed) { return false; }
+  const std::string sql = "PRAGMA table_info(" + table + ");";
+  sqlite3_stmt *stmt = nullptr;
+  if (sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
+    return false;
+  }
+  bool found = false;
+  while (sqlite3_step(stmt) == SQLITE_ROW) {
+    const auto *name =
+        reinterpret_cast<const char *>(sqlite3_column_text(stmt, 1));
+    if (name && std::string(name) == column) {
+      found = true;
+      break;
+    }
+  }
+  sqlite3_finalize(stmt);
+  return found;
+}
+
+// Parses "ALTER TABLE <table> ADD COLUMN <col> ..." and extracts table/col.
+static bool parseAlterTableAddColumn(const std::string &sql,
+                                      std::string &tableName,
+                                      std::string &colName) {
+  std::string up = sql;
+  std::transform(up.begin(), up.end(), up.begin(), ::toupper);
+
+  const auto alterPos = up.find("ALTER TABLE ");
+  const auto addPos   = up.find("ADD COLUMN ");
+  if (alterPos == std::string::npos || addPos == std::string::npos) return false;
+
+  const size_t tblStart = alterPos + 12;
+  const size_t tblEnd   = up.find(' ', tblStart);
+  if (tblEnd == std::string::npos) return false;
+  tableName = sql.substr(tblStart, tblEnd - tblStart);
+
+  const size_t colStart = addPos + 11;
+  const size_t colEnd   = up.find(' ', colStart);
+  colName = colEnd != std::string::npos ? sql.substr(colStart, colEnd - colStart)
+                                        : sql.substr(colStart);
+  return !tableName.empty() && !colName.empty();
+}
+
+// ---------------------------------------------------------------------------
+// Migration system
+// ---------------------------------------------------------------------------
+
+const std::vector<Database::Migration> &Database::getMigrations() {
+  static const std::vector<Migration> migrations = {
+      {1, "Initial schema baseline",
+       "-- Migration 1: Schema already created by initializeSchema\n"
+       "-- This entry marks the initial schema version.\n"},
+      {2, "Add chain_hash column to audit_log",
+       "ALTER TABLE audit_log ADD COLUMN chain_hash TEXT NOT NULL DEFAULT '';"},
+      {3, "Add mfa_secret_base32 column to users",
+       "ALTER TABLE users ADD COLUMN mfa_secret_base32 TEXT NOT NULL DEFAULT '';"},
+      {4, "Add case-insensitive unique index on users.username",
+       "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_nocase ON users (username COLLATE NOCASE);"},
+      {5, "Add TOTP replay-prevention column to user_mfa",
+       "ALTER TABLE user_mfa ADD COLUMN last_used_totp_step INTEGER NOT NULL DEFAULT -1;"},
+      {6, "Add password_changed_at column to users for session invalidation",
+       "ALTER TABLE users ADD COLUMN password_changed_at INTEGER NOT NULL DEFAULT 0;"},
+      {7, "Add key_hash column to api_keys for constant-time key verification",
+       "ALTER TABLE api_keys ADD COLUMN key_hash TEXT NOT NULL DEFAULT '';"},
+      {8, "Rebuild api_keys: promote key_hash to primary key, drop plaintext key",
+       "CREATE TABLE api_keys_new ("
+       "    key_hash TEXT NOT NULL PRIMARY KEY,"
+       "    key_prefix TEXT NOT NULL DEFAULT '',"
+       "    active INTEGER NOT NULL DEFAULT 1,"
+       "    created_date INTEGER NOT NULL DEFAULT 0,"
+       "    role TEXT NOT NULL DEFAULT 'OPERATOR'"
+       ");"
+       "INSERT INTO api_keys_new (key_hash, key_prefix, active, created_date, role)"
+       "    SELECT key_hash, SUBSTR(key, 1, 8), active,"
+       "           COALESCE(created_date, 0), COALESCE(role, 'OPERATOR')"
+       "    FROM api_keys WHERE key_hash != '';"
+       "DROP TABLE api_keys;"
+       "ALTER TABLE api_keys_new RENAME TO api_keys;"},
+      {9, "Add blacklisted_tokens table for durable JWT revocation",
+       "CREATE TABLE IF NOT EXISTS blacklisted_tokens "
+       "(token TEXT NOT NULL PRIMARY KEY, expires_at INTEGER NOT NULL);"},
+  };
+  return migrations;
+}
+
+int Database::getCurrentSchemaVersion() {
+  if (!isOpen_ || db_ == nullptr) {
+    return 0;
+  }
+  sqlite3_stmt *stmt = nullptr;
+  const char *sql = "SELECT COALESCE(MAX(version), 0) FROM schema_migrations;";
+  if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+    return 0;
+  }
+  auto handle = makeStatement(stmt);
+  int version = 0;
+  if (sqlite3_step(handle.get()) == SQLITE_ROW) {
+    version = sqlite3_column_int(handle.get(), 0);
+  }
+  return version;
+}
+
+bool Database::applyMigration(const Migration &migration) {
+  char *errMsg = nullptr;
+  if (sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr, &errMsg) !=
+      SQLITE_OK) {
+    sqlite3_free(errMsg);
+    return false;
+  }
+
+  // Skip entries where every non-empty line is a comment (baseline marker).
+  // The simple `find("--") == 0` check was insufficient: it also skipped
+  // migrations that start with a comment but contain real SQL on later lines.
+  auto allLinesAreComments = [](const std::string &sql) {
+    std::istringstream ss(sql);
+    std::string line;
+    while (std::getline(ss, line)) {
+      // Trim leading whitespace
+      const auto first = line.find_first_not_of(" \t\r\n");
+      if (first == std::string::npos) continue;  // blank line — skip
+      if (line.compare(first, 2, "--") != 0) return false;  // real SQL found
+    }
+    return true;
+  };
+  const bool isCommentOnly = migration.sql.empty() || allLinesAreComments(migration.sql);
+
+  if (!isCommentOnly) {
+    // For ALTER TABLE ADD COLUMN: check via PRAGMA first to ensure idempotency.
+    // This avoids relying on SQLite error codes and makes re-runs safe.
+    std::string tblName, colName;
+    const bool isAddColumn =
+        parseAlterTableAddColumn(migration.sql, tblName, colName);
+    const bool skipSql =
+        isAddColumn && columnExists(db_, tblName, colName);
+
+    if (skipSql) {
+      LOG_INFO("[Migration] Column {}.{} already exists — skipping ALTER TABLE",
+               tblName, colName);
+    } else {
+      if (sqlite3_exec(db_, migration.sql.c_str(), nullptr, nullptr, &errMsg) !=
+          SQLITE_OK) {
+        const std::string error = errMsg ? errMsg : "Unknown error";
+        sqlite3_free(errMsg);
+        sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+        LOG_ERROR("[Migration] SQL error in migration {}: {}", migration.version,
+                  error);
+        return false;
+      }
+    }
+  }
+
+  // Record the migration
+  sqlite3_stmt *stmt = nullptr;
+  const char *insertSql =
+      "INSERT INTO schema_migrations (version, description) VALUES (?, ?);";
+  if (sqlite3_prepare_v2(db_, insertSql, -1, &stmt, nullptr) != SQLITE_OK) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
+  auto handle = makeStatement(stmt);
+  sqlite3_bind_int(handle.get(), 1, migration.version);
+  sqlite3_bind_text(handle.get(), 2, migration.description.c_str(), -1,
+                    SQLITE_TRANSIENT);
+  const bool ok = (sqlite3_step(handle.get()) == SQLITE_DONE);
+
+  if (!ok) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
+
+  const int commitRc = sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, nullptr);
+  if (commitRc != SQLITE_OK) {
+    setError("Migration COMMIT fehlgeschlagen: " + std::string(sqlite3_errmsg(db_)));
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
+  return true;
+}
+
+bool Database::runMigrations() {
+  const int currentVersion = getCurrentSchemaVersion();
+  const auto &migrations = getMigrations();
+
+  for (const auto &migration : migrations) {
+    if (migration.version <= currentVersion) {
+      continue;
+    }
+    LOG_INFO("[Migration] Applying migration {}: {}", migration.version, migration.description);
+    if (!applyMigration(migration)) {
+      LOG_ERROR("[Migration] ERROR: Migration {} failed", migration.version);
+      return false;
+    }
+    // Post-migration C++ hooks
+    if (migration.version == 7) {
+      // Back-populate key_hash for rows that were created before this migration
+      if (sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr, nullptr) != SQLITE_OK) {
+        LOG_ERROR("[Migration] ERROR: Could not start transaction for migration 7 hook");
+        return false;
+      }
+      const char *selectSql =
+          "SELECT key FROM api_keys WHERE key_hash = '' OR key_hash IS NULL;";
+      sqlite3_stmt *rawSel = nullptr;
+      if (sqlite3_prepare_v2(db_, selectSql, -1, &rawSel, nullptr) != SQLITE_OK) {
+        sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+        LOG_ERROR("[Migration] ERROR: Could not prepare select for migration 7 hook");
+        return false;
+      }
+      auto selHandle = makeStatement(rawSel);
+      std::vector<std::string> keysToHash;
+      while (sqlite3_step(selHandle.get()) == SQLITE_ROW) {
+        keysToHash.emplace_back(columnText(selHandle.get(), 0));
+      }
+      selHandle.reset();
+      for (const auto &k : keysToHash) {
+        const std::string hash = sha256Hex(k);
+        const char *updSql = "UPDATE api_keys SET key_hash = ? WHERE key = ?;";
+        sqlite3_stmt *rawUpd = nullptr;
+        if (sqlite3_prepare_v2(db_, updSql, -1, &rawUpd, nullptr) != SQLITE_OK) {
+          sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+          LOG_ERROR("[Migration] ERROR: Could not prepare update for migration 7 hook");
+          return false;
+        }
+        auto updHandle = makeStatement(rawUpd);
+        sqlite3_bind_text(updHandle.get(), 1, hash.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(updHandle.get(), 2, k.c_str(), -1, SQLITE_TRANSIENT);
+        if (sqlite3_step(updHandle.get()) != SQLITE_DONE) {
+          sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+          LOG_ERROR("[Migration] ERROR: Failed to update key_hash in migration 7 hook");
+          return false;
+        }
+      }
+      if (sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, nullptr) != SQLITE_OK) {
+        sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+        LOG_ERROR("[Migration] ERROR: Could not commit migration 7 hook");
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+// ---------------------------------------------------------------------------
 
 bool Database::close() {
   clearError();
@@ -422,6 +817,12 @@ bool Database::initializeSchema() {
   }
 
   const char *createTableSQL = R"(
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            version     INTEGER PRIMARY KEY,
+            description TEXT    NOT NULL,
+            applied_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+        );
+
         CREATE TABLE IF NOT EXISTS samples (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             sample_id TEXT NOT NULL UNIQUE,
@@ -675,8 +1076,7 @@ bool Database::initializeSchema() {
     const char *countSQL = "SELECT COUNT(*) FROM users;";
     sqlite3_stmt *cRaw = nullptr;
     if (sqlite3_prepare_v2(db_, countSQL, -1, &cRaw, nullptr) != SQLITE_OK) {
-      std::cerr << "[WARNING] Default admin check failed: " << sqlite3_errmsg(db_)
-                << " — run create_admin tool manually.\n";
+      LOG_WARN("[WARNING] Default admin check failed: {} — run create_admin tool manually.", sqlite3_errmsg(db_));
     } else {
       auto cStmt = makeStatement(cRaw);
       if (sqlite3_step(cStmt.get()) == SQLITE_ROW &&
@@ -691,8 +1091,7 @@ bool Database::initializeSchema() {
         )";
         sqlite3_stmt *iRaw = nullptr;
         if (sqlite3_prepare_v2(db_, insertSQL, -1, &iRaw, nullptr) != SQLITE_OK) {
-          std::cerr << "[WARNING] Default admin INSERT failed: " << sqlite3_errmsg(db_)
-                    << " — run create_admin tool manually.\n";
+          LOG_WARN("[WARNING] Default admin INSERT failed: {} — run create_admin tool manually.", sqlite3_errmsg(db_));
         } else {
           auto iStmt = makeStatement(iRaw);
           sqlite3_bind_text(iStmt.get(), 1, "admin", -1, SQLITE_TRANSIENT);
@@ -700,22 +1099,19 @@ bool Database::initializeSchema() {
           sqlite3_bind_text(iStmt.get(), 3, role.c_str(), -1, SQLITE_TRANSIENT);
           sqlite3_bind_int64(iStmt.get(), 4, static_cast<sqlite3_int64>(now));
           if (sqlite3_step(iStmt.get()) == SQLITE_DONE) {
-            std::cerr << "[WARNING] Default admin created (admin/admin). "
-                         "Change password immediately!\n";
+            LOG_WARN("[WARNING] Default admin created (admin/admin). Change password immediately!");
           } else {
-            std::cerr << "[WARNING] Default admin INSERT step failed — run "
-                         "create_admin tool manually.\n";
+            LOG_WARN("[WARNING] Default admin INSERT step failed — run create_admin tool manually.");
           }
         }
       }
     }
   } catch (const std::exception &e) {
-    std::cerr << "[WARNING] Default admin seeding failed: " << e.what()
-              << " — run create_admin tool manually.\n";
+    LOG_WARN("[WARNING] Default admin seeding failed: {} — run create_admin tool manually.", e.what());
   }
 
-  std::cerr << "Datenbankschema erfolgreich initialisiert" << std::endl;
-  return true;
+  LOG_INFO("Datenbankschema erfolgreich initialisiert");
+  return runMigrations();
 }
 
 Database::HealthStatus Database::getHealthStatus() {
@@ -874,7 +1270,7 @@ Database::createSamplesBatch(const std::vector<core::Sample> &samples,
   }
 
   const char *insertSQL = R"(
-        INSERT INTO samples (sample_id, patient_id, patient_name, description, status, registration_date, updated_at)
+        INSERT OR IGNORE INTO samples (sample_id, patient_id, patient_name, description, status, registration_date, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?);
     )";
 
@@ -911,10 +1307,40 @@ Database::createSamplesBatch(const std::vector<core::Sample> &samples,
 
     rc = sqlite3_step(stmt.get());
     if (rc != SQLITE_DONE) {
+      const std::string stepErr = sqlite3_errmsg(db_);
+      sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+      result.inserted = 0;
+      result.failures.clear();
       BatchInsertError error;
       error.index = i;
-      error.message = sqlite3_errmsg(db_);
+      error.message = stepErr;
       result.failures.push_back(error);
+      return result;
+    }
+
+    if (sqlite3_changes(db_) == 0) {
+      // Duplicate barcode — skip, but persist a CREATE audit entry so the
+      // rejected attempt is traceable (ISO 15189 requirement).
+      BatchInsertError dup;
+      dup.index = i;
+      dup.message = "Duplicate barcode: " + sample.getSampleId();
+      result.failures.push_back(dup);
+
+      core::AuditEntry dupEntry(core::AuditEntry::ActionType::CREATE,
+                                core::AuditEntry::EntityType::SAMPLE,
+                                sample.getSampleId(), actorName,
+                                "Import rejected: duplicate barcode");
+      if (!logAudit(dupEntry)) {
+        sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+        result.inserted = 0;
+        result.failures.clear();
+        BatchInsertError auditErr;
+        auditErr.index = i;
+        auditErr.message = "Audit log failed: " + getLastError();
+        result.failures.push_back(auditErr);
+        return result;
+      }
+
       sqlite3_reset(stmt.get());
       sqlite3_clear_bindings(stmt.get());
       continue;
@@ -933,6 +1359,7 @@ Database::createSamplesBatch(const std::vector<core::Sample> &samples,
     if (!logAudit(entry)) {
       sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
       result.inserted = 0;
+      result.failures.clear();
       BatchInsertError error;
       error.index = i;
       error.message = "Audit log failed: " + getLastError();
@@ -947,11 +1374,16 @@ Database::createSamplesBatch(const std::vector<core::Sample> &samples,
 
   rc = sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &errMsg);
   if (rc != SQLITE_OK) {
-    setError("Fehler beim Commit der Transaktion: " +
-             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    const std::string commitErr = errMsg ? errMsg : sqlite3_errmsg(db_);
+    setError("Fehler beim Commit der Transaktion: " + commitErr);
     sqlite3_free(errMsg);
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     result.inserted = 0;
+    result.failures.clear();
+    BatchInsertError err;
+    err.index = samples.size();
+    err.message = "COMMIT failed: " + commitErr;
+    result.failures.push_back(err);
     return result;
   }
 
@@ -959,7 +1391,9 @@ Database::createSamplesBatch(const std::vector<core::Sample> &samples,
 }
 
 std::unique_ptr<core::Sample> Database::getSample(int id) {
-  clearError();
+  // Skip clearError when called inside an active transaction so the
+  // transaction owner's error state is not clobbered.
+  if (sqlite3_get_autocommit(db_)) { clearError(); }
 
   if (!isOpen_) {
     setError("Datenbank ist nicht geöffnet");
@@ -1336,8 +1770,9 @@ bool Database::updateSample(const core::Sample &sample,
     return false;
   }
 
-  auto existing = getSample(sample.getId());
-  if (!existing) {
+  const std::time_t regDate = sample.getRegistrationDate();
+  if (regDate <= 0 || regDate > std::time(nullptr) + kMaxFutureDateTolerance) {
+    setError("registration_date darf nicht in der Zukunft liegen");
     return false;
   }
 
@@ -1348,6 +1783,14 @@ bool Database::updateSample(const core::Sample &sample,
     setError("Fehler beim Starten der Transaktion: " +
              std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
     sqlite3_free(errMsg);
+    return false;
+  }
+
+  // Read existing state inside the transaction so the audit diff reflects
+  // the true pre-update state (ISO 15189 audit trail correctness).
+  auto existing = getSample(sample.getId());
+  if (!existing) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     return false;
   }
 
@@ -1447,8 +1890,21 @@ bool Database::deleteSample(int id, const std::string &actor) {
     return false;
   }
 
+  char *errMsg = nullptr;
+  int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
+                        &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Starten der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    return false;
+  }
+
+  // Read inside transaction so the order-existence check and the archive
+  // UPDATE are atomic — prevents a concurrent createOrder from slipping in.
   auto existing = getSample(id);
   if (!existing) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     return false;
   }
 
@@ -1458,21 +1914,12 @@ bool Database::deleteSample(int id, const std::string &actor) {
     for (const auto &ord : orders) {
       const auto s = ord->getStatus();
       if (s != core::Order::Status::CANCELLED) {
+        sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
         setError("Probe hat aktive Auftraege (ID: " + ord->getOrderId() +
                  "); Auftraege zuerst stornieren.");
         return false;
       }
     }
-  }
-
-  char *errMsg = nullptr;
-  int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
-                        &errMsg);
-  if (rc != SQLITE_OK) {
-    setError("Fehler beim Starten der Transaktion: " +
-             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
-    sqlite3_free(errMsg);
-    return false;
   }
 
   const char *deleteSQL = "UPDATE samples SET status = ? WHERE id = ?;";
@@ -1638,6 +2085,27 @@ bool Database::createOrder(const core::Order &order, const std::string &actor) {
     return false;
   }
 
+  // Explicit FK check — guards against PRAGMA foreign_keys being off.
+  const char *checkSQL = "SELECT COUNT(*) FROM samples WHERE sample_id = ? LIMIT 1;";
+  sqlite3_stmt *rawCheck = nullptr;
+  rc = sqlite3_prepare_v2(db_, checkSQL, -1, &rawCheck, nullptr);
+  if (rc != SQLITE_OK) {
+    const std::string rbErr = sqlite3_errmsg(db_);
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    setError("Fehler beim Prüfen der Proben-ID: " + rbErr);
+    return false;
+  }
+  auto checkStmt = makeStatement(rawCheck);
+  sqlite3_bind_text(checkStmt.get(), 1, order.getSampleId().c_str(), -1, SQLITE_TRANSIENT);
+  rc = sqlite3_step(checkStmt.get());
+  const bool sampleExists = (rc == SQLITE_ROW && sqlite3_column_int(checkStmt.get(), 0) > 0);
+  checkStmt.reset();
+  if (!sampleExists) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    setError("Probe '" + order.getSampleId() + "' nicht gefunden");
+    return false;
+  }
+
   const char *insertSQL = R"(
         INSERT INTO orders (order_id, sample_id, test_type, status, priority,
                            requested_date, completed_date, requested_by, notes)
@@ -1711,7 +2179,7 @@ bool Database::createOrder(const core::Order &order, const std::string &actor) {
 }
 
 std::unique_ptr<core::Order> Database::getOrder(int id) {
-  clearError();
+  if (sqlite3_get_autocommit(db_)) { clearError(); }
 
   if (!isOpen_) {
     setError("Datenbank ist nicht geöffnet");
@@ -1805,7 +2273,7 @@ std::vector<std::unique_ptr<core::Order>>
 Database::getOrdersBySampleId(const std::string &sampleId) {
   std::vector<std::unique_ptr<core::Order>> orders;
 
-  clearError();
+  if (sqlite3_get_autocommit(db_)) { clearError(); }
 
   if (!isOpen_) {
     setError("Datenbank ist nicht geöffnet");
@@ -2027,11 +2495,6 @@ bool Database::updateOrder(const core::Order &order, const std::string &actor) {
     return false;
   }
 
-  auto existing = getOrder(order.getId());
-  if (!existing) {
-    return false;
-  }
-
   char *errMsg = nullptr;
   int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
                         &errMsg);
@@ -2039,6 +2502,14 @@ bool Database::updateOrder(const core::Order &order, const std::string &actor) {
     setError("Fehler beim Starten der Transaktion: " +
              std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
     sqlite3_free(errMsg);
+    return false;
+  }
+
+  // Read existing state inside the transaction so the audit diff reflects
+  // the true pre-update state (ISO 15189 audit trail correctness).
+  auto existing = getOrder(order.getId());
+  if (!existing) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     return false;
   }
 
@@ -2153,25 +2624,6 @@ bool Database::deleteOrder(int id, const std::string &actor) {
     return false;
   }
 
-  auto existing = getOrder(id);
-  if (!existing) {
-    return false;
-  }
-
-  // Check for active results before cancelling order — prevents orphaned results
-  {
-    auto results = getTestResultsByOrderId(existing->getId());
-    for (const auto &res : results) {
-      const auto s = res->getStatus();
-      if (s != core::TestResult::Status::VALIDATED &&
-          s != core::TestResult::Status::REJECTED) {
-        setError("Auftrag hat aktive Ergebnisse (ID: " + res->getResultId() +
-                 "); Ergebnisse zuerst abschliessen oder ablehnen.");
-        return false;
-      }
-    }
-  }
-
   char *errMsg = nullptr;
   int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
                         &errMsg);
@@ -2180,6 +2632,35 @@ bool Database::deleteOrder(int id, const std::string &actor) {
              std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
     sqlite3_free(errMsg);
     return false;
+  }
+
+  // Read inside transaction so the results-check and the cancellation UPDATE
+  // are atomic — prevents concurrent createTestResult from slipping between.
+  auto existing = getOrder(id);
+  if (!existing) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
+
+  // Check for active results using a single fast EXISTS query to avoid
+  // loading potentially thousands of result rows inside a write transaction.
+  {
+    const char *checkSQL =
+        "SELECT 1 FROM test_results WHERE order_id = ? "
+        "AND status NOT IN ('VALIDATED','REJECTED') LIMIT 1;";
+    sqlite3_stmt *rawCheck = nullptr;
+    if (sqlite3_prepare_v2(db_, checkSQL, -1, &rawCheck, nullptr) != SQLITE_OK) {
+      sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+      setError("Fehler beim Prüfen aktiver Ergebnisse");
+      return false;
+    }
+    auto checkStmt = makeStatement(rawCheck);
+    sqlite3_bind_int(checkStmt.get(), 1, existing->getId());
+    if (sqlite3_step(checkStmt.get()) == SQLITE_ROW) {
+      sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+      setError("Auftrag hat aktive Ergebnisse; Ergebnisse zuerst abschliessen oder ablehnen.");
+      return false;
+    }
   }
 
   const char *deleteSQL = "UPDATE orders SET status = ? WHERE id = ?;";
@@ -2276,11 +2757,6 @@ bool Database::createTestResult(const core::TestResult &result,
     return false;
   }
 
-  auto order = getOrder(result.getOrderId());
-  if (!order) {
-    return false;
-  }
-
   const std::string computedFlag =
       core::TestResult::flagToString(result.getFlag());
 
@@ -2291,6 +2767,14 @@ bool Database::createTestResult(const core::TestResult &result,
     setError("Fehler beim Starten der Transaktion: " +
              std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
     sqlite3_free(errMsg);
+    return false;
+  }
+
+  // Read order inside transaction to avoid TOCTOU race with concurrent
+  // deleteOrder — ensures the referenced order still exists at insert time.
+  auto order = getOrder(result.getOrderId());
+  if (!order) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     return false;
   }
 
@@ -2423,38 +2907,42 @@ Database::createTestResultsBatch(const std::vector<core::TestResult> &results,
 
   for (size_t i = 0; i < results.size(); ++i) {
     const auto &item = results[i];
-    auto failWith = [&](const std::string &message) {
-      BatchInsertError error;
-      error.index = i;
-      error.message = message;
-      result.failures.push_back(error);
+
+    auto rollbackAndReturn = [&](const std::string &message) -> BatchInsertResult {
+      sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+      result.inserted = 0;
+      result.failures.clear();
+      BatchInsertError err;
+      err.index = i;
+      err.message = message;
+      result.failures.push_back(err);
+      return result;
     };
 
     if (item.getResultId().empty()) {
-      failWith("Ergebnis-ID darf nicht leer sein");
-      continue;
+      return rollbackAndReturn("Ergebnis-ID darf nicht leer sein");
     }
     if (item.getOrderId() <= 0) {
-      failWith("Auftrags-ID ist ungültig");
-      continue;
+      return rollbackAndReturn("Auftrags-ID ist ungültig");
     }
     if (item.getTestParameter().empty()) {
-      failWith("Testparameter darf nicht leer sein");
-      continue;
+      return rollbackAndReturn("Testparameter darf nicht leer sein");
     }
     if (item.getValue().empty()) {
-      failWith("Messwert darf nicht leer sein");
-      continue;
+      return rollbackAndReturn("Messwert darf nicht leer sein");
     }
     if (item.getUnit().empty()) {
-      failWith("Einheit darf nicht leer sein");
-      continue;
+      return rollbackAndReturn("Einheit darf nicht leer sein");
     }
 
     auto order = getOrder(item.getOrderId());
     if (!order) {
-      failWith(getLastError());
-      continue;
+      return rollbackAndReturn(getLastError());
+    }
+    if (order->getStatus() == core::Order::Status::CANCELLED) {
+      return rollbackAndReturn("Order " +
+                               std::to_string(item.getOrderId()) +
+                               " is cancelled — results cannot be added");
     }
 
     const std::string computedFlag =
@@ -2487,10 +2975,7 @@ Database::createTestResultsBatch(const std::vector<core::TestResult> &results,
 
     rc = sqlite3_step(stmt.get());
     if (rc != SQLITE_DONE) {
-      failWith(sqlite3_errmsg(db_));
-      sqlite3_reset(stmt.get());
-      sqlite3_clear_bindings(stmt.get());
-      continue;
+      return rollbackAndReturn(sqlite3_errmsg(db_));
     }
 
     std::ostringstream details;
@@ -2507,13 +2992,7 @@ Database::createTestResultsBatch(const std::vector<core::TestResult> &results,
                            core::AuditEntry::EntityType::RESULT,
                            item.getResultId(), actorName, details.str());
     if (!logAudit(entry)) {
-      sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-      result.inserted = 0;
-      BatchInsertError error;
-      error.index = i;
-      error.message = "Audit log failed: " + getLastError();
-      result.failures.push_back(error);
-      return result;
+      return rollbackAndReturn("Audit log failed: " + getLastError());
     }
 
     sqlite3_reset(stmt.get());
@@ -2523,11 +3002,16 @@ Database::createTestResultsBatch(const std::vector<core::TestResult> &results,
 
   rc = sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &errMsg);
   if (rc != SQLITE_OK) {
-    setError("Fehler beim Commit der Transaktion: " +
-             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    const std::string commitErr = errMsg ? errMsg : sqlite3_errmsg(db_);
+    setError("Fehler beim Commit der Transaktion: " + commitErr);
     sqlite3_free(errMsg);
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     result.inserted = 0;
+    result.failures.clear();
+    BatchInsertError err;
+    err.index = results.size();
+    err.message = "COMMIT failed: " + commitErr;
+    result.failures.push_back(err);
     return result;
   }
 
@@ -2535,7 +3019,7 @@ Database::createTestResultsBatch(const std::vector<core::TestResult> &results,
 }
 
 std::unique_ptr<core::TestResult> Database::getTestResult(int id) {
-  clearError();
+  if (sqlite3_get_autocommit(db_)) { clearError(); }
 
   if (!isOpen_) {
     setError("Datenbank ist nicht geöffnet");
@@ -2634,7 +3118,7 @@ Database::getTestResultsByOrderId(int orderId, std::optional<int> limit,
                                   std::optional<int> offset) {
   std::vector<std::unique_ptr<core::TestResult>> results;
 
-  clearError();
+  if (sqlite3_get_autocommit(db_)) { clearError(); }
 
   if (!isOpen_) {
     setError("Datenbank ist nicht geöffnet");
@@ -2799,22 +3283,26 @@ bool Database::updateTestResult(const core::TestResult &result,
     return false;
   }
 
-  auto existing = getTestResult(result.getId());
-  if (!existing) {
-    return false;
-  }
-
-  if (existing->getStatus() == core::TestResult::Status::REJECTED) {
-    setError("REJECTED-Ergebnisse koennen nicht mehr geaendert werden (Terminalzustand).");
-    return false;
-  }
-
   char *errMsg = nullptr;
   int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr, &errMsg);
   if (rc != SQLITE_OK) {
     setError("Fehler beim Starten der Transaktion: " +
              std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
     sqlite3_free(errMsg);
+    return false;
+  }
+
+  // Read existing state inside the transaction so the audit diff reflects
+  // the true pre-update state (ISO 15189 audit trail correctness).
+  auto existing = getTestResult(result.getId());
+  if (!existing) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
+
+  if (existing->getStatus() == core::TestResult::Status::REJECTED) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    setError("REJECTED-Ergebnisse koennen nicht mehr geaendert werden (Terminalzustand).");
     return false;
   }
 
@@ -2985,8 +3473,19 @@ bool Database::updateTestResultWithAudit(const core::TestResult &result,
     return false;
   }
 
+  char *errMsg = nullptr;
+  int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
+                        &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Starten der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    return false;
+  }
+
   auto existing = getTestResult(result.getId());
   if (!existing) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     if (!hasError()) {
       setError("Ergebnis mit ID " + std::to_string(result.getId()) +
                " nicht gefunden");
@@ -2995,17 +3494,8 @@ bool Database::updateTestResultWithAudit(const core::TestResult &result,
   }
 
   if (existing->getStatus() == core::TestResult::Status::REJECTED) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     setError("REJECTED-Ergebnisse koennen nicht mehr geaendert werden (Terminalzustand).");
-    return false;
-  }
-
-  char *errMsg = nullptr;
-  int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
-                        &errMsg);
-  if (rc != SQLITE_OK) {
-    setError("Fehler beim Starten der Transaktion: " +
-             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
-    sqlite3_free(errMsg);
     return false;
   }
 
@@ -3079,11 +3569,22 @@ bool Database::exportValidatedResultsToCsv(const std::string &filePath,
     return false;
   }
 
+  // Begin transaction first so that the file write and audit entry are atomic:
+  // either both succeed or neither is visible.
+  char *txErrMsg = nullptr;
+  int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
+                        &txErrMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Starten der Transaktion: " +
+             std::string(txErrMsg ? txErrMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(txErrMsg);
+    return false;
+  }
+
   std::ofstream output(filePath);
   if (!output.is_open()) {
     setError("Exportdatei konnte nicht geschrieben werden");
-    output.close();
-    std::remove(filePath.c_str());
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     return false;
   }
 
@@ -3101,12 +3602,13 @@ bool Database::exportValidatedResultsToCsv(const std::string &filePath,
   selectSql << " ORDER BY id;";
 
   sqlite3_stmt *rawStmt = nullptr;
-  int rc = sqlite3_prepare_v2(db_, selectSql.str().c_str(), -1, &rawStmt, nullptr);
+  rc = sqlite3_prepare_v2(db_, selectSql.str().c_str(), -1, &rawStmt, nullptr);
   if (rc != SQLITE_OK) {
     setError("Fehler beim Vorbereiten des SELECT: " +
              std::string(sqlite3_errmsg(db_)));
     output.close();
     std::remove(filePath.c_str());
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     return false;
   }
   auto stmt = makeStatement(rawStmt);
@@ -3125,15 +3627,15 @@ bool Database::exportValidatedResultsToCsv(const std::string &filePath,
   while ((rc = sqlite3_step(stmt.get())) == SQLITE_ROW) {
     exportedResultIds.push_back(columnText(stmt.get(), 0));
     output << escapeCsvField(columnText(stmt.get(), 0)) << ","
-           << columnText(stmt.get(), 1) << ","
+           << escapeCsvField(columnText(stmt.get(), 1)) << ","
            << escapeCsvField(columnText(stmt.get(), 2)) << ","
            << escapeCsvField(columnText(stmt.get(), 3)) << ","
            << escapeCsvField(columnText(stmt.get(), 4)) << ","
-           << columnText(stmt.get(), 5) << ","
-           << columnText(stmt.get(), 6) << ","
+           << escapeCsvField(columnText(stmt.get(), 5)) << ","
+           << escapeCsvField(columnText(stmt.get(), 6)) << ","
            << escapeCsvField(columnText(stmt.get(), 7)) << ","
            << escapeCsvField(columnText(stmt.get(), 8)) << ","
-           << columnText(stmt.get(), 9) << ","
+           << escapeCsvField(columnText(stmt.get(), 9)) << ","
            << escapeCsvField(columnText(stmt.get(), 10)) << ","
            << escapeCsvField(columnText(stmt.get(), 11)) << "\n";
     exported++;
@@ -3144,6 +3646,7 @@ bool Database::exportValidatedResultsToCsv(const std::string &filePath,
              std::string(sqlite3_errmsg(db_)));
     output.close();
     std::remove(filePath.c_str());
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     return false;
   }
 
@@ -3151,6 +3654,7 @@ bool Database::exportValidatedResultsToCsv(const std::string &filePath,
     output.close();
     std::remove(filePath.c_str());
     setError("Keine validierten Ergebnisse zum Export");
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     return false;
   }
 
@@ -3158,18 +3662,7 @@ bool Database::exportValidatedResultsToCsv(const std::string &filePath,
     setError("Fehler beim Schreiben der Exportdatei");
     output.close();
     std::remove(filePath.c_str());
-    return false;
-  }
-
-  char *errMsg = nullptr;
-  rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
-                    &errMsg);
-  if (rc != SQLITE_OK) {
-    setError("Fehler beim Starten der Transaktion: " +
-             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
-    sqlite3_free(errMsg);
-    output.close();
-    std::remove(filePath.c_str());
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     return false;
   }
 
@@ -3182,19 +3675,22 @@ bool Database::exportValidatedResultsToCsv(const std::string &filePath,
                            core::AuditEntry::EntityType::RESULT, resultId,
                            actor, details);
     if (!logAudit(entry)) {
-      sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+      output.close();
       std::remove(filePath.c_str());
+      sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
       return false;
     }
   }
 
-  rc = sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &errMsg);
+  char *commitErrMsg = nullptr;
+  rc = sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &commitErrMsg);
   if (rc != SQLITE_OK) {
     setError("Fehler beim Commit der Transaktion: " +
-             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
-    sqlite3_free(errMsg);
-    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+             std::string(commitErrMsg ? commitErrMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(commitErrMsg);
+    output.close();
     std::remove(filePath.c_str());
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     return false;
   }
 
@@ -3210,21 +3706,6 @@ bool Database::validateTestResult(const std::string &resultId,
     return false;
   }
 
-  auto result = getTestResultByResultId(resultId);
-  if (!result) {
-    return false;
-  }
-
-  // Terminal-state guard: REJECTED results cannot be promoted to VALIDATED
-  if (result->getStatus() == core::TestResult::Status::REJECTED) {
-    setError("REJECTED-Ergebnisse koennen nicht validiert werden (Terminalzustand).");
-    return false;
-  }
-  if (result->getStatus() == core::TestResult::Status::VALIDATED) {
-    setError("Ergebnis ist bereits validiert.");
-    return false;
-  }
-
   char *errMsg = nullptr;
   int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
                         &errMsg);
@@ -3232,6 +3713,24 @@ bool Database::validateTestResult(const std::string &resultId,
     setError("Fehler beim Starten der Transaktion: " +
              std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
     sqlite3_free(errMsg);
+    return false;
+  }
+
+  auto result = getTestResultByResultId(resultId);
+  if (!result) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
+
+  // Terminal-state guard: REJECTED results cannot be promoted to VALIDATED
+  if (result->getStatus() == core::TestResult::Status::REJECTED) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    setError("REJECTED-Ergebnisse koennen nicht validiert werden (Terminalzustand).");
+    return false;
+  }
+  if (result->getStatus() == core::TestResult::Status::VALIDATED) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    setError("Ergebnis ist bereits validiert.");
     return false;
   }
 
@@ -3272,11 +3771,6 @@ bool Database::deleteTestResult(int id, const std::string &actor) {
     return false;
   }
 
-  auto existing = getTestResult(id);
-  if (!existing) {
-    return false;
-  }
-
   char *errMsg = nullptr;
   int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
                         &errMsg);
@@ -3284,6 +3778,14 @@ bool Database::deleteTestResult(int id, const std::string &actor) {
     setError("Fehler beim Starten der Transaktion: " +
              std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
     sqlite3_free(errMsg);
+    return false;
+  }
+
+  // Read inside transaction so the audit diff reflects true pre-delete state
+  // and is atomic with the soft-delete UPDATE (ISO 15189 audit correctness).
+  auto existing = getTestResult(id);
+  if (!existing) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     return false;
   }
 
@@ -3786,41 +4288,241 @@ bool Database::logAudit(const core::AuditEntry &entry) {
     return false;
   }
 
+  // Hash-chain atomicity strategy:
+  // - If we are already inside a caller-managed transaction (BEGIN IMMEDIATE),
+  //   we rely on that transaction's exclusive lock — no nested BEGIN needed.
+  // - If we are in autocommit mode (standalone call), we start our own
+  //   BEGIN IMMEDIATE to prevent concurrent writes racing between the
+  //   hash SELECT and the INSERT.
+  const bool ownTransaction = (sqlite3_get_autocommit(db_) != 0);
+
+  if (ownTransaction) {
+    char *txErrMsg = nullptr;
+    const int txRc = sqlite3_exec(db_, "BEGIN IMMEDIATE;", nullptr, nullptr, &txErrMsg);
+    if (txRc != SQLITE_OK) {
+      const std::string txErr = txErrMsg ? txErrMsg : sqlite3_errmsg(db_);
+      sqlite3_free(txErrMsg);
+      setError("Fehler beim Starten der Hash-Chain-Transaktion: " + txErr);
+      return false;
+    }
+  }
+
+  // Fetch the last chain_hash (within the active transaction).
+  // Skip pre-migration rows that have empty chain_hash so they don't
+  // break the chain by supplying the genesis hash when a real chain exists.
+  std::string prevHash(64, '0');
+  {
+    sqlite3_stmt *hashRaw = nullptr;
+    const char *hashSql =
+        "SELECT chain_hash FROM audit_log WHERE chain_hash IS NOT NULL AND chain_hash != '' ORDER BY id DESC LIMIT 1;";
+    if (sqlite3_prepare_v2(db_, hashSql, -1, &hashRaw, nullptr) == SQLITE_OK) {
+      auto hashStmt = makeStatement(hashRaw);
+      if (sqlite3_step(hashStmt.get()) == SQLITE_ROW) {
+        const auto *text = reinterpret_cast<const char *>(
+            sqlite3_column_text(hashStmt.get(), 0));
+        if (text && *text) {
+          prevHash = text;
+        }
+      }
+    }
+  }
+
+  const std::string actionStr    = entry.getActionString();
+  const std::string entityStr    = entry.getEntityString();
+  const std::string entityId     = entry.getEntityId();
+  const std::string user         = entry.getUser();
+  const std::string timestampStr = std::to_string(
+      static_cast<long long>(entry.getTimestamp()));
+  const std::string details      = entry.getDetails();
+
+  const std::string newHash = computeAuditHash(
+      auditHmacKey_, prevHash, actionStr, entityStr, entityId, user, timestampStr, details);
+
   const char *insertSQL = R"(
-        INSERT INTO audit_log (action, entity, entity_id, user, timestamp, details)
-        VALUES (?, ?, ?, ?, ?, ?);
+        INSERT INTO audit_log (action, entity, entity_id, user, timestamp, details, chain_hash)
+        VALUES (?, ?, ?, ?, ?, ?, ?);
     )";
 
   sqlite3_stmt *rawStmt = nullptr;
   int rc = sqlite3_prepare_v2(db_, insertSQL, -1, &rawStmt, nullptr);
   if (rc != SQLITE_OK) {
-    setError("Fehler beim Vorbereiten des INSERT: " +
-             std::string(sqlite3_errmsg(db_)));
+    const std::string prepErr = sqlite3_errmsg(db_);
+    if (ownTransaction) {
+      sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    }
+    setError("Fehler beim Vorbereiten des INSERT: " + prepErr);
     return false;
   }
   auto stmt = makeStatement(rawStmt);
 
-  sqlite3_bind_text(stmt.get(), 1, entry.getActionString().c_str(), -1,
-                    SQLITE_TRANSIENT);
-  sqlite3_bind_text(stmt.get(), 2, entry.getEntityString().c_str(), -1,
-                    SQLITE_TRANSIENT);
-  sqlite3_bind_text(stmt.get(), 3, entry.getEntityId().c_str(), -1,
-                    SQLITE_TRANSIENT);
-  sqlite3_bind_text(stmt.get(), 4, entry.getUser().c_str(), -1,
-                    SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt.get(), 1, actionStr.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt.get(), 2, entityStr.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt.get(), 3, entityId.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt.get(), 4, user.c_str(), -1, SQLITE_TRANSIENT);
   sqlite3_bind_int64(stmt.get(), 5,
                      static_cast<sqlite3_int64>(entry.getTimestamp()));
-  sqlite3_bind_text(stmt.get(), 6, entry.getDetails().c_str(), -1,
-                    SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt.get(), 6, details.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt.get(), 7, newHash.c_str(), -1, SQLITE_TRANSIENT);
 
   rc = sqlite3_step(stmt.get());
 
   if (rc != SQLITE_DONE) {
-    setError("Fehler beim Einfügen des Audit-Eintrags: " +
-             std::string(sqlite3_errmsg(db_)));
+    const std::string stepErr = sqlite3_errmsg(db_);
+    if (ownTransaction) {
+      sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    }
+    setError("Fehler beim Einfügen des Audit-Eintrags: " + stepErr);
     return false;
   }
 
+  if (ownTransaction) {
+    char *commitErr = nullptr;
+    if (sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &commitErr) != SQLITE_OK) {
+      const std::string cErr = commitErr ? commitErr : sqlite3_errmsg(db_);
+      sqlite3_free(commitErr);
+      sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+      setError("Fehler beim Commit des Audit-Eintrags: " + cErr);
+      return false;
+    }
+  }
+
+  return true;
+}
+
+std::string Database::getLastAuditHash() {
+  if (!isOpen_ || db_ == nullptr) {
+    return std::string(64, '0');
+  }
+  sqlite3_stmt *rawStmt = nullptr;
+  // Skip pre-migration rows with empty chain_hash — they must not be treated
+  // as the chain tail, since verifyAuditChain also skips them.
+  const char *sql =
+      "SELECT chain_hash FROM audit_log WHERE chain_hash IS NOT NULL AND chain_hash != '' ORDER BY id DESC LIMIT 1;";
+  if (sqlite3_prepare_v2(db_, sql, -1, &rawStmt, nullptr) != SQLITE_OK) {
+    return std::string(64, '0');
+  }
+  auto handle = makeStatement(rawStmt);
+  std::string hash(64, '0');
+  if (sqlite3_step(handle.get()) == SQLITE_ROW) {
+    const auto *text =
+        reinterpret_cast<const char *>(sqlite3_column_text(handle.get(), 0));
+    if (text && *text) {
+      hash = text;
+    }
+  }
+  return hash;
+}
+
+bool Database::verifyAuditChain(std::string &firstBrokenAt) {
+  firstBrokenAt.clear();
+
+  if (!isOpen_ || db_ == nullptr) {
+    firstBrokenAt = "database not open";
+    return false;
+  }
+
+  // BEGIN DEFERRED gives a consistent read snapshot across all chunks so that
+  // concurrent writes cannot shift rows between LIMIT/OFFSET fetches and cause
+  // rows to be silently skipped or double-read.
+  if (sqlite3_exec(db_, "BEGIN DEFERRED;", nullptr, nullptr, nullptr) != SQLITE_OK) {
+    firstBrokenAt = "could not begin read transaction";
+    return false;
+  }
+
+  constexpr int kChunkSize = 10000;
+  const char *sql =
+      "SELECT id, action, entity, entity_id, user, timestamp, details, chain_hash "
+      "FROM audit_log ORDER BY id ASC LIMIT ? OFFSET ?;";
+
+  // Use the retention anchor as the initial prevHash if a purge has occurred,
+  // so the chain is still verifiable after audit entries are deleted.
+  std::string prevHash(64, '0');
+  {
+    const char *anchorSQL =
+        "SELECT value FROM retention_settings WHERE key = 'audit_chain_anchor' LIMIT 1;";
+    sqlite3_stmt *rawAnchor = nullptr;
+    if (sqlite3_prepare_v2(db_, anchorSQL, -1, &rawAnchor, nullptr) != SQLITE_OK) {
+      sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+      firstBrokenAt = "could not read audit chain anchor: " +
+                      std::string(sqlite3_errmsg(db_));
+      return false;
+    }
+    auto anchorStmt = makeStatement(rawAnchor);
+    const int anchorRc = sqlite3_step(anchorStmt.get());
+    if (anchorRc == SQLITE_ROW) {
+      const std::string anchor = columnText(anchorStmt.get(), 0);
+      if (!anchor.empty()) {
+        prevHash = anchor;
+      }
+    } else if (anchorRc != SQLITE_DONE) {
+      sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+      firstBrokenAt = "error reading audit chain anchor: " +
+                      std::string(sqlite3_errmsg(db_));
+      return false;
+    }
+  }
+
+  bool chainStarted = false;
+  int offset = 0;
+
+  while (true) {
+    sqlite3_stmt *rawStmt = nullptr;
+    if (sqlite3_prepare_v2(db_, sql, -1, &rawStmt, nullptr) != SQLITE_OK) {
+      sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+      firstBrokenAt = "query preparation failed";
+      return false;
+    }
+    auto stmt = makeStatement(rawStmt);
+    sqlite3_bind_int(stmt.get(), 1, kChunkSize);
+    sqlite3_bind_int(stmt.get(), 2, offset);
+
+    int rowsInChunk = 0;
+    int rc = 0;
+    while ((rc = sqlite3_step(stmt.get())) == SQLITE_ROW) {
+      ++rowsInChunk;
+      const int         id     = sqlite3_column_int(stmt.get(), 0);
+      const std::string action = columnText(stmt.get(), 1);
+      const std::string entity = columnText(stmt.get(), 2);
+      const std::string entId  = columnText(stmt.get(), 3);
+      const std::string user   = columnText(stmt.get(), 4);
+      const std::string tsStr  = std::to_string(
+          static_cast<long long>(sqlite3_column_int64(stmt.get(), 5)));
+      const std::string details    = columnText(stmt.get(), 6);
+      const std::string storedHash = columnText(stmt.get(), 7);
+
+      // Pre-migration entries have empty chain_hash — skip only if the
+      // hash chain has not started yet (i.e., all prior entries were also empty).
+      // An empty hash AFTER a verified entry is treated as a chain break,
+      // since it could be an injected row bypassing tamper detection.
+      if (storedHash.empty()) {
+        if (chainStarted) {
+          sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+          firstBrokenAt = "entry id=" + std::to_string(id) +
+                          " (missing chain_hash after chain start)";
+          return false;
+        }
+        continue;
+      }
+      chainStarted = true;
+
+      const std::string expectedHash = computeAuditHash(
+          auditHmacKey_, prevHash, action, entity, entId, user, tsStr, details);
+
+      if (expectedHash != storedHash) {
+        sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+        firstBrokenAt = "entry id=" + std::to_string(id);
+        return false;
+      }
+      prevHash = storedHash;
+    }
+
+    if (rowsInChunk < kChunkSize) {
+      break;
+    }
+    offset += kChunkSize;
+  }
+
+  sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, nullptr);
   return true;
 }
 
@@ -3942,7 +4644,7 @@ Database::getAuditLogFiltered(const AuditLogFilter &filter) {
 
   int limit = filter.limit;
   if (limit <= 0) {
-    limit = 100;
+    limit = 1000;
   }
 
   if (!hasFilter) {
@@ -4046,11 +4748,21 @@ bool Database::exportAuditLogToCsv(const std::string &filePath,
     return false;
   }
 
+  // Begin transaction first so that the file write and audit entry are atomic.
+  char *txErrMsg = nullptr;
+  int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
+                        &txErrMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Starten der Transaktion: " +
+             std::string(txErrMsg ? txErrMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(txErrMsg);
+    return false;
+  }
+
   std::ofstream output(filePath);
   if (!output.is_open()) {
     setError("Exportdatei konnte nicht geschrieben werden");
-    output.close();
-    std::remove(filePath.c_str());
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     return false;
   }
 
@@ -4058,7 +4770,7 @@ bool Database::exportAuditLogToCsv(const std::string &filePath,
 
   int limit = filter.limit;
   if (limit <= 0) {
-    limit = 100;
+    limit = 1000;
   }
 
   std::ostringstream sql;
@@ -4087,12 +4799,13 @@ bool Database::exportAuditLogToCsv(const std::string &filePath,
   sql << " ORDER BY timestamp DESC LIMIT ?;";
 
   sqlite3_stmt *rawStmt = nullptr;
-  int rc = sqlite3_prepare_v2(db_, sql.str().c_str(), -1, &rawStmt, nullptr);
+  rc = sqlite3_prepare_v2(db_, sql.str().c_str(), -1, &rawStmt, nullptr);
   if (rc != SQLITE_OK) {
     setError("Fehler beim Vorbereiten des SELECT: " +
              std::string(sqlite3_errmsg(db_)));
     output.close();
     std::remove(filePath.c_str());
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     return false;
   }
   auto stmt = makeStatement(rawStmt);
@@ -4144,13 +4857,7 @@ bool Database::exportAuditLogToCsv(const std::string &filePath,
              std::string(sqlite3_errmsg(db_)));
     output.close();
     std::remove(filePath.c_str());
-    return false;
-  }
-
-  if (exportedCount == 0) {
-    output.close();
-    std::remove(filePath.c_str());
-    setError("Keine Audit-Einträge zum Export");
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     return false;
   }
 
@@ -4158,6 +4865,7 @@ bool Database::exportAuditLogToCsv(const std::string &filePath,
     setError("Fehler beim Schreiben der Exportdatei");
     output.close();
     std::remove(filePath.c_str());
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     return false;
   }
 
@@ -4170,6 +4878,19 @@ bool Database::exportAuditLogToCsv(const std::string &filePath,
                               "audit_log", normalizeActor(actor), details);
   if (!logAudit(auditEntry)) {
     std::remove(filePath.c_str());
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
+
+  char *commitErrMsg = nullptr;
+  rc = sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &commitErrMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Commit der Transaktion: " +
+             std::string(commitErrMsg ? commitErrMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(commitErrMsg);
+    output.close();
+    std::remove(filePath.c_str());
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     return false;
   }
 
@@ -4299,6 +5020,24 @@ bool Database::applyAuditRetention(const std::string &actor,
     return false;
   }
 
+  // Before deleting, capture the chain_hash of the last row to be purged.
+  // This becomes the new anchor so verifyAuditChain can resume from here.
+  std::string newAnchor;
+  {
+    const char *anchorSQL =
+        "SELECT chain_hash FROM audit_log WHERE timestamp < ? "
+        "AND chain_hash IS NOT NULL AND chain_hash != '' "
+        "ORDER BY id DESC LIMIT 1;";
+    sqlite3_stmt *rawAnchor = nullptr;
+    if (sqlite3_prepare_v2(db_, anchorSQL, -1, &rawAnchor, nullptr) == SQLITE_OK) {
+      auto anchorStmt = makeStatement(rawAnchor);
+      sqlite3_bind_int64(anchorStmt.get(), 1, static_cast<sqlite3_int64>(cutoff));
+      if (sqlite3_step(anchorStmt.get()) == SQLITE_ROW) {
+        newAnchor = columnText(anchorStmt.get(), 0);
+      }
+    }
+  }
+
   const char *deleteSQL =
       "DELETE FROM audit_log WHERE timestamp < ?;";
   sqlite3_stmt *rawStmt = nullptr;
@@ -4324,6 +5063,30 @@ bool Database::applyAuditRetention(const std::string &actor,
   }
 
   purgedCount = sqlite3_changes(db_);
+
+  // Persist the anchor hash if rows were deleted.
+  // This is a hard error: if the anchor cannot be saved, the chain would be
+  // unverifiable after the purge, so we roll back the entire retention operation.
+  if (purgedCount > 0 && !newAnchor.empty()) {
+    const char *upsertAnchorSQL =
+        "INSERT INTO retention_settings (key, value) VALUES ('audit_chain_anchor', ?) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value;";
+    sqlite3_stmt *rawAnchorUp = nullptr;
+    if (sqlite3_prepare_v2(db_, upsertAnchorSQL, -1, &rawAnchorUp, nullptr) != SQLITE_OK) {
+      setError("Fehler beim Vorbereiten des Audit-Anker-Upserts: " +
+               std::string(sqlite3_errmsg(db_)));
+      sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+      return false;
+    }
+    auto anchorUpStmt = makeStatement(rawAnchorUp);
+    sqlite3_bind_text(anchorUpStmt.get(), 1, newAnchor.c_str(), -1, SQLITE_TRANSIENT);
+    if (sqlite3_step(anchorUpStmt.get()) != SQLITE_DONE) {
+      setError("Fehler beim Speichern des Audit-Ankers: " +
+               std::string(sqlite3_errmsg(db_)));
+      sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+      return false;
+    }
+  }
   if (purgedCount > 0) {
     std::ostringstream details;
     details << "Retention purge: " << purgedCount
@@ -4615,7 +5378,7 @@ Database::getUserByUsername(const std::string &username) {
   const char *selectSQL = R"(
         SELECT id, username, password_hash, role, active,
                must_change_password, last_login, created_date, full_name, email
-        FROM users WHERE username = ?;
+        FROM users WHERE username = ? COLLATE NOCASE;
     )";
 
   sqlite3_stmt *rawStmt = nullptr;
@@ -4811,6 +5574,28 @@ bool Database::updateUser(const core::User &user, const std::string &actor) {
     return false;
   }
 
+  if (passwordChanged) {
+    const char *pwtsSql = "UPDATE users SET password_changed_at = ? WHERE id = ?;";
+    sqlite3_stmt *rawPwts = nullptr;
+    rc = sqlite3_prepare_v2(db_, pwtsSql, -1, &rawPwts, nullptr);
+    if (rc != SQLITE_OK) {
+      {const std::string _rbErr = sqlite3_errmsg(db_);
+      sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+      setError("Fehler beim Vorbereiten von password_changed_at: " + std::string(_rbErr));}
+      return false;
+    }
+    auto pwtsHandle = makeStatement(rawPwts);
+    sqlite3_bind_int64(pwtsHandle.get(), 1, static_cast<sqlite3_int64>(std::time(nullptr)));
+    sqlite3_bind_int(pwtsHandle.get(), 2, user.getId());
+    rc = sqlite3_step(pwtsHandle.get());
+    if (rc != SQLITE_DONE) {
+      {const std::string _rbErr = sqlite3_errmsg(db_);
+      sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+      setError("Fehler beim Aktualisieren von password_changed_at: " + std::string(_rbErr));}
+      return false;
+    }
+  }
+
   std::ostringstream details;
   bool hasChanges = false;
   appendAuditChange(details, hasChanges, "Benutzername",
@@ -4827,13 +5612,25 @@ bool Database::updateUser(const core::User &user, const std::string &actor) {
                     existing->getFullName(), user.getFullName());
   appendAuditChange(details, hasChanges, "Email",
                     existing->getEmail(), user.getEmail());
+  if (passwordChanged) {
+    if (hasChanges) { details << "; "; }
+    const std::string actorNorm = normalizeActor(actor);
+    if (actorNorm == user.getUsername()) {
+      details << "Passwort: vom Benutzer selbst geaendert";
+    } else {
+      details << "Passwort: durch " << actorNorm << " geaendert";
+    }
+    hasChanges = true;
+  }
 
   const std::string detailText =
       hasChanges ? details.str() : "Keine Änderungen";
 
+  // Use the original username as entity_id so audit queries for the old name
+  // still find this rename event, even after the username has changed.
   core::AuditEntry entry(core::AuditEntry::ActionType::UPDATE,
                          core::AuditEntry::EntityType::USER,
-                         user.getUsername(), normalizeActor(actor),
+                         existing->getUsername(), normalizeActor(actor),
                          detailText);
   if (!logAudit(entry)) {
     sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
@@ -5100,10 +5897,21 @@ bool Database::updateRole(const std::string &name,
     return false;
   }
 
+  char *errMsg = nullptr;
+  int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
+                    &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Starten der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    return false;
+  }
+
   const char *existsSQL = "SELECT 1 FROM roles WHERE name = ? LIMIT 1;";
   sqlite3_stmt *existsStmtRaw = nullptr;
-  int rc = sqlite3_prepare_v2(db_, existsSQL, -1, &existsStmtRaw, nullptr);
+  rc = sqlite3_prepare_v2(db_, existsSQL, -1, &existsStmtRaw, nullptr);
   if (rc != SQLITE_OK) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     setError("Fehler beim Prüfen der Rolle: " +
              std::string(sqlite3_errmsg(db_)));
     return false;
@@ -5112,10 +5920,12 @@ bool Database::updateRole(const std::string &name,
   sqlite3_bind_text(existsStmt.get(), 1, name.c_str(), -1, SQLITE_TRANSIENT);
   rc = sqlite3_step(existsStmt.get());
   if (rc == SQLITE_DONE) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     setError("Rolle '" + name + "' nicht gefunden");
     return false;
   }
   if (rc != SQLITE_ROW) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     setError("Fehler beim Prüfen der Rolle: " +
              std::string(sqlite3_errmsg(db_)));
     return false;
@@ -5123,16 +5933,7 @@ bool Database::updateRole(const std::string &name,
 
   auto existingPerms = getRolePermissions(name);
   if (hasError()) {
-    return false;
-  }
-
-  char *errMsg = nullptr;
-  rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
-                    &errMsg);
-  if (rc != SQLITE_OK) {
-    setError("Fehler beim Starten der Transaktion: " +
-             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
-    sqlite3_free(errMsg);
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     return false;
   }
 
@@ -5308,10 +6109,21 @@ bool Database::assignUserRole(int userId, const std::string &roleName,
     return false;
   }
 
+  char *errMsg = nullptr;
+  int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
+                    &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Starten der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    return false;
+  }
+
   const char *existsSQL = "SELECT 1 FROM roles WHERE name = ? LIMIT 1;";
   sqlite3_stmt *existsStmtRaw = nullptr;
-  int rc = sqlite3_prepare_v2(db_, existsSQL, -1, &existsStmtRaw, nullptr);
+  rc = sqlite3_prepare_v2(db_, existsSQL, -1, &existsStmtRaw, nullptr);
   if (rc != SQLITE_OK) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     setError("Fehler beim Prüfen der Rolle: " +
              std::string(sqlite3_errmsg(db_)));
     return false;
@@ -5321,23 +6133,14 @@ bool Database::assignUserRole(int userId, const std::string &roleName,
                     SQLITE_TRANSIENT);
   rc = sqlite3_step(existsStmt.get());
   if (rc == SQLITE_DONE) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     setError("Rolle '" + roleName + "' nicht gefunden");
     return false;
   }
   if (rc != SQLITE_ROW) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     setError("Fehler beim Prüfen der Rolle: " +
              std::string(sqlite3_errmsg(db_)));
-    return false;
-  }
-
-  // Open transaction BEFORE reads to prevent TOCTOU on security-critical user state
-  char *errMsg = nullptr;
-  rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr,
-                    &errMsg);
-  if (rc != SQLITE_OK) {
-    setError("Fehler beim Starten der Transaktion: " +
-             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
-    sqlite3_free(errMsg);
     return false;
   }
 
@@ -5518,7 +6321,8 @@ bool Database::isLdapEnabled() {
 }
 
 bool Database::upsertApiKey(const std::string &key, bool active,
-                             const std::string &role) {
+                             const std::string &role,
+                             const std::string &actor) {
   clearError();
 
   if (!isOpen_) {
@@ -5531,32 +6335,85 @@ bool Database::upsertApiKey(const std::string &key, bool active,
     return false;
   }
 
+  if (key.size() < 32) {
+    setError("API-Schlüssel muss mindestens 32 Zeichen lang sein");
+    return false;
+  }
+
   const std::string effectiveRole = role.empty() ? "OPERATOR" : role;
+  const std::string keyHash = sha256Hex(key);
+  const std::string keyPrefix = key.size() >= 8 ? key.substr(0, 8) : key;
+
+  char *errMsg = nullptr;
+  int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr, &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Starten der Transaktion: " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    return false;
+  }
+
+  // Detect INSERT vs UPDATE for audit action type
+  const char *existsSQL = "SELECT 1 FROM api_keys WHERE key_hash = ? LIMIT 1;";
+  sqlite3_stmt *rawExists = nullptr;
+  rc = sqlite3_prepare_v2(db_, existsSQL, -1, &rawExists, nullptr);
+  if (rc != SQLITE_OK) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    setError("Fehler beim Prüfen des API-Schlüssels: " + std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+  auto existsStmt = makeStatement(rawExists);
+  sqlite3_bind_text(existsStmt.get(), 1, keyHash.c_str(), -1, SQLITE_TRANSIENT);
+  const bool isUpdate = (sqlite3_step(existsStmt.get()) == SQLITE_ROW);
+  existsStmt.reset();
+
   const char *upsertSQL = R"(
-        INSERT INTO api_keys (key, active, created_date, role)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(key) DO UPDATE SET active = excluded.active, role = excluded.role;
+        INSERT INTO api_keys (key_hash, key_prefix, active, created_date, role)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(key_hash) DO UPDATE SET
+            active = excluded.active,
+            role   = excluded.role;
     )";
 
   sqlite3_stmt *rawStmt = nullptr;
-  int rc = sqlite3_prepare_v2(db_, upsertSQL, -1, &rawStmt, nullptr);
+  rc = sqlite3_prepare_v2(db_, upsertSQL, -1, &rawStmt, nullptr);
   if (rc != SQLITE_OK) {
-    setError("Fehler beim Vorbereiten des API-Key-UPSERT: " +
-             std::string(sqlite3_errmsg(db_)));
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    setError("Fehler beim Vorbereiten des API-Key-UPSERT: " + std::string(sqlite3_errmsg(db_)));
     return false;
   }
 
   auto stmt = makeStatement(rawStmt);
-  sqlite3_bind_text(stmt.get(), 1, key.c_str(), -1, SQLITE_TRANSIENT);
-  sqlite3_bind_int(stmt.get(), 2, active ? 1 : 0);
-  sqlite3_bind_int64(stmt.get(), 3,
-                     static_cast<sqlite3_int64>(std::time(nullptr)));
-  sqlite3_bind_text(stmt.get(), 4, effectiveRole.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt.get(), 1, keyHash.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt.get(), 2, keyPrefix.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int(stmt.get(), 3, active ? 1 : 0);
+  sqlite3_bind_int64(stmt.get(), 4, static_cast<sqlite3_int64>(std::time(nullptr)));
+  sqlite3_bind_text(stmt.get(), 5, effectiveRole.c_str(), -1, SQLITE_TRANSIENT);
 
   rc = sqlite3_step(stmt.get());
   if (rc != SQLITE_DONE) {
-    setError("Fehler beim Speichern des API-Schlüssels: " +
-             std::string(sqlite3_errmsg(db_)));
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    setError("Fehler beim Speichern des API-Schlüssels: " + std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+
+  const std::string auditDetails = "Prefix: " + keyPrefix + "; Role: " + effectiveRole +
+                                   "; Active: " + (active ? "true" : "false");
+  const auto auditAction = isUpdate ? core::AuditEntry::ActionType::UPDATE
+                                    : core::AuditEntry::ActionType::CREATE;
+  core::AuditEntry entry(auditAction, core::AuditEntry::EntityType::SYSTEM,
+                         keyPrefix, normalizeActor(actor), auditDetails);
+  if (!logAudit(entry)) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
+
+  rc = sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &errMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Commit (upsertApiKey): " +
+             std::string(errMsg ? errMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(errMsg);
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     return false;
   }
 
@@ -5575,8 +6432,11 @@ std::optional<std::string> Database::isApiKeyValid(const std::string &key) {
     return std::nullopt;
   }
 
+  // Look up by SHA-256 hash to avoid plaintext key in the SQL comparison.
+  // New keys always have key_hash populated; the migration back-fills old rows.
+  const std::string keyHash = sha256Hex(key);
   const char *selectSQL =
-      "SELECT active, role FROM api_keys WHERE key = ? LIMIT 1;";
+      "SELECT active, role FROM api_keys WHERE key_hash = ? LIMIT 1;";
   sqlite3_stmt *rawStmt = nullptr;
   int rc = sqlite3_prepare_v2(db_, selectSQL, -1, &rawStmt, nullptr);
   if (rc != SQLITE_OK) {
@@ -5586,7 +6446,7 @@ std::optional<std::string> Database::isApiKeyValid(const std::string &key) {
   }
 
   auto stmt = makeStatement(rawStmt);
-  sqlite3_bind_text(stmt.get(), 1, key.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt.get(), 1, keyHash.c_str(), -1, SQLITE_TRANSIENT);
 
   rc = sqlite3_step(stmt.get());
   if (rc == SQLITE_ROW) {
@@ -5848,8 +6708,13 @@ bool Database::verifyUserMfa(const std::string &username,
   }
 
   const std::string secret = columnText(stmt.get(), 0);
-  if (!verifyMfaCode(secret, code)) {
-    setError("Ungültiger oder abgelaufener MFA-Code");
+
+  // Delegate to verifyAndConsumeMfaCode to enforce TOTP anti-replay via
+  // last_used_totp_step. Using verifyMfaCode() here would allow replay attacks.
+  if (!verifyAndConsumeMfaCode(username, secret, code)) {
+    if (getLastError().empty()) {
+      setError("Ungültiger oder abgelaufener MFA-Code");
+    }
     return false;
   }
 
@@ -6067,14 +6932,6 @@ bool Database::startSession(int userId, const std::string &username,
     return false;
   }
 
-  // Bestehende aktive Sitzungen schließen, ohne den Aufrufer zu blockieren.
-  const bool closed = endSession(userId, username, "relogin");
-  if (!closed) {
-    // Fehler behalten, aber Login nicht blockieren.
-  } else {
-    clearError();
-  }
-
   const std::time_t now = std::time(nullptr);
   const std::string methodStr = method == AuthMethod::LDAP ? "LDAP" : "Lokal";
 
@@ -6087,6 +6944,29 @@ bool Database::startSession(int userId, const std::string &username,
     sqlite3_free(errMsg);
     return false;
   }
+
+  // Close any existing active sessions atomically inside this transaction.
+  const char *closeSQL =
+      "UPDATE sessions SET logout_ts = ? WHERE user_id = ? AND logout_ts IS NULL;";
+  sqlite3_stmt *rawClose = nullptr;
+  rc = sqlite3_prepare_v2(db_, closeSQL, -1, &rawClose, nullptr);
+  if (rc != SQLITE_OK) {
+    const std::string rbErr = sqlite3_errmsg(db_);
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    setError("Fehler beim Vorbereiten des Session-Close: " + rbErr);
+    return false;
+  }
+  auto closeStmt = makeStatement(rawClose);
+  sqlite3_bind_int64(closeStmt.get(), 1, static_cast<sqlite3_int64>(now));
+  sqlite3_bind_int(closeStmt.get(), 2, userId);
+  rc = sqlite3_step(closeStmt.get());
+  if (rc != SQLITE_DONE) {
+    const std::string rbErr = sqlite3_errmsg(db_);
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    setError("Fehler beim Schließen alter Sitzungen: " + rbErr);
+    return false;
+  }
+  closeStmt.reset();
 
   const char *insertSQL = R"(
         INSERT INTO sessions (user_id, username, method, login_ts, details)
@@ -6236,6 +7116,73 @@ Database::getLatestSessionForUser(int userId) {
   return getSessionById(sessionId);
 }
 
+int Database::expireStaleSessionsOlderThan(int maxLifetimeSeconds) {
+  if (!isOpen_ || db_ == nullptr || maxLifetimeSeconds <= 0) {
+    return 0;
+  }
+  const std::time_t now = std::time(nullptr);
+  const std::time_t cutoff =
+      now - static_cast<std::time_t>(maxLifetimeSeconds);
+
+  if (sqlite3_exec(db_, "BEGIN IMMEDIATE;", nullptr, nullptr, nullptr) !=
+      SQLITE_OK) {
+    return 0;
+  }
+
+  // Collect affected sessions inside the transaction to prevent SELECT/UPDATE races
+  struct SessionInfo { int id; int userId; std::string username; };
+  std::vector<SessionInfo> affected;
+  {
+    const char *querySQL =
+        "SELECT id, user_id, username FROM sessions WHERE logout_ts IS NULL AND login_ts < ?;";
+    sqlite3_stmt *rawQuery = nullptr;
+    if (sqlite3_prepare_v2(db_, querySQL, -1, &rawQuery, nullptr) != SQLITE_OK) {
+      sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+      return 0;
+    }
+    auto qHandle = makeStatement(rawQuery);
+    sqlite3_bind_int64(qHandle.get(), 1, static_cast<sqlite3_int64>(cutoff));
+    while (sqlite3_step(qHandle.get()) == SQLITE_ROW) {
+      SessionInfo s;
+      s.id     = sqlite3_column_int(qHandle.get(), 0);
+      s.userId = sqlite3_column_int(qHandle.get(), 1);
+      const char *uname =
+          reinterpret_cast<const char *>(sqlite3_column_text(qHandle.get(), 2));
+      s.username = uname ? uname : "";
+      affected.push_back(s);
+    }
+  }
+
+  const char *sql =
+      "UPDATE sessions SET logout_ts = ? WHERE logout_ts IS NULL AND login_ts < ?;";
+  sqlite3_stmt *rawStmt = nullptr;
+  if (sqlite3_prepare_v2(db_, sql, -1, &rawStmt, nullptr) != SQLITE_OK) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return 0;
+  }
+  auto handle = makeStatement(rawStmt);
+  sqlite3_bind_int64(handle.get(), 1, static_cast<sqlite3_int64>(now));
+  sqlite3_bind_int64(handle.get(), 2, static_cast<sqlite3_int64>(cutoff));
+  sqlite3_step(handle.get());
+  const int expired = sqlite3_changes(db_);
+
+  if (sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, nullptr) != SQLITE_OK) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return 0;
+  }
+
+  for (const auto &s : affected) {
+    core::AuditEntry entry(core::AuditEntry::ActionType::UPDATE,
+                           core::AuditEntry::EntityType::USER,
+                           std::to_string(s.userId), "system",
+                           "Stale session " + std::to_string(s.id) +
+                               " of user '" + s.username +
+                               "' expired by server (session lifetime exceeded)");
+    (void)logAudit(entry);
+  }
+  return expired;
+}
+
 Database::AuthResult Database::authenticatePrimary(const std::string &username,
                                                    const std::string &password) {
   clearError();
@@ -6271,7 +7218,7 @@ Database::AuthResult Database::authenticatePrimary(const std::string &username,
         if (!active) {
           const std::string msg = "LDAP-Benutzer ist deaktiviert";
           setError(msg);
-          logUserAction(core::AuditEntry::ActionType::UPDATE, actor, actor,
+          logUserAction(core::AuditEntry::ActionType::LOGIN_FAILED, actor, actor,
                         "Login fehlgeschlagen (LDAP, deaktiviert)");
           setError(msg);
           return result;
@@ -6282,7 +7229,7 @@ Database::AuthResult Database::authenticatePrimary(const std::string &username,
           if (!tempUser.verifyPassword(password)) {
             const std::string msg = "Ungültiger Benutzername oder Passwort";
             setError(msg);
-            logUserAction(core::AuditEntry::ActionType::UPDATE, actor, actor,
+            logUserAction(core::AuditEntry::ActionType::LOGIN_FAILED, actor, actor,
                           "Login fehlgeschlagen (LDAP, falsches Passwort)");
             setError(msg);
             return result;
@@ -6294,6 +7241,7 @@ Database::AuthResult Database::authenticatePrimary(const std::string &username,
           core::User newUser(username, core::User::hashPassword(password),
                              core::User::Role::OPERATOR);
           newUser.setRoleName("Operator");
+          newUser.setMustChangePassword(true);
           (void)createUser(newUser, actor);
           localUser = getUserByUsername(username);
         }
@@ -6302,7 +7250,7 @@ Database::AuthResult Database::authenticatePrimary(const std::string &username,
           const std::string msg =
               "LDAP-Anmeldung erfolgreich, aber lokaler Benutzer fehlt";
           setError(msg);
-          logUserAction(core::AuditEntry::ActionType::UPDATE, actor, actor,
+          logUserAction(core::AuditEntry::ActionType::LOGIN_FAILED, actor, actor,
                         "Login fehlgeschlagen (LDAP, lokaler Benutzer fehlt)");
           setError(msg);
           return result;
@@ -6311,7 +7259,7 @@ Database::AuthResult Database::authenticatePrimary(const std::string &username,
         if (!localUser->isActive()) {
           const std::string msg = "Benutzer ist deaktiviert";
           setError(msg);
-          logUserAction(core::AuditEntry::ActionType::UPDATE, actor, actor,
+          logUserAction(core::AuditEntry::ActionType::LOGIN_FAILED, actor, actor,
                         "Login fehlgeschlagen (LDAP, deaktiviert)");
           setError(msg);
           return result;
@@ -6331,7 +7279,7 @@ Database::AuthResult Database::authenticatePrimary(const std::string &username,
       if (rc != SQLITE_DONE) {
         const std::string msg = "LDAP-Abfrage fehlgeschlagen";
         setError(msg);
-        logUserAction(core::AuditEntry::ActionType::UPDATE, actor, actor,
+        logUserAction(core::AuditEntry::ActionType::LOGIN_FAILED, actor, actor,
                       "Login fehlgeschlagen (LDAP, Abfragefehler)");
         setError(msg);
         return result;
@@ -6339,7 +7287,7 @@ Database::AuthResult Database::authenticatePrimary(const std::string &username,
     } else {
       const std::string msg = "LDAP-Abfrage konnte nicht vorbereitet werden";
       setError(msg);
-      logUserAction(core::AuditEntry::ActionType::UPDATE, actor, actor,
+      logUserAction(core::AuditEntry::ActionType::LOGIN_FAILED, actor, actor,
                     "Login fehlgeschlagen (LDAP, Abfragefehler)");
       setError(msg);
       return result;
@@ -6351,9 +7299,12 @@ Database::AuthResult Database::authenticatePrimary(const std::string &username,
   result.method = AuthMethod::LOCAL;
 
   if (!localUser) {
+    // Perform a dummy PBKDF2 hash so response time matches the wrong-password path,
+    // preventing timing-based username enumeration.
+    (void)core::User::hashPassword(password);
     const std::string msg = "Ungültiger Benutzername oder Passwort";
     setError(msg);
-    logUserAction(core::AuditEntry::ActionType::UPDATE, actor, actor,
+    logUserAction(core::AuditEntry::ActionType::LOGIN_FAILED, actor, actor,
                   "Login fehlgeschlagen (lokal, Benutzer unbekannt)");
     setError(msg);
     return result;
@@ -6362,7 +7313,7 @@ Database::AuthResult Database::authenticatePrimary(const std::string &username,
   if (!localUser->isActive()) {
     const std::string msg = "Benutzer ist deaktiviert";
     setError(msg);
-    logUserAction(core::AuditEntry::ActionType::UPDATE, actor, actor,
+    logUserAction(core::AuditEntry::ActionType::LOGIN_FAILED, actor, actor,
                   "Login fehlgeschlagen (lokal, deaktiviert)");
     setError(msg);
     return result;
@@ -6371,7 +7322,7 @@ Database::AuthResult Database::authenticatePrimary(const std::string &username,
   if (!localUser->verifyPassword(password)) {
     const std::string msg = "Ungültiger Benutzername oder Passwort";
     setError(msg);
-    logUserAction(core::AuditEntry::ActionType::UPDATE, actor, actor,
+    logUserAction(core::AuditEntry::ActionType::LOGIN_FAILED, actor, actor,
                   "Login fehlgeschlagen (lokal, falsches Passwort)");
     setError(msg);
     return result;
@@ -6424,7 +7375,7 @@ Database::authenticateUser(const std::string &username,
       const std::string msg =
           "MFA ist erforderlich, aber kein MFA-Secret ist konfiguriert";
       setError(msg);
-      logUserAction(core::AuditEntry::ActionType::UPDATE, actor, actor,
+      logUserAction(core::AuditEntry::ActionType::LOGIN_FAILED, actor, actor,
                     "Login fehlgeschlagen (" + methodStr +
                         ", MFA-Secret fehlt)");
       setError(msg);
@@ -6434,23 +7385,30 @@ Database::authenticateUser(const std::string &username,
     if (!mfaCode.has_value()) {
 
       const std::string msg = "MFA erforderlich. Bitte MFA-Code eingeben.";
-      const std::string prevError = lastError_;
-      logUserAction(core::AuditEntry::ActionType::UPDATE, actor, actor,
+      std::string prevError;
+      {
+        std::lock_guard<std::mutex> lg(errorMutex_);
+        prevError = lastError_;
+      }
+      logUserAction(core::AuditEntry::ActionType::LOGIN_FAILED, actor, actor,
                     "Login fehlgeschlagen (" + methodStr +
                         ", MFA erforderlich)");
-      if (!prevError.empty()) {
-        lastError_ = prevError;
-      } else if (!lastError_.empty()) {
-        clearError();
+      {
+        std::lock_guard<std::mutex> lg(errorMutex_);
+        if (!prevError.empty()) {
+          lastError_ = prevError;
+        } else {
+          lastError_.clear();
+        }
       }
       setError(msg);
       return nullptr;
     }
 
-    if (!verifyMfaCode(result.mfaSecret, mfaCode.value())) {
+    if (!verifyAndConsumeMfaCode(actor, result.mfaSecret, mfaCode.value())) {
       const std::string msg = "Ungültiger oder abgelaufener MFA-Code";
       setError(msg);
-      logUserAction(core::AuditEntry::ActionType::UPDATE, actor, actor,
+      logUserAction(core::AuditEntry::ActionType::LOGIN_FAILED, actor, actor,
                     "Login fehlgeschlagen (" + methodStr +
                         ", MFA ungültig)");
       setError(msg);
@@ -6458,10 +7416,7 @@ Database::authenticateUser(const std::string &username,
     }
   }
 
-  // Login-Timestamp aktualisieren
-  result.user->updateLastLogin();
-  (void)updateUser(*result.user, actor);
-
+  // Start session first — if it fails, do not emit a login audit entry.
   if (!startSession(result.user->getId(), actor, result.method,
                     "Authentifiziert")) {
     const std::string msg =
@@ -6469,12 +7424,409 @@ Database::authenticateUser(const std::string &username,
     setError(msg);
     return nullptr;
   }
+  result.user->updateLastLogin();
+  (void)updateUser(*result.user, actor);
   return std::move(result.user);
 }
 
 void Database::setError(const std::string &error) {
-  lastError_ = error;
-  std::cerr << "Datenbankfehler: " << error << std::endl;
+  {
+    std::lock_guard<std::mutex> lg(errorMutex_);
+    lastError_ = error;
+  }
+  LOG_ERROR("Datenbankfehler: {}", error);
+}
+
+// ============================================================================
+// MFA Enrollment
+// ============================================================================
+
+std::string Database::generateMfaSecret() {
+  // Generate 20 cryptographically-random bytes (160 bits) via OpenSSL
+  std::vector<uint8_t> randomBytes(20);
+  if (RAND_bytes(randomBytes.data(), static_cast<int>(randomBytes.size())) != 1) {
+    setError("RAND_bytes failed: unable to generate MFA secret");
+    return {};
+  }
+  return base32Encode(randomBytes);
+}
+
+std::string Database::getMfaEnrollmentUri(const std::string &username,
+                                          const std::string &base32Secret) {
+  // Percent-encode username so special characters can't inject query params
+  // into the otpauth:// URI (e.g. a username containing '?' or '&').
+  std::string encodedUsername;
+  encodedUsername.reserve(username.size() * 3);
+  for (const unsigned char ch : username) {
+    if (std::isalnum(ch) || ch == '_' || ch == '-' || ch == '.') {
+      encodedUsername += static_cast<char>(ch);
+    } else {
+      char buf[4];
+      std::snprintf(buf, sizeof(buf), "%%%02X", static_cast<unsigned int>(ch));
+      encodedUsername += buf;
+    }
+  }
+  return "otpauth://totp/OpenSylab:" + encodedUsername
+       + "?secret=" + base32Secret
+       + "&issuer=OpenSylab";
+}
+
+bool Database::setUserMfaSecret(int userId, const std::string &base32Secret,
+                                int64_t initialUsedStep) {
+  clearError();
+
+  if (!isOpen_) {
+    setError("Datenbank ist nicht geöffnet");
+    return false;
+  }
+
+  char *errMsg = nullptr;
+  if (sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr, &errMsg) != SQLITE_OK) {
+    sqlite3_free(errMsg);
+    setError("Fehler beim Starten der Transaktion (setUserMfaSecret)");
+    return false;
+  }
+
+  // Retrieve username from users table (inside the transaction to prevent TOCTOU)
+  const char *selectSQL = R"(SELECT username FROM users WHERE id = ? LIMIT 1;)";
+  sqlite3_stmt *rawSel = nullptr;
+  int rc = sqlite3_prepare_v2(db_, selectSQL, -1, &rawSel, nullptr);
+  if (rc != SQLITE_OK) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    setError("Fehler beim Vorbereiten des User-SELECT: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+  auto selStmt = makeStatement(rawSel);
+  sqlite3_bind_int(selStmt.get(), 1, userId);
+  rc = sqlite3_step(selStmt.get());
+  if (rc != SQLITE_ROW) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    setError("Benutzer nicht gefunden (id=" + std::to_string(userId) + ")");
+    return false;
+  }
+  const std::string username = columnText(selStmt.get(), 0);
+
+  // Upsert into user_mfa — set mfa_required = 1, store the Base32 secret, and
+  // record the step used during enrollment to prevent replay in the login path.
+  const char *upsertSQL = R"(
+      INSERT INTO user_mfa (username, mfa_required, mfa_secret, last_used_totp_step)
+      VALUES (?, 1, ?, ?)
+      ON CONFLICT(username) DO UPDATE SET
+          mfa_required        = 1,
+          mfa_secret          = excluded.mfa_secret,
+          last_used_totp_step = excluded.last_used_totp_step;
+  )";
+  sqlite3_stmt *rawUpsert = nullptr;
+  rc = sqlite3_prepare_v2(db_, upsertSQL, -1, &rawUpsert, nullptr);
+  if (rc != SQLITE_OK) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    setError("Fehler beim Vorbereiten des MFA-UPSERT: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+  auto upsertStmt = makeStatement(rawUpsert);
+  sqlite3_bind_text(upsertStmt.get(), 1, username.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(upsertStmt.get(), 2, base32Secret.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int64(upsertStmt.get(), 3, initialUsedStep);
+  rc = sqlite3_step(upsertStmt.get());
+  if (rc != SQLITE_DONE) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    setError("Fehler beim Speichern des MFA-Secrets: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+
+  core::AuditEntry mfaEnrollAudit(core::AuditEntry::ActionType::UPDATE,
+                                   core::AuditEntry::EntityType::USER,
+                                   username, username, "MFA enrollment completed");
+  if (!logAudit(mfaEnrollAudit)) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
+  char *commitErrMsg = nullptr;
+  rc = sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &commitErrMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Commit (enableUserMfa): " +
+             std::string(commitErrMsg ? commitErrMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(commitErrMsg);
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
+  return true;
+}
+
+bool Database::disableUserMfa(int userId, const std::string &actor) {
+  clearError();
+
+  if (!isOpen_) {
+    setError("Datenbank ist nicht geöffnet");
+    return false;
+  }
+
+  char *errMsg = nullptr;
+  if (sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr, &errMsg) != SQLITE_OK) {
+    sqlite3_free(errMsg);
+    setError("Fehler beim Starten der Transaktion (disableUserMfa)");
+    return false;
+  }
+
+  // Retrieve username (inside transaction to prevent TOCTOU with deleteUser)
+  const char *selectSQL = R"(SELECT username FROM users WHERE id = ? LIMIT 1;)";
+  sqlite3_stmt *rawSel = nullptr;
+  int rc = sqlite3_prepare_v2(db_, selectSQL, -1, &rawSel, nullptr);
+  if (rc != SQLITE_OK) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    setError("Fehler beim Vorbereiten des User-SELECT: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+  auto selStmt = makeStatement(rawSel);
+  sqlite3_bind_int(selStmt.get(), 1, userId);
+  rc = sqlite3_step(selStmt.get());
+  if (rc != SQLITE_ROW) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    setError("Benutzer nicht gefunden (id=" + std::to_string(userId) + ")");
+    return false;
+  }
+  const std::string username = columnText(selStmt.get(), 0);
+
+  // Upsert: disable MFA and clear secret
+  const char *upsertSQL = R"(
+      INSERT INTO user_mfa (username, mfa_required, mfa_secret)
+      VALUES (?, 0, '')
+      ON CONFLICT(username) DO UPDATE SET
+          mfa_required = 0,
+          mfa_secret   = '';
+  )";
+  sqlite3_stmt *rawUpsert = nullptr;
+  rc = sqlite3_prepare_v2(db_, upsertSQL, -1, &rawUpsert, nullptr);
+  if (rc != SQLITE_OK) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    setError("Fehler beim Vorbereiten des MFA-Disable-UPSERT: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+  auto upsertStmt = makeStatement(rawUpsert);
+  sqlite3_bind_text(upsertStmt.get(), 1, username.c_str(), -1, SQLITE_TRANSIENT);
+  rc = sqlite3_step(upsertStmt.get());
+  if (rc != SQLITE_DONE) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    setError("Fehler beim Deaktivieren von MFA: " +
+             std::string(sqlite3_errmsg(db_)));
+    return false;
+  }
+
+  const std::string auditActor = actor.empty() ? username : actor;
+  core::AuditEntry mfaAudit(core::AuditEntry::ActionType::UPDATE,
+                             core::AuditEntry::EntityType::USER,
+                             username, auditActor, "MFA disabled");
+  if (!logAudit(mfaAudit)) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
+  char *commitErrMsg = nullptr;
+  rc = sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &commitErrMsg);
+  if (rc != SQLITE_OK) {
+    setError("Fehler beim Commit (disableUserMfa): " +
+             std::string(commitErrMsg ? commitErrMsg : sqlite3_errmsg(db_)));
+    sqlite3_free(commitErrMsg);
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return false;
+  }
+  return true;
+}
+
+bool Database::verifyMfaCodeForEnrollment(const std::string &base32Secret,
+                                          const std::string &code,
+                                          int64_t &matchedStep) {
+  matchedStep = -1;
+  int provided = -1;
+  try {
+    provided = std::stoi(code);
+  } catch (...) {
+    return false;
+  }
+  if (provided < 0 || provided > 999999) {
+    return false;
+  }
+  const std::time_t now = std::time(nullptr);
+  for (int offset = -1; offset <= 1; ++offset) {
+    const std::time_t candidate = now + static_cast<std::time_t>(offset * 30);
+    if (computeMfaCode(base32Secret, candidate) == provided) {
+      matchedStep = static_cast<int64_t>(candidate) / 30;
+      return true;
+    }
+  }
+  return false;
+}
+
+bool Database::verifyAndConsumeMfaCode(const std::string &username,
+                                       const std::string &secret,
+                                       const std::string &code) {
+  if (secret.empty() || code.empty() || username.empty()) {
+    return false;
+  }
+
+  int provided = -1;
+  try {
+    provided = std::stoi(code);
+  } catch (...) {
+    return false;
+  }
+  if (provided < 0 || provided > 999999) {
+    return false;
+  }
+
+  // Find the matching absolute TOTP time step (±1 window)
+  const std::time_t now = std::time(nullptr);
+  int64_t matchedAbsStep = -1;
+  for (int offset = -1; offset <= 1; ++offset) {
+    const std::time_t candidate = now + static_cast<std::time_t>(offset * 30);
+    if (computeMfaCode(secret, candidate) == provided) {
+      matchedAbsStep = static_cast<int64_t>(candidate) / 30;
+      break;
+    }
+  }
+  if (matchedAbsStep < 0) {
+    return false;
+  }
+
+  // Atomic replay check + consume to prevent TOCTOU race under concurrent logins
+  if (sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr, nullptr) !=
+      SQLITE_OK) {
+    setError("verifyAndConsumeMfaCode: begin transaction failed");
+    return false;
+  }
+
+  // Read last-used step — require the row to exist (MFA secret must be enrolled)
+  const char *selectSql =
+      "SELECT last_used_totp_step FROM user_mfa WHERE username = ? LIMIT 1;";
+  sqlite3_stmt *rawStmt = nullptr;
+  if (sqlite3_prepare_v2(db_, selectSql, -1, &rawStmt, nullptr) != SQLITE_OK) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    setError("verifyAndConsumeMfaCode: prepare select failed");
+    return false;
+  }
+  auto selectHandle = makeStatement(rawStmt);
+  sqlite3_bind_text(selectHandle.get(), 1, username.c_str(), -1, SQLITE_TRANSIENT);
+  int64_t lastUsedStep = -1;
+  bool rowFound = false;
+  if (sqlite3_step(selectHandle.get()) == SQLITE_ROW) {
+    lastUsedStep = sqlite3_column_int64(selectHandle.get(), 0);
+    rowFound = true;
+  }
+  selectHandle.reset();
+
+  if (!rowFound) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    setError("verifyAndConsumeMfaCode: no user_mfa row for user");
+    return false;
+  }
+  if (lastUsedStep >= matchedAbsStep) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    setError("TOTP code replay detected");
+    return false;
+  }
+
+  // Consume: record the used step inside the same transaction
+  const char *updateSql =
+      "UPDATE user_mfa SET last_used_totp_step = ? WHERE username = ?;";
+  sqlite3_stmt *rawUpdate = nullptr;
+  if (sqlite3_prepare_v2(db_, updateSql, -1, &rawUpdate, nullptr) != SQLITE_OK) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    setError("verifyAndConsumeMfaCode: prepare update failed");
+    return false;
+  }
+  auto updateHandle = makeStatement(rawUpdate);
+  sqlite3_bind_int64(updateHandle.get(), 1, matchedAbsStep);
+  sqlite3_bind_text(updateHandle.get(), 2, username.c_str(), -1, SQLITE_TRANSIENT);
+  if (sqlite3_step(updateHandle.get()) != SQLITE_DONE) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    setError("verifyAndConsumeMfaCode: update failed");
+    return false;
+  }
+  updateHandle.reset();
+
+  if (sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, nullptr) != SQLITE_OK) {
+    setError("verifyAndConsumeMfaCode: commit failed");
+    return false;
+  }
+  return true;
+}
+
+std::time_t Database::getPasswordChangedAt(int userId) {
+  if (!isOpen_ || db_ == nullptr) {
+    return 0;
+  }
+  const char *sql =
+      "SELECT COALESCE(password_changed_at, 0) FROM users WHERE id = ? LIMIT 1;";
+  sqlite3_stmt *rawStmt = nullptr;
+  if (sqlite3_prepare_v2(db_, sql, -1, &rawStmt, nullptr) != SQLITE_OK) {
+    return 0;
+  }
+  auto handle = makeStatement(rawStmt);
+  sqlite3_bind_int(handle.get(), 1, userId);
+  if (sqlite3_step(handle.get()) == SQLITE_ROW) {
+    return static_cast<std::time_t>(sqlite3_column_int64(handle.get(), 0));
+  }
+  return 0;
+}
+
+bool Database::persistBlacklistedToken(const std::string &token,
+                                       std::time_t expiresAt) {
+  if (!isOpen_ || db_ == nullptr || token.empty()) {
+    return false;
+  }
+  const char *sql =
+      "INSERT OR REPLACE INTO blacklisted_tokens (token, expires_at) VALUES (?, ?);";
+  sqlite3_stmt *rawStmt = nullptr;
+  if (sqlite3_prepare_v2(db_, sql, -1, &rawStmt, nullptr) != SQLITE_OK) {
+    return false;
+  }
+  auto handle = makeStatement(rawStmt);
+  sqlite3_bind_text(handle.get(), 1, token.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int64(handle.get(), 2, static_cast<sqlite3_int64>(expiresAt));
+  return sqlite3_step(handle.get()) == SQLITE_DONE;
+}
+
+void Database::pruneExpiredBlacklistedTokens() {
+  if (!isOpen_ || db_ == nullptr) {
+    return;
+  }
+  const std::time_t now = std::time(nullptr);
+  const char *sql =
+      "DELETE FROM blacklisted_tokens WHERE expires_at <= ?;";
+  sqlite3_stmt *rawStmt = nullptr;
+  if (sqlite3_prepare_v2(db_, sql, -1, &rawStmt, nullptr) != SQLITE_OK) {
+    return;
+  }
+  auto handle = makeStatement(rawStmt);
+  sqlite3_bind_int64(handle.get(), 1, static_cast<sqlite3_int64>(now));
+  sqlite3_step(handle.get());
+}
+
+std::vector<std::pair<std::string, std::time_t>>
+Database::loadActiveBlacklistedTokens() {
+  pruneExpiredBlacklistedTokens();
+  std::vector<std::pair<std::string, std::time_t>> result;
+  if (!isOpen_ || db_ == nullptr) {
+    return result;
+  }
+  const std::time_t now = std::time(nullptr);
+  const char *sql = "SELECT token, expires_at FROM blacklisted_tokens WHERE expires_at > ?;";
+  sqlite3_stmt *rawStmt = nullptr;
+  if (sqlite3_prepare_v2(db_, sql, -1, &rawStmt, nullptr) != SQLITE_OK) {
+    return result;
+  }
+  auto handle = makeStatement(rawStmt);
+  sqlite3_bind_int64(handle.get(), 1, static_cast<sqlite3_int64>(now));
+  while (sqlite3_step(handle.get()) == SQLITE_ROW) {
+    const std::string tok = columnText(handle.get(), 0);
+    const std::time_t expiry = static_cast<std::time_t>(sqlite3_column_int64(handle.get(), 1));
+    result.emplace_back(tok, expiry);
+  }
+  return result;
 }
 
 } // namespace db

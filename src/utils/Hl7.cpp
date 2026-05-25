@@ -9,6 +9,7 @@ namespace utils {
 namespace {
 
 constexpr size_t kMaxImportBytes = 10 * 1024 * 1024;
+constexpr size_t kMaxResultsPerImport = 10000;
 
 std::string trim(const std::string &value) {
   const size_t start = value.find_first_not_of(" \t\r\n");
@@ -34,7 +35,7 @@ std::string firstNonEmpty(const std::string &a, const std::string &b) {
 
 } // namespace
 
-Hl7Exchange::Hl7Exchange(std::shared_ptr<db::Database> database)
+Hl7Exchange::Hl7Exchange(std::shared_ptr<db::IDatabase> database)
     : database_(std::move(database)) {}
 
 bool Hl7Exchange::importOruR01Message(const std::string &message,
@@ -105,20 +106,34 @@ bool Hl7Exchange::importOruR01Message(const std::string &message,
     return false;
   }
 
+  // Field-length validation (mirrors API layer limits to ensure DB consistency)
+  auto fieldTooLong = [&](const std::string &field, const std::string &name,
+                          size_t maxLen, const std::string &segment) -> bool {
+    if (field.size() > maxLen) {
+      Hl7Parser::Error err;
+      err.segment = segment;
+      err.message = name + " exceeds maximum length of " + std::to_string(maxLen);
+      summary.errors.push_back(err);
+      return true;
+    }
+    return false;
+  };
+
+  if (fieldTooLong(mapped.sample.sampleId, "sample_id", 64, "SPM") ||
+      fieldTooLong(mapped.sample.patientId, "patient_id", 64, "PID") ||
+      fieldTooLong(mapped.sample.patientName, "patient_name", 255, "PID") ||
+      fieldTooLong(mapped.order.orderId, "order_id", 64, "OBR") ||
+      fieldTooLong(mapped.order.testType, "test_type", 255, "OBR")) {
+    logErrors(summary.errors, actor, parser.getMessageControlId(),
+              parser.getMessageType(), parser.getTriggerEvent());
+    summary.lastError = "Field exceeds maximum allowed length";
+    return false;
+  }
+
   core::Sample sample(mapped.sample.sampleId, mapped.sample.patientId);
   sample.setPatientName(mapped.sample.patientName);
   sample.setDescription(mapped.sample.description);
   sample.setStatus(core::Sample::Status::REGISTERED);
-
-  if (!database_->createSample(sample, actor)) {
-    auto existing = database_->getSampleByBarcode(mapped.sample.sampleId);
-    if (!existing) {
-      summary.lastError = database_->getLastError();
-      return false;
-    }
-  } else {
-    summary.samplesCreated++;
-  }
 
   if (mapped.order.orderId.empty() || mapped.order.sampleId.empty()) {
     Hl7Parser::Error err;
@@ -133,6 +148,53 @@ bool Hl7Exchange::importOruR01Message(const std::string &message,
     return false;
   }
 
+  if (mapped.results.size() > kMaxResultsPerImport) {
+    Hl7Parser::Error err;
+    err.segment = "OBX";
+    err.fieldIndex = 0;
+    err.line = 0;
+    err.message = "Import exceeds maximum of " +
+                  std::to_string(kMaxResultsPerImport) + " results per message";
+    summary.errors.push_back(err);
+    logErrors(summary.errors, actor, parser.getMessageControlId(),
+              parser.getMessageType(), parser.getTriggerEvent());
+    summary.lastError = "Too many OBX segments in HL7 message";
+    return false;
+  }
+
+  // Pre-validate all observations before any DB writes to prevent orphaned samples/orders
+  for (const auto &resultData : mapped.results) {
+    if (resultData.parameter.empty() || resultData.value.empty()) {
+      Hl7Parser::Error err;
+      err.segment = "OBX";
+      err.fieldIndex = resultData.parameter.empty() ? 3 : 5;
+      err.message = "Missing observation parameter/value";
+      summary.errors.push_back(err);
+    } else {
+      fieldTooLong(resultData.parameter, "parameter", 255, "OBX");
+      fieldTooLong(resultData.value, "value", 255, "OBX");
+      fieldTooLong(resultData.unit, "unit", 255, "OBX");
+    }
+  }
+  if (!summary.errors.empty()) {
+    logErrors(summary.errors, actor, parser.getMessageControlId(),
+              parser.getMessageType(), parser.getTriggerEvent());
+    summary.lastError = "HL7 import aborted: observation validation failed";
+    return false;
+  }
+
+  bool sampleCreatedNow = false;
+  if (!database_->createSample(sample, actor)) {
+    auto existing = database_->getSampleByBarcode(mapped.sample.sampleId);
+    if (!existing) {
+      summary.lastError = database_->getLastError();
+      return false;
+    }
+  } else {
+    sampleCreatedNow = true;
+    summary.samplesCreated++;
+  }
+
   core::Order order(mapped.order.orderId, mapped.order.sampleId,
                     mapped.order.testType);
   order.setStatus(core::Order::Status::REQUESTED);
@@ -142,6 +204,16 @@ bool Hl7Exchange::importOruR01Message(const std::string &message,
   if (!database_->createOrder(order, actor)) {
     auto existing = database_->getOrderByOrderId(mapped.order.orderId);
     if (!existing) {
+      // Compensate: remove the sample we just created so no orphan is left
+      if (sampleCreatedNow) {
+        auto s = database_->getSampleByBarcode(mapped.sample.sampleId);
+        if (s && !database_->deleteSample(s->getId(), actor)) {
+          summary.lastError =
+              "createOrder failed AND compensating deleteSample failed: " +
+              database_->getLastError();
+          return false;
+        }
+      }
       summary.lastError = database_->getLastError();
       return false;
     }
@@ -162,18 +234,12 @@ bool Hl7Exchange::importOruR01Message(const std::string &message,
   resultIds.reserve(mapped.results.size());
 
   for (const auto &resultData : mapped.results) {
-    if (resultData.parameter.empty() || resultData.value.empty()) {
-      Hl7Parser::Error err;
-      err.segment = "OBX";
-      err.fieldIndex = resultData.parameter.empty() ? 3 : 5;
-      err.message = "Missing observation parameter/value";
-      summary.errors.push_back(err);
-      continue;
-    }
-
     std::string resultId = resultData.resultId;
     if (resultId.empty()) {
       resultId = mapped.order.orderId + "-" + resultData.parameter;
+    }
+    if (resultId.size() > 64) {
+      resultId = resultId.substr(0, 64);
     }
 
     core::TestResult result(resultId, orderDbId, resultData.parameter);
@@ -481,6 +547,9 @@ bool Hl7Parser::mapOruR01(MappedData &out) {
     }
 
     result.resultId = orderId.empty() ? suffix : orderId + "-" + suffix;
+    if (result.resultId.size() > 64) {
+      result.resultId = result.resultId.substr(0, 64);
+    }
     result.orderId = orderId;
     result.parameter = obsId;
     result.value = value;

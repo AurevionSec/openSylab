@@ -1,13 +1,14 @@
 #include "utils/CsvImport.h"
+#include "utils/Logger.h"
 #include <algorithm>
 #include <cctype>
-#include <filesystem>
+#include <cstdint>
 #include <fstream>
-#include <iostream>
-#include <sstream>
 
 namespace {
 constexpr size_t kMaxImportBytes = 10 * 1024 * 1024;
+// 24-hour tolerance for registration_date validation (accommodates clock skew)
+constexpr std::time_t kMaxFutureDateTolerance = 86400;
 
 std::string trim(const std::string &value) {
   const size_t start = value.find_first_not_of(" \t\r\n");
@@ -43,9 +44,7 @@ bool isEmptyRecord(const std::string &record) {
 
 void printErrorSummary(int importedCount, int errorCount) {
   if (errorCount > 0) {
-    std::cerr << "\nImport-Zusammenfassung:\n";
-    std::cerr << "  ✓ Erfolgreich: " << importedCount << "\n";
-    std::cerr << "  ✗ Fehler: " << errorCount << "\n";
+    LOG_WARN("Import-Zusammenfassung: Erfolgreich={}, Fehler={}", importedCount, errorCount);
   }
 }
 } // namespace
@@ -57,7 +56,7 @@ bool CsvImport::processRecord(const std::string &record, int recordNumber,
   if (fields.size() < 2) {
     const std::string error =
         "Zu wenig Felder (erwartet mindestens 2)";
-    std::cerr << "✗ Fehler Record " << recordNumber << ": " << error << "\n";
+    LOG_ERROR("Fehler Record {}: {}", recordNumber, error);
     addFailedRecord(recordNumber, record, error);
     return false;
   }
@@ -69,11 +68,10 @@ bool CsvImport::processRecord(const std::string &record, int recordNumber,
     importedRecords_.push_back({sample, recordNumber, record});
     return true;
   } catch (const std::invalid_argument &e) {
-    std::cerr << "✗ Fehler Record " << recordNumber << ": " << e.what() << "\n";
+    LOG_ERROR("Fehler Record {}: {}", recordNumber, e.what());
     addFailedRecord(recordNumber, record, e.what());
   } catch (const std::exception &e) {
-    std::cerr << "✗ Unerwarteter Fehler Record " << recordNumber << ": "
-              << e.what() << "\n";
+    LOG_ERROR("Unerwarteter Fehler Record {}: {}", recordNumber, e.what());
     addFailedRecord(recordNumber, record, e.what());
   }
   return false;
@@ -88,16 +86,16 @@ CsvImport::importSamples(const std::string &filePath) {
   failedRecords_.clear();
   headerLine_.clear();
 
-  std::error_code ec;
-  const auto size = std::filesystem::file_size(filePath, ec);
-  if (!ec && size > kMaxImportBytes) {
-    setError("CSV-Datei zu groß für Import");
-    return samples;
-  }
-
   std::ifstream file(filePath);
   if (!file.is_open()) {
     setError("Kann Datei nicht öffnen: " + filePath);
+    return samples;
+  }
+  file.seekg(0, std::ios::end);
+  const auto size = file.tellg();
+  file.seekg(0, std::ios::beg);
+  if (size < 0 || static_cast<std::uintmax_t>(size) > kMaxImportBytes) {
+    setError("CSV-Datei zu groß für Import");
     return samples;
   }
 
@@ -110,7 +108,7 @@ CsvImport::importSamples(const std::string &filePath) {
     std::string headerLine;
     if (std::getline(file, headerLine)) {
       headerLine_ = headerLine;
-      std::cerr << "Header: " << headerLine << std::endl;
+      LOG_DEBUG("Header: {}", headerLine);
       if (!validateHeader(headerLine_)) {
         setError("Ungueltiger CSV-Header. Erwartet: sample_id,patient_id,"
                  "patient_name,description,status");
@@ -145,8 +143,7 @@ CsvImport::importSamples(const std::string &filePath) {
   // Prüfen auf nicht geschlossene Anführungszeichen
   if (inQuotes) {
     errorCount++;
-    std::cerr
-        << "✗ Fehler: Datei endet mit nicht geschlossenem Anführungszeichen\n";
+    LOG_ERROR("Fehler: Datei endet mit nicht geschlossenem Anführungszeichen");
   }
 
   // Letzten Record verarbeiten (falls Datei nicht mit Newline endet)
@@ -161,8 +158,7 @@ CsvImport::importSamples(const std::string &filePath) {
   file.close();
 
   if (importedCount_ > 0) {
-    std::cerr << "\n✓ CSV-Import erfolgreich: " << importedCount_
-              << " Proben importiert\n";
+    LOG_INFO("CSV-Import erfolgreich: {} Proben importiert", importedCount_);
   } else {
     setError(errorCount > 0
                  ? "Keine Proben importiert - alle Zeilen enthielten Fehler"
@@ -177,7 +173,7 @@ bool CsvImport::validateHeader(const std::string &header) {
   const std::vector<std::string> expected = {
       "sample_id", "patient_id", "patient_name", "description", "status"};
   auto fields = parseLine(header);
-  if (fields.size() < 2 || fields.size() > expected.size()) {
+  if (fields.size() < 2) {
     return false;
   }
   if (!fields.empty()) {
@@ -186,7 +182,8 @@ bool CsvImport::validateHeader(const std::string &header) {
       fields[0] = fields[0].substr(bom.size());
     }
   }
-  for (size_t i = 0; i < fields.size(); ++i) {
+  const size_t checkCount = std::min(fields.size(), expected.size());
+  for (size_t i = 0; i < checkCount; ++i) {
     if (toLower(trim(fields[i])) != expected[i]) {
       return false;
     }
@@ -276,8 +273,17 @@ core::Sample CsvImport::parseRecord(const std::vector<std::string> &fields) {
     return fields[index];
   };
 
-  sample.setSampleId(requireField(0, "sample_id"));
-  sample.setPatientId(requireField(1, "patient_id"));
+  const std::string sampleId = requireField(0, "sample_id");
+  if (sampleId.size() > 64) {
+    throw std::invalid_argument("sample_id ueberschreitet Maximallänge von 64 Zeichen");
+  }
+  sample.setSampleId(sampleId);
+
+  const std::string patientId = requireField(1, "patient_id");
+  if (patientId.size() > 64) {
+    throw std::invalid_argument("patient_id ueberschreitet Maximallänge von 64 Zeichen");
+  }
+  sample.setPatientId(patientId);
 
   // Optionale Felder
   if (fields.size() > 2) {
@@ -297,6 +303,26 @@ core::Sample CsvImport::parseRecord(const std::vector<std::string> &fields) {
     sample.setStatus(core::Sample::Status::REGISTERED);
   }
 
+  if (fields.size() > 5 && !fields[5].empty()) {
+    bool isNumeric = !fields[5].empty() &&
+                     fields[5].find_first_not_of("0123456789") == std::string::npos;
+    if (isNumeric) {
+      try {
+        const long long ts = std::stoll(fields[5]);
+        const long long maxTs =
+            static_cast<long long>(std::time(nullptr)) + kMaxFutureDateTolerance;
+        if (ts <= 0 || ts > maxTs) {
+          throw std::invalid_argument(
+              "registration_date liegt in der Zukunft oder ist ungueltig");
+        }
+        sample.setRegistrationDate(static_cast<std::time_t>(ts));
+      } catch (const std::out_of_range &) {
+        throw std::invalid_argument("registration_date ist ungueltig");
+      }
+    }
+    // Non-numeric field at position 5 is an unknown extra column — silently ignored.
+  }
+
   return sample;
 }
 
@@ -307,7 +333,7 @@ void CsvImport::addFailedRecord(int recordNumber, const std::string &record,
 
 void CsvImport::setError(const std::string &error) {
   lastError_ = error;
-  std::cerr << "CSV-Import-Fehler: " << error << std::endl;
+  LOG_ERROR("CSV-Import-Fehler: {}", error);
 }
 
 } // namespace utils

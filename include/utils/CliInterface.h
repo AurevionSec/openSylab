@@ -2,7 +2,7 @@
 #define OPENSYLAB_CLIINTERFACE_H
 
 #include "core/User.h"
-#include "db/Database.h"
+#include "db/IDatabase.h"
 #include <algorithm>
 #include <cctype>
 #include <ctime>
@@ -25,7 +25,7 @@ public:
    * @brief Konstruktor
    * @param database Zeiger auf Datenbank-Instanz
    */
-  explicit CliInterface(std::shared_ptr<db::Database> database);
+  explicit CliInterface(std::shared_ptr<db::IDatabase> database);
 
   /**
    * @brief Destruktor
@@ -63,7 +63,7 @@ public:
   }
 
 private:
-  std::shared_ptr<db::Database> database_;
+  std::shared_ptr<db::IDatabase> database_;
   bool running_;
   std::unique_ptr<core::User> currentUser_;
   std::time_t startTime_;

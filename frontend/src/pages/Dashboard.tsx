@@ -9,8 +9,9 @@ import type { DashboardStats } from '../types/stats';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { ErrorBanner } from '../components/common/ErrorBanner';
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Rectangle,
 } from 'recharts';
+import type { BarShapeProps } from 'recharts';
 
 const STATUS_COLORS: Record<string, string> = {
   REGISTERED: '#3B82F6',
@@ -33,6 +34,7 @@ export const Dashboard = () => {
   const [samples, setSamples] = useState<Sample[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [warning, setWarning] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -50,22 +52,37 @@ export const Dashboard = () => {
           };
         }
 
-        const samplesData = await getSamples({ limit: 100 });
-        const ordersData = await getOrders({ limit: 100 });
-        const resultsData = await getResults({ limit: 100 });
+        const [samplesResult, ordersResult, resultsResult] = await Promise.allSettled([
+          getSamples({ limit: 100 }),
+          getOrders({ limit: 100 }),
+          getResults({ limit: 100 }),
+        ]);
 
-        if (statsData && statsData.samples.total === 0 && samplesData.total > 0) {
+        const samplesData = samplesResult.status === 'fulfilled' ? samplesResult.value : null;
+        const ordersData = ordersResult.status === 'fulfilled' ? ordersResult.value : null;
+        const resultsData = resultsResult.status === 'fulfilled' ? resultsResult.value : null;
+
+        const fetchErrors: string[] = [];
+        if (samplesResult.status === 'rejected') fetchErrors.push('samples');
+        if (ordersResult.status === 'rejected') fetchErrors.push('orders');
+        if (resultsResult.status === 'rejected') fetchErrors.push('results');
+        if (fetchErrors.length > 0 && !cancelled) {
+          // Inline warning — partial data is still shown; only a full failure triggers error
+          setWarning(`Failed to load: ${fetchErrors.join(', ')}. Displayed data may be incomplete.`);
+        }
+
+        if (statsData && samplesData && statsData.samples.total === 0 && samplesData.total > 0) {
           statsData.samples.total = samplesData.total;
         }
-        if (statsData && statsData.orders.total === 0 && ordersData.total > 0) {
+        if (statsData && ordersData && statsData.orders.total === 0 && ordersData.total > 0) {
           statsData.orders.total = ordersData.total;
         }
-        if (statsData && statsData.results.total === 0 && resultsData.total > 0) {
+        if (statsData && resultsData && statsData.results.total === 0 && resultsData.total > 0) {
           statsData.results.total = resultsData.total;
         }
 
         if (!cancelled) setStats(statsData);
-        if (!cancelled) setSamples(samplesData.samples);
+        if (!cancelled) setSamples(samplesData?.samples ?? []);
       } catch (err) {
         console.error('Dashboard error:', err);
         if (!cancelled) setError('Failed to load dashboard data');
@@ -152,6 +169,7 @@ export const Dashboard = () => {
   return (
     <Layout>
       <div className="space-y-4">
+        {warning && <ErrorBanner message={warning} />}
         {/* Header */}
         <div className="border-b border-[#E2E8F0] pb-4">
           <h1 className="text-2xl font-bold text-[#1A1C20] tracking-tight uppercase">System Overview</h1>
@@ -259,11 +277,10 @@ export const Dashboard = () => {
                     contentStyle={{ fontSize: 11, border: '1px solid #E2E8F0' }}
                     formatter={(v) => [v, 'Count']}
                   />
-                  <Bar dataKey="count" radius={[2, 2, 0, 0]}>
-                    {sampleStatusChart.map((entry, i) => (
-                      <Cell key={i} fill={entry.fill} />
-                    ))}
-                  </Bar>
+                  <Bar
+                    dataKey="count"
+                    shape={(props: BarShapeProps) => <Rectangle {...props} radius={[2, 2, 0, 0]} />}
+                  />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -283,11 +300,10 @@ export const Dashboard = () => {
                     contentStyle={{ fontSize: 11, border: '1px solid #E2E8F0' }}
                     formatter={(v) => [v, 'Count']}
                   />
-                  <Bar dataKey="count" radius={[2, 2, 0, 0]}>
-                    {orderStatusChart.map((entry, i) => (
-                      <Cell key={i} fill={entry.fill} />
-                    ))}
-                  </Bar>
+                  <Bar
+                    dataKey="count"
+                    shape={(props: BarShapeProps) => <Rectangle {...props} radius={[2, 2, 0, 0]} />}
+                  />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -307,11 +323,10 @@ export const Dashboard = () => {
                     contentStyle={{ fontSize: 11, border: '1px solid #E2E8F0' }}
                     formatter={(v) => [v, 'Count']}
                   />
-                  <Bar dataKey="count" radius={[2, 2, 0, 0]}>
-                    {orderPriorityChart.map((entry, i) => (
-                      <Cell key={i} fill={entry.fill} />
-                    ))}
-                  </Bar>
+                  <Bar
+                    dataKey="count"
+                    shape={(props: BarShapeProps) => <Rectangle {...props} radius={[2, 2, 0, 0]} />}
+                  />
                 </BarChart>
               </ResponsiveContainer>
             ) : (

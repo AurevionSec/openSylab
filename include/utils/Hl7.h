@@ -4,7 +4,7 @@
 #include "core/Order.h"
 #include "core/Sample.h"
 #include "core/TestResult.h"
-#include "db/Database.h"
+#include "db/IDatabase.h"
 #include <memory>
 #include <string>
 #include <vector>
@@ -93,7 +93,7 @@ public:
     std::string lastError;
   };
 
-  explicit Hl7Exchange(std::shared_ptr<db::Database> database);
+  explicit Hl7Exchange(std::shared_ptr<db::IDatabase> database);
 
   bool importOruR01Message(const std::string &message,
                            const std::string &actor,
@@ -103,7 +103,7 @@ public:
                                   const std::vector<core::TestResult> &results);
 
 private:
-  std::shared_ptr<db::Database> database_;
+  std::shared_ptr<db::IDatabase> database_;
   void logErrors(const std::vector<Hl7Parser::Error> &errors,
                  const std::string &actor,
                  const std::string &messageId,

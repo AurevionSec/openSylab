@@ -2,6 +2,35 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.9.0] - 2026-05-25
+
+### Architecture
+
+- **nlohmann/json v3.11.3** — FetchContent integration; replaced hand-rolled JSON parser throughout `ApiServer.cpp`; all API endpoints now use `json::parse` / `json{}.dump()`
+- **spdlog v1.14.1** — Structured JSON logging via FetchContent; console color sink + optional rotating file sink; `LOG_*` macros replace all `std::cout`/`std::cerr` in library code
+- **IDatabase interface** — Pure virtual `IDatabase` interface introduced; `ApiServer.h` now imports `IDatabase.h` (Layer 4 → Layer 2 → Layer 1 violation fixed); all components depend only on the interface
+- **PostgreSQLDatabase stub** — `PostgreSQLDatabase` implements `IDatabase`; all methods return safe failure values; startup guard in `main.cpp` rejects `dbBackend=postgresql` until v1.1 (no HMAC support)
+
+### Security
+
+- **HMAC-SHA256 audit hash chain** — Each audit entry is HMAC-SHA256-chained to its predecessor using canonical JSON field serialization (collision-safe); `OPENSYLAB_AUDIT_HMAC_KEY` is mandatory at startup (min 32 chars, hard-fail); `BEGIN IMMEDIATE` transactions ensure atomic hash-chain writes; tamper detection verified in unit tests
+- **`GET /api/v1/audit/verify`** — New ADMIN-only endpoint verifies the complete hash chain and returns the first broken entry on integrity failure
+- **Startup guards** — Hard-fail if `OPENSYLAB_AUDIT_HMAC_KEY` is absent or shorter than 32 characters; hard-fail if `dbBackend=postgresql` (stub has no HMAC support)
+- **`docker-compose.yml`** — Added `OPENSYLAB_AUDIT_HMAC_KEY` placeholder with `openssl rand -hex 32` generation instruction
+
+### Features
+
+- **Thread-per-connection concurrency** — `serveLoop()` now spawns a `std::thread` per accepted connection; `std::atomic<int>` slot reservation with `memory_order_seq_cst`; max 32 concurrent connections (HTTP 503 on overflow)
+- **Database migrations** — `schema_migrations` table tracks applied migrations; 3 versioned migrations (chain_hash column, mfa_secret_base32 column, auth_config table); idempotent via `PRAGMA table_info` pre-check; runs automatically on `initializeSchema()`
+- **TOTP Base32 enrollment flow** — `generateMfaSecret()` generates cryptographic secret via `RAND_bytes`; `base32Encode()` produces authenticator-compatible Base32; `getMfaEnrollmentUri()` returns `otpauth://totp/...` URI for QR display; `POST /auth/mfa/enroll`, `POST /auth/mfa/verify-enrollment`, `DELETE /auth/mfa` endpoints
+- **Configuration file** `opensylab.conf` — INI-format config with search order: `--config` flag → `OPENSYLAB_CONFIG` env var → `./opensylab.conf` → `/etc/opensylab/opensylab.conf`; all 11 settings configurable; explicit paths that don't exist cause startup failure; `..` in path rejected
+- **OpenAPI 3.0 specification** — `docs/openapi.yaml` (23 paths, all schemas, BearerAuth security scheme); served unauthenticated at `GET /api/v1/openapi.yaml`; compatible with Swagger UI, Redoc, and `openapi-generator`
+- **Frontend unit tests** — Vitest v2.1.9 + React Testing Library + happy-dom; 46 tests covering AuthContext (7), API client (6), utility functions (24), Login component (9)
+
+### Bug fixes
+
+- **Unused includes removed** — `<algorithm>` from `Fhir.cpp`, `<chrono>`/`<thread>` from `CliInterface.cpp`, `<sstream>` from `CsvImport.cpp`, `<stdexcept>` from `Logger.cpp`, `<cerrno>` from `ApiServer.cpp`
+
 ## [0.8.2] - 2026-05-14
 
 ### Bug fixes (Tests & Validation)

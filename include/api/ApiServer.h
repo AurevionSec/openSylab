@@ -4,7 +4,7 @@
 #include "core/Order.h"
 #include "core/Sample.h"
 #include "core/TestResult.h"
-#include "db/Database.h"
+#include "db/IDatabase.h"
 #include "api/TlsContext.h"
 #include "auth/JwtAuth.h"
 #include <atomic>
@@ -13,7 +13,6 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
-#include <unordered_set>
 #include <optional>
 #include <openssl/ssl.h>
 
@@ -36,11 +35,12 @@ struct ApiResponse {
   int status = 200;
   std::string body;
   std::string contentType = "application/json";
+  std::unordered_map<std::string, std::string> extraHeaders{};
 };
 
 class ApiRouter {
 public:
-  explicit ApiRouter(std::shared_ptr<db::Database> database);
+  explicit ApiRouter(std::shared_ptr<db::IDatabase> database);
 
   ApiResponse handleRequest(const ApiRequest &request);
 
@@ -56,15 +56,26 @@ private:
   std::optional<auth::JwtAuth::TokenPayload>
   extractAndValidateJwt(const std::unordered_map<std::string, std::string> &headers);
 
-  std::shared_ptr<db::Database> database_;
+  std::shared_ptr<db::IDatabase> database_;
   std::unique_ptr<auth::JwtAuth> jwtAuth_;
-  mutable std::unordered_set<std::string> tokenBlacklist_;
+  // Token blacklist: maps token → expiry time_point.
+  // Expired entries are pruned on every logout to prevent unbounded growth.
+  mutable std::unordered_map<std::string, std::chrono::steady_clock::time_point> tokenBlacklist_;
   mutable std::mutex blacklistMutex_;
+
+  // Server-side TOTP enrollment sessions: userId → (secret, expiry).
+  // The client never supplies the secret at verify time — only the 6-digit code.
+  struct PendingEnrollment {
+    std::string secret;
+    std::chrono::steady_clock::time_point expiry;
+  };
+  mutable std::unordered_map<int, PendingEnrollment> pendingEnrollments_;
+  mutable std::mutex enrollmentMutex_;
 };
 
 class ApiServer {
 public:
-  ApiServer(std::shared_ptr<db::Database> database, int port = 8080);
+  ApiServer(std::shared_ptr<db::IDatabase> database, int port = 8080);
 
   bool run();
   void stop();
@@ -105,11 +116,15 @@ private:
   void handleClientTls(int clientFd);
   void handleClientPlain(int clientFd);
 
-  std::shared_ptr<db::Database> database_;
+  // Thread-pool configuration
+  static constexpr int kMaxThreads = 32;
+
+  std::shared_ptr<db::IDatabase> database_;
   ApiRouter router_;
   int port_;
   int serverFd_;
   std::atomic<bool> running_;
+  std::atomic<int> activeConnections_{0};
   std::unique_ptr<TlsContext> tlsContext_;
   bool tlsEnabled_;
   std::string corsOrigin_;

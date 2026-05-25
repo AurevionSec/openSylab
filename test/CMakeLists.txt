@@ -13,6 +13,9 @@ set(TEST_SOURCES
     unit/test_fhir.cpp
     unit/test_statistics.cpp
     unit/test_utils.cpp
+    unit/test_config.cpp
+    unit/test_migrations.cpp
+    unit/test_audit_chain.cpp
     unit/test_runner.cpp
 )
 
@@ -26,7 +29,7 @@ target_include_directories(opensylab_tests PRIVATE
 )
 
 # Libraries verlinken
-target_link_libraries(opensylab_tests PRIVATE SQLite::SQLite3 OpenSSL::SSL OpenSSL::Crypto jwt-cpp::jwt-cpp)
+target_link_libraries(opensylab_tests PRIVATE SQLite::SQLite3 OpenSSL::SSL OpenSSL::Crypto jwt-cpp::jwt-cpp nlohmann_json::nlohmann_json spdlog::spdlog)
 
 # Quellcode-Dateien die getestet werden sollen
 target_sources(opensylab_tests PRIVATE
@@ -39,11 +42,13 @@ target_sources(opensylab_tests PRIVATE
     ${PROJECT_SOURCE_DIR}/src/api/ApiServer.cpp
     ${PROJECT_SOURCE_DIR}/src/api/TlsContext.cpp
     ${PROJECT_SOURCE_DIR}/src/auth/JwtAuth.cpp
+    ${PROJECT_SOURCE_DIR}/src/utils/Config.cpp
     ${PROJECT_SOURCE_DIR}/src/utils/CsvImport.cpp
     ${PROJECT_SOURCE_DIR}/src/utils/CsvResultImport.cpp
     ${PROJECT_SOURCE_DIR}/src/utils/Hl7.cpp
     ${PROJECT_SOURCE_DIR}/src/utils/Fhir.cpp
     ${PROJECT_SOURCE_DIR}/src/utils/CliInterface.cpp
+    ${PROJECT_SOURCE_DIR}/src/utils/Logger.cpp
 )
 
 # Test hinzufügen

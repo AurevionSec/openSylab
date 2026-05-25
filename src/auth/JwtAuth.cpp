@@ -1,6 +1,7 @@
 #include "auth/JwtAuth.h"
 #include <jwt-cpp/jwt.h>
 #include <chrono>
+#include <random>
 #include <stdexcept>
 
 namespace opensylab {
@@ -19,6 +20,18 @@ JwtAuth::JwtAuth(const JwtConfig &config) : config_(config) {
   }
 }
 
+static std::string generateJti(int userId) {
+  std::random_device rd;
+  std::seed_seq seq{rd(), rd(), rd(), rd()};
+  std::mt19937_64 rng(seq);
+  const uint64_t r1 = std::uniform_int_distribution<uint64_t>{}(rng);
+  const uint64_t r2 = std::uniform_int_distribution<uint64_t>{}(rng);
+  const auto ts = static_cast<uint64_t>(
+      std::chrono::system_clock::now().time_since_epoch().count());
+  return std::to_string(userId) + "_" + std::to_string(ts) + "_" +
+         std::to_string(r1) + "_" + std::to_string(r2);
+}
+
 std::string JwtAuth::generateToken(int userId, const std::string &username,
                                    const std::string &role) {
   auto now = std::chrono::system_clock::now();
@@ -27,6 +40,7 @@ std::string JwtAuth::generateToken(int userId, const std::string &username,
   auto token = jwt::create()
                    .set_issuer(config_.issuer)
                    .set_type("JWT")
+                   .set_id(generateJti(userId))
                    .set_issued_at(now)
                    .set_expires_at(exp)
                    .set_payload_claim("userId", jwt::claim(std::to_string(userId)))
@@ -53,10 +67,15 @@ JwtAuth::validateToken(const std::string &token) {
     // Extract payload
     TokenPayload payload;
 
-    // Get userId (stored as string, convert to int)
+    // Get userId (stored as string, convert to int with bounds check)
     if (decoded.has_payload_claim("userId")) {
-      std::string userIdStr = decoded.get_payload_claim("userId").as_string();
-      payload.userId = std::stoi(userIdStr);
+      const std::string userIdStr = decoded.get_payload_claim("userId").as_string();
+      size_t idx = 0;
+      const long long parsed = std::stoll(userIdStr, &idx);
+      if (idx != userIdStr.size() || parsed <= 0 || parsed > INT_MAX) {
+        return std::nullopt;
+      }
+      payload.userId = static_cast<int>(parsed);
     } else {
       return std::nullopt;
     }
@@ -87,18 +106,13 @@ JwtAuth::validateToken(const std::string &token) {
       payload.iat = std::chrono::system_clock::to_time_t(
           decoded.get_issued_at());
     } else {
-      payload.iat = 0;
+      return std::nullopt;
     }
 
     if (decoded.has_issuer()) {
       payload.issuer = decoded.get_issuer();
     } else {
       payload.issuer = "";
-    }
-
-    // Check if expired
-    if (isTokenExpired(payload)) {
-      return std::nullopt;
     }
 
     return payload;

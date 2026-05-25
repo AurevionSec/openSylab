@@ -181,11 +181,8 @@ export const SampleCreateModal = ({ isOpen, onClose, onSuccess }: SampleCreateMo
                 className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#0055FF] focus:border-transparent"
                 required
               >
-                {Object.entries(SAMPLE_STATUSES).map(([key, label]) => (
-                  <option key={key} value={key}>
-                    {label}
-                  </option>
-                ))}
+                {/* New samples must start in REGISTERED state per ISO 15189 state machine */}
+                <option value="REGISTERED">{SAMPLE_STATUSES.REGISTERED}</option>
               </select>
             </div>
 

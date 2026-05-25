@@ -2,7 +2,7 @@
 #define OPENSYLAB_CSVRESULTIMPORT_H
 
 #include "core/TestResult.h"
-#include "db/Database.h"
+#include "db/IDatabase.h"
 #include <memory>
 #include <string>
 #include <vector>
@@ -36,7 +36,7 @@ public:
    * @brief Konstruktor
    * @param database Zeiger auf Datenbank für Validierung
    */
-  explicit CsvResultImport(std::shared_ptr<db::Database> database);
+  explicit CsvResultImport(std::shared_ptr<db::IDatabase> database);
 
   /**
    * @brief Destruktor
@@ -55,7 +55,8 @@ public:
    * @param filePath Pfad zur CSV-Datei
    * @return Anzahl erfolgreich gespeicherter Ergebnisse
    */
-  int importAndStore(const std::string &filePath);
+  int importAndStore(const std::string &filePath,
+                     const std::string &actor = "");
 
   /**
    * @brief Setzt das Trennzeichen für CSV-Parsing
@@ -114,7 +115,7 @@ public:
                      const std::vector<FailedRecord> &extraFailed) const;
 
 private:
-  std::shared_ptr<db::Database> database_;
+  std::shared_ptr<db::IDatabase> database_;
   char delimiter_;
   bool hasHeader_;
   bool validateOrders_;

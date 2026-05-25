@@ -89,6 +89,13 @@ export const Import = () => {
       const lines = (firstLower.startsWith('sample_id') || firstLower === 'id,patient_id' || firstLower.startsWith('id,patient_id'))
         ? allLines.slice(1)
         : allLines;
+      if (lines.length > 10000) {
+        setCsvError('Zu viele Zeilen. Maximum: 10.000 Zeilen pro Import.');
+        setFileName('');
+        setRows([]);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        return;
+      }
       const parsed: ImportRow[] = lines.map((line, i) => ({
         lineNumber: i + 1,
         raw: line,
@@ -169,6 +176,14 @@ export const Import = () => {
       if (hl7FileInputRef.current) hl7FileInputRef.current.value = '';
       return;
     }
+    const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+    if (!['.hl7', '.txt'].includes(ext) && file.type !== 'text/plain') {
+      setHl7Error('Ungültiges Dateiformat. Erlaubt: .hl7, .txt');
+      setHl7FileContent('');
+      setHl7FileName('');
+      if (hl7FileInputRef.current) hl7FileInputRef.current.value = '';
+      return;
+    }
     setHl7FileName(file.name);
     setHl7Result(null);
     setHl7Error('');
@@ -208,6 +223,13 @@ export const Import = () => {
     if (!file) return;
     if (file.size > 5 * 1024 * 1024) {
       setFhirError('Datei zu groß. Maximale Größe: 5 MB.');
+      setFhirFileContent('');
+      setFhirFileName('');
+      if (fhirFileInputRef.current) fhirFileInputRef.current.value = '';
+      return;
+    }
+    if (!file.name.toLowerCase().endsWith('.json') && file.type !== 'application/json') {
+      setFhirError('Ungültiges Dateiformat. Erlaubt: .json');
       setFhirFileContent('');
       setFhirFileName('');
       if (fhirFileInputRef.current) fhirFileInputRef.current.value = '';

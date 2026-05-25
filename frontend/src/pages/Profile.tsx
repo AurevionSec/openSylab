@@ -257,18 +257,19 @@ const ChangePasswordForm = ({ onSuccess, onCancel, forceChange }: ChangePassword
     e.preventDefault();
     setError('');
     setSuccess(false);
+    setLoading(true);
 
     if (formData.new_password !== confirmPassword) {
       setError('New passwords do not match');
+      setLoading(false);
       return;
     }
 
     if (formData.new_password.length < 8) {
       setError('Password must be at least 8 characters long');
+      setLoading(false);
       return;
     }
-
-    setLoading(true);
 
     try {
       await changePassword(formData);

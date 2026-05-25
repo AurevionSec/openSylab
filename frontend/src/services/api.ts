@@ -9,6 +9,12 @@ const api = axios.create({
   },
 });
 
+// Dispatch a custom event so AuthContext (inside the React tree) can handle
+// logout and navigate via React Router, avoiding the back-button breakage that
+// window.location.href causes (bypasses React Router history).
+const dispatchAuthExpired = () =>
+  window.dispatchEvent(new Event('opensylab:auth-expired'));
+
 // Add JWT Bearer token interceptor
 api.interceptors.request.use((config) => {
   // Try JWT token first
@@ -19,9 +25,9 @@ api.interceptors.request.use((config) => {
     if (_isExpired) {
       localStorage.removeItem(JWT_TOKEN_STORAGE_KEY);
       localStorage.removeItem(USER_INFO_STORAGE_KEY);
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
-      }
+      localStorage.removeItem('opensylab_token_expiry');
+      localStorage.removeItem(API_KEY_STORAGE_KEY);
+      dispatchAuthExpired();
       return Promise.reject(new Error('Token expired'));
     }
     config.headers['Authorization'] = `Bearer ${jwtToken}`;
@@ -42,20 +48,17 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     const status = error.response?.status;
-    // Exempt the login endpoint from the session-expiry redirect — a 403 from
-    // /auth/login means mfa_required, not an expired session.
+    // Only 401 signals a truly expired/invalid token — clear the session.
+    // 403 means the token is valid but the role is insufficient (RBAC denial);
+    // logging out on 403 would boot authenticated VIEWER/CUSTOM users.
     const isLoginEndpoint = (error.config?.url ?? '').includes('/auth/login');
-    if ((status === 401 || status === 403) && !isLoginEndpoint) {
-      // Session expired or unauthorized — clear auth and redirect to login
+    if (status === 401 && !isLoginEndpoint) {
+      // Session expired — clear auth and signal React to navigate.
       localStorage.removeItem(JWT_TOKEN_STORAGE_KEY);
       localStorage.removeItem(USER_INFO_STORAGE_KEY);
       localStorage.removeItem('opensylab_token_expiry');
       localStorage.removeItem(API_KEY_STORAGE_KEY);
-
-      // Only redirect if not already on login page
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
-      }
+      dispatchAuthExpired();
     }
     return Promise.reject(error);
   }

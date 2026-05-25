@@ -123,6 +123,7 @@ bool test_csvresultimport_HeaderWithBomAccepted() {
 bool test_csvresultimport_HeaderWithExtraColumnsRejected() {
   auto db = createTestDatabase();
 
+  // Extra trailing columns beyond the known schema should be accepted (not rejected).
   std::string csvContent =
       "result_id,order_id,test_parameter,value,unit,ref_low,ref_high,measured_by,extra\n"
       "R001,1,Glucose,95,mg/dL,70,100,Laborant1,X\n";
@@ -132,8 +133,9 @@ bool test_csvresultimport_HeaderWithExtraColumnsRejected() {
   CsvResultImport importer(db);
   auto results = importer.importResults(filename);
 
-  ASSERT_EQ(results.size(), 0);
-  ASSERT_FALSE(importer.getLastError().empty());
+  // Extra column is silently ignored; the row should import successfully.
+  ASSERT_EQ(results.size(), 1);
+  ASSERT_TRUE(importer.getLastError().empty());
 
   deleteTempFile(filename);
   return true;

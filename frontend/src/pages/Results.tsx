@@ -25,6 +25,7 @@ export const Results = () => {
   const [selectedResult, setSelectedResult] = useState<TestResult | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [resultToDelete, setResultToDelete] = useState<TestResult | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const itemsPerPage = 20;
 
   const { data: results, total: totalResults, loading, error, refetch } = useEntityList(
@@ -65,8 +66,15 @@ export const Results = () => {
 
   const handleDeleteConfirm = async () => {
     if (!resultToDelete) return;
-    await deleteResult(resultToDelete.result_id);
-    try { refetch(); } catch { /* list refresh failed, delete succeeded */ }
+    setDeleteError(null);
+    try {
+      await deleteResult(resultToDelete.result_id);
+      setIsDeleteDialogOpen(false);
+      setResultToDelete(null);
+      refetch();
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Delete failed');
+    }
   };
 
   return (
@@ -139,7 +147,7 @@ export const Results = () => {
               </div>
             </div>
 
-            <ErrorBanner message={error || null} />
+            <ErrorBanner message={deleteError || error || null} />
 
             {loading ? (
               <div className="flex items-center justify-center py-12">

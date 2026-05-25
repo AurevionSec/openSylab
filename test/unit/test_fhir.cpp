@@ -173,6 +173,41 @@ bool test_fhir_ParseBundleWithBraceInString() {
   return true;
 }
 
+bool test_fhir_ImportPartialObservationValidationAbortsAllWrites() {
+  std::string dbPath = uniqueDbPath();
+  auto db = std::make_shared<opensylab::db::Database>(dbPath);
+  ASSERT_TRUE(db->open());
+  ASSERT_TRUE(db->initializeSchema());
+
+  // Valid patient/specimen/order, but second Observation has no value
+  const std::string payload =
+      "{\"resourceType\":\"Bundle\",\"type\":\"collection\",\"entry\":["
+      "{\"resource\":{\"resourceType\":\"Patient\",\"identifier\":[{\"value\":\"P_PAR\"}],"
+      "\"name\":[{\"text\":\"Partial^Patient\"}]}}"
+      ",{\"resource\":{\"resourceType\":\"Specimen\",\"identifier\":[{\"value\":\"S_PAR\"}]}}"
+      ",{\"resource\":{\"resourceType\":\"ServiceRequest\",\"identifier\":[{\"value\":\"O_PAR\"}],"
+      "\"code\":{\"text\":\"HB\"}}}"
+      ",{\"resource\":{\"resourceType\":\"Observation\","
+      "\"code\":{\"text\":\"HB\"},\"valueQuantity\":{\"value\":12.1,\"unit\":\"g/dL\"}}}"
+      ",{\"resource\":{\"resourceType\":\"Observation\","
+      "\"code\":{\"text\":\"GLU\"}}}"  // missing valueQuantity — triggers validation error
+      "]}";
+
+  FhirExchange exchange(db);
+  FhirExchange::ImportSummary summary;
+  ASSERT_FALSE(exchange.importBundle(payload, "tester", summary));
+  ASSERT_FALSE(summary.errors.empty());
+  ASSERT_EQ(summary.resultsCreated, 0);
+
+  // No sample, no order must have been written (pre-validation must abort all writes)
+  ASSERT_NULL(db->getSampleByBarcode("S_PAR"));
+  ASSERT_NULL(db->getOrderByOrderId("O_PAR"));
+
+  db->close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
 void registerFhirTests() {
   registerTest("FHIR::ParseValidBundle", test_fhir_ParseValidBundle);
   registerTest("FHIR::ImportCreatesEntities", test_fhir_ImportCreatesEntities);
@@ -181,4 +216,6 @@ void registerFhirTests() {
                test_fhir_ExportBundleContainsResources);
   registerTest("FHIR::ParseBundleWithBraceInString",
                test_fhir_ParseBundleWithBraceInString);
+  registerTest("FHIR::ImportPartialObservationValidationAbortsAllWrites",
+               test_fhir_ImportPartialObservationValidationAbortsAllWrites);
 }

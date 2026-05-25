@@ -1,9 +1,10 @@
 #include "utils/CsvResultImport.h"
+#include "utils/Logger.h"
 #include <algorithm>
 #include <cctype>
-#include <filesystem>
+#include <climits>
+#include <cstdint>
 #include <fstream>
-#include <iostream>
 #include <sstream>
 
 namespace {
@@ -19,7 +20,7 @@ std::string toLower(std::string value) {
 namespace opensylab {
 namespace utils {
 
-CsvResultImport::CsvResultImport(std::shared_ptr<db::Database> database)
+CsvResultImport::CsvResultImport(std::shared_ptr<db::IDatabase> database)
     : database_(database), delimiter_(','), hasHeader_(true),
       validateOrders_(true), lastError_(""), importedCount_(0), errorCount_(0) {
 }
@@ -34,16 +35,17 @@ CsvResultImport::importResults(const std::string &filePath) {
   lastError_.clear();
   headerLine_.clear();
 
-  std::error_code ec;
-  const auto size = std::filesystem::file_size(filePath, ec);
-  if (!ec && size > kMaxImportBytes) {
-    setError("CSV-Datei zu groß für Import");
-    return results;
-  }
-
   std::ifstream file(filePath);
   if (!file.is_open()) {
     setError("Kann Datei nicht öffnen: " + filePath);
+    return results;
+  }
+
+  file.seekg(0, std::ios::end);
+  const auto size = file.tellg();
+  file.seekg(0, std::ios::beg);
+  if (size < 0 || static_cast<std::uintmax_t>(size) > kMaxImportBytes) {
+    setError("CSV-Datei zu groß für Import");
     return results;
   }
 
@@ -117,16 +119,13 @@ CsvResultImport::importResults(const std::string &filePath) {
 
   // Zusammenfassung ausgeben
   if (errorCount_ > 0) {
-    std::cerr << "\nImport-Zusammenfassung:\n";
-    std::cerr << "  ✓ Erfolgreich: " << importedCount_ << "\n";
-    std::cerr << "  ✗ Fehler: " << errorCount_ << "\n";
+    LOG_WARN("Import-Zusammenfassung: Erfolgreich={}, Fehler={}", importedCount_, errorCount_);
   }
 
   if (importedCount_ == 0 && errorCount_ > 0) {
     setError("Keine Ergebnisse importiert - alle Zeilen enthielten Fehler");
   } else if (importedCount_ > 0) {
-    std::cerr << "\n✓ CSV-Import erfolgreich: " << importedCount_
-              << " Ergebnisse importiert\n";
+    LOG_INFO("CSV-Import erfolgreich: {} Ergebnisse importiert", importedCount_);
   } else {
     setError("Keine Ergebnisse importiert - Datei enthielt keine "
              "verwertbaren Zeilen");
@@ -135,17 +134,17 @@ CsvResultImport::importResults(const std::string &filePath) {
   return results;
 }
 
-int CsvResultImport::importAndStore(const std::string &filePath) {
+int CsvResultImport::importAndStore(const std::string &filePath,
+                                    const std::string &actor) {
   auto results = importResults(filePath);
 
-  auto batch = database_->createTestResultsBatch(results);
+  auto batch = database_->createTestResultsBatch(results, actor);
   for (const auto &failure : batch.failures) {
     if (failure.index >= results.size()) {
       continue;
     }
-    std::cerr << "✗ Fehler beim Speichern von "
-              << results[failure.index].getResultId() << ": "
-              << failure.message << "\n";
+    LOG_ERROR("Fehler beim Speichern von {}: {}",
+              results[failure.index].getResultId(), failure.message);
   }
 
   return static_cast<int>(batch.inserted);
@@ -160,7 +159,7 @@ bool CsvResultImport::processRecord(const std::string &record, int recordNumber,
   if (fields.size() < 4) {
     const std::string error =
         "Zu wenig Felder (erwartet mindestens 4)";
-    std::cerr << "✗ Fehler Record " << recordNumber << ": " << error << "\n";
+    LOG_ERROR("Fehler Record {}: {}", recordNumber, error);
     addFailedRecord(recordNumber, record, error);
     return false;
   }
@@ -169,7 +168,13 @@ bool CsvResultImport::processRecord(const std::string &record, int recordNumber,
   std::string resultId = trim(fields[0]);
   if (resultId.empty()) {
     const std::string error = "result_id ist ein Pflichtfeld";
-    std::cerr << "✗ Fehler Record " << recordNumber << ": " << error << "\n";
+    LOG_ERROR("Fehler Record {}: {}", recordNumber, error);
+    addFailedRecord(recordNumber, record, error);
+    return false;
+  }
+  if (resultId.size() > 64) {
+    const std::string error = "result_id ueberschreitet Maximallänge von 64 Zeichen";
+    LOG_ERROR("Fehler Record {}: {}", recordNumber, error);
     addFailedRecord(recordNumber, record, error);
     return false;
   }
@@ -178,10 +183,14 @@ bool CsvResultImport::processRecord(const std::string &record, int recordNumber,
   std::string orderIdStr = trim(fields[1]);
   int orderId = 0;
   try {
-    orderId = std::stoi(orderIdStr);
+    const long long parsed = std::stoll(orderIdStr);
+    if (parsed <= 0 || parsed > INT_MAX) {
+      throw std::out_of_range("order_id out of range");
+    }
+    orderId = static_cast<int>(parsed);
   } catch (...) {
     const std::string error = "order_id muss numerisch sein";
-    std::cerr << "✗ Fehler Record " << recordNumber << ": " << error << "\n";
+    LOG_ERROR("Fehler Record {}: {}", recordNumber, error);
     addFailedRecord(recordNumber, record, error);
     return false;
   }
@@ -190,7 +199,7 @@ bool CsvResultImport::processRecord(const std::string &record, int recordNumber,
   if (validateOrders_ && !validateOrderExists(orderId)) {
     const std::string error = "Auftrag " + std::to_string(orderId) +
                               " existiert nicht";
-    std::cerr << "✗ Fehler Record " << recordNumber << ": " << error << "\n";
+    LOG_ERROR("Fehler Record {}: {}", recordNumber, error);
     addFailedRecord(recordNumber, record, error);
     return false;
   }
@@ -199,7 +208,13 @@ bool CsvResultImport::processRecord(const std::string &record, int recordNumber,
   std::string testParameter = trim(fields[2]);
   if (testParameter.empty()) {
     const std::string error = "test_parameter ist ein Pflichtfeld";
-    std::cerr << "✗ Fehler Record " << recordNumber << ": " << error << "\n";
+    LOG_ERROR("Fehler Record {}: {}", recordNumber, error);
+    addFailedRecord(recordNumber, record, error);
+    return false;
+  }
+  if (testParameter.size() > 255) {
+    const std::string error = "test_parameter ueberschreitet Maximallänge von 255 Zeichen";
+    LOG_ERROR("Fehler Record {}: {}", recordNumber, error);
     addFailedRecord(recordNumber, record, error);
     return false;
   }
@@ -208,7 +223,13 @@ bool CsvResultImport::processRecord(const std::string &record, int recordNumber,
   std::string value = trim(fields[3]);
   if (value.empty()) {
     const std::string error = "value ist ein Pflichtfeld";
-    std::cerr << "✗ Fehler Record " << recordNumber << ": " << error << "\n";
+    LOG_ERROR("Fehler Record {}: {}", recordNumber, error);
+    addFailedRecord(recordNumber, record, error);
+    return false;
+  }
+  if (value.size() > 255) {
+    const std::string error = "value ueberschreitet Maximallänge von 255 Zeichen";
+    LOG_ERROR("Fehler Record {}: {}", recordNumber, error);
     addFailedRecord(recordNumber, record, error);
     return false;
   }
@@ -221,7 +242,14 @@ bool CsvResultImport::processRecord(const std::string &record, int recordNumber,
 
   // Optionale Felder
   if (fields.size() > 4) {
-    result.setUnit(trim(fields[4]));
+    const std::string unit = trim(fields[4]);
+    if (unit.size() > 255) {
+      const std::string error = "unit ueberschreitet Maximallänge von 255 Zeichen";
+      LOG_ERROR("Fehler Record {}: {}", recordNumber, error);
+      addFailedRecord(recordNumber, record, error);
+      return false;
+    }
+    result.setUnit(unit);
   }
 
   if (fields.size() > 5) {
@@ -241,7 +269,14 @@ bool CsvResultImport::processRecord(const std::string &record, int recordNumber,
   }
 
   if (fields.size() > 7) {
-    result.setMeasuredBy(trim(fields[7]));
+    const std::string measuredBy = trim(fields[7]);
+    if (measuredBy.size() > 255) {
+      const std::string error = "measured_by ueberschreitet Maximallänge von 255 Zeichen";
+      LOG_ERROR("Fehler Record {}: {}", recordNumber, error);
+      addFailedRecord(recordNumber, record, error);
+      return false;
+    }
+    result.setMeasuredBy(measuredBy);
   }
 
   // Referenzbereich-String erstellen
@@ -359,11 +394,13 @@ bool CsvResultImport::writeRetryCsv(
 }
 
 bool CsvResultImport::validateHeader(const std::string &header) {
-  const std::vector<std::string> expected = {
+  const std::vector<std::string> required = {
+      "result_id", "order_id", "test_parameter", "value"};
+  const std::vector<std::string> allKnown = {
       "result_id", "order_id", "test_parameter", "value",
       "unit",      "ref_low",  "ref_high",       "measured_by"};
   auto fields = parseLine(header);
-  if (fields.size() < 4 || fields.size() > expected.size()) {
+  if (fields.size() < required.size()) {
     return false;
   }
   if (!fields.empty()) {
@@ -372,8 +409,9 @@ bool CsvResultImport::validateHeader(const std::string &header) {
       fields[0] = fields[0].substr(bom.size());
     }
   }
-  for (size_t i = 0; i < fields.size(); ++i) {
-    if (toLower(trim(fields[i])) != expected[i]) {
+  const size_t checkCount = std::min(fields.size(), allKnown.size());
+  for (size_t i = 0; i < checkCount; ++i) {
+    if (toLower(trim(fields[i])) != allKnown[i]) {
       return false;
     }
   }
@@ -382,7 +420,7 @@ bool CsvResultImport::validateHeader(const std::string &header) {
 
 void CsvResultImport::setError(const std::string &error) {
   lastError_ = error;
-  std::cerr << "CSV-Import-Fehler: " << error << std::endl;
+  LOG_ERROR("CSV-Import-Fehler: {}", error);
 }
 
 std::string CsvResultImport::trim(const std::string &str) {

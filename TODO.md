@@ -1,7 +1,7 @@
 # OpenSylab — Roadmap & TODO
 
-**Current version:** v0.8.2 (2026-05-14)
-**Next version:** v0.9.0
+**Current version:** v0.9.0 (2026-05-25)
+**Next version:** v1.0.0
 **Branch:** main
 
 ---
@@ -50,14 +50,10 @@ Highlights: Rate Limiting · Forced password change · Enforce HTTPS · Health e
 - [x] **Status transition validation in backend** — only enforced in the frontend via
       `SAMPLE_TRANSITIONS`/`ORDER_TRANSITIONS`; the backend accepts any status string
       on PUT (ISO 15189 compliance gap)
-- [ ] **Configuration file** `opensylab.conf` — currently everything via CLI flags /
-      env vars; no standardized config path for prod deployments
-- [ ] **Frontend unit tests** — 0 automated frontend tests (Vitest + RTL).
-      Docs: "planned for v0.8.0"
-- [ ] **OpenAPI / Swagger** — no machine-readable API contract, 30+ endpoints
-      without documentation
-- [ ] **Database migrations** — no versioned migration system;
-      schema upgrade from v0.7 → v0.8 = manual or DB reset
+- [x] **Configuration file** `opensylab.conf` — done in v0.9.0
+- [x] **Frontend unit tests** — done in v0.9.0 (Vitest + RTL, 46 tests)
+- [x] **OpenAPI / Swagger** — done in v0.9.0 (docs/openapi.yaml, self-serve endpoint)
+- [x] **Database migrations** — done in v0.9.0 (versioned, idempotent)
 
 ### P2 — UI/UX improvements
 
@@ -88,10 +84,7 @@ Highlights: Rate Limiting · Forced password change · Enforce HTTPS · Health e
       frontend container may start before the backend
 - [x] **CORS duplication** — `getenv("OPENSYLAB_CORS_ORIGIN")` is read separately in
       `handleClientTls()` and `handleClientPlain()` (2 locations)
-- [ ] **Multi-threaded server / concurrency** — current `serveLoop()` is
-      sequential/blocking; a slow or malicious client blocks
-      the entire API for all other users. Migration to thread pool
-      or thread-per-connection required.
+- [x] **Multi-threaded server / concurrency** — done in v0.9.0 (thread-per-connection, max 32 concurrent, 503 on overflow)
 - [ ] **Secret key rotation** — no documented process for rotating
       the JWT secret without a server restart
 
@@ -163,35 +156,25 @@ P0 complete + health endpoint + HL7/FHIR endpoints + breadcrumb fix + TESTING.md
       Refactoring: one handler class per resource (SampleHandler, OrderHandler,
       ResultHandler, UserHandler, AuditHandler, StatsHandler, HL7Handler, FhirHandler).
       Effort: ~3–4 weeks.
-- [ ] **Replace JSON parser: nlohmann/json via FetchContent** — The hand-rolled
-      implementation does not support arrays or nested objects. nlohmann/json is
-      header-only, zero transitive dependencies, excellent security track record.
-      FetchContent infrastructure already exists (jwt-cpp). Effort: ~1 week.
-- [ ] **Layer violation: API imports DB directly** — `include/api/ApiServer.h`
-      imports `db/Database.h` directly; violates the documented 5-layer rule
-      (Layer 4 must not import Layer 1). Introduce a repository/service pattern
-      as a mediator long term.
-- [ ] **PostgreSQL backend option** — SQLite is correct for the single-lab edition;
-      for multi-site / multi-tenant (roadmap v1.1) a DB abstraction layer with
-      PostgreSQL support is needed. Roadmap v0.9 foresees this.
+- [x] **Replace JSON parser: nlohmann/json via FetchContent** — done in v0.9.0
+- [x] **Layer violation: API imports DB directly** — done in v0.9.0 (`IDatabase` interface; `ApiServer.h` now imports `IDatabase.h` only)
+- [x] **PostgreSQL backend option** — done in v0.9.0 (stub; full implementation planned v1.1)
 
-### v0.9.0 — Architecture modernization (priority proposal)
+### ✅ v0.9.0 — Architecture modernization (Completed 2026-05-25)
 
-- [ ] **Thread pool / thread-per-connection** (→ existing in P3, prioritized here)
-- [x] **Socket timeouts** `SO_RCVTIMEO` / `SO_SNDTIMEO` (→ done)
-- [ ] **Integrate nlohmann/json** (→ new, see above)
-- [x] **SQLite WAL mode** (→ done)
-- [x] **Status enum mismatch** frontend/backend (→ done)
-- [ ] **Hash-chain audit trail** — Cryptographically chained audit entries: each
-      hash includes the hash of the previous entry. A tampered entry breaks the
-      entire chain — mathematically provable. Optional: RFC 3161-qualified
-      timestamp (QTSP per eIDAS) per hash for forensic admissibility.
-      Effort: ~3–4 weeks (implementation + verification tool + documentation).
-- [ ] **OpenAPI / Swagger** (→ existing in P1)
-- [ ] **Database migrations** (→ existing in P1)
-- [ ] **PostgreSQL backend option** (→ new, see above)
-- [ ] **Structured JSON logs** — No dedicated logging system currently;
-      `std::cout`/`std::cerr` in library code violates the CLAUDE.md rule.
+- [x] **Thread pool / thread-per-connection** — thread-per-connection with `std::atomic<int>` slot reservation (max 32 concurrent), `memory_order_seq_cst`, 503 on overflow
+- [x] **Socket timeouts** `SO_RCVTIMEO` / `SO_SNDTIMEO` (→ done in v0.8.x)
+- [x] **Integrate nlohmann/json** — FetchContent v3.11.3; removed hand-rolled JSON parser; all API endpoints use `json::parse` / `json{}.dump()`
+- [x] **SQLite WAL mode** (→ done in v0.8.x)
+- [x] **Status enum mismatch** frontend/backend (→ done in v0.8.x)
+- [x] **Hash-chain audit trail** — HMAC-SHA256 with canonical JSON serialization; `OPENSYLAB_AUDIT_HMAC_KEY` mandatory (min 32 chars, hard-fail on startup); `BEGIN IMMEDIATE` atomicity; `GET /api/v1/audit/verify` endpoint; tamper detection in unit tests
+- [x] **OpenAPI / Swagger** — `docs/openapi.yaml` (OpenAPI 3.0, 23 paths, all schemas); served at `GET /api/v1/openapi.yaml` (unauthenticated, public)
+- [x] **Database migrations** — `schema_migrations` table; 3 versioned migrations; idempotent via `PRAGMA table_info` pre-check; runs automatically in `initializeSchema()`
+- [x] **PostgreSQL backend option** — `IDatabase` pure-virtual interface; `PostgreSQLDatabase` stub; layer violation in `ApiServer.h` fixed; PostgreSQL startup-blocked until v1.1 (no HMAC support in stub)
+- [x] **Structured JSON logs** — spdlog v1.14.1 via FetchContent; console color sink + rotating file sink; `LOG_*` macros throughout; no more `std::cout` in library code
+- [x] **TOTP Base32 enrollment flow** — `generateMfaSecret()` with `RAND_bytes`; `base32Encode()`; `getMfaEnrollmentUri()` returning `otpauth://` URI; `POST /auth/mfa/enroll`, `POST /auth/mfa/verify-enrollment`, `DELETE /auth/mfa` endpoints
+- [x] **Configuration file** `opensylab.conf` — INI parser; search order: `--config` flag → `OPENSYLAB_CONFIG` env → `./opensylab.conf` → `/etc/opensylab/opensylab.conf`; all settings configurable
+- [x] **Frontend unit tests** — Vitest v2.1.9 + React Testing Library; 46 tests across AuthContext, API client, utils, Login component
 
 ---
 

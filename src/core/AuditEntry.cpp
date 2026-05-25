@@ -33,6 +33,8 @@ std::string AuditEntry::actionToString(ActionType action) {
     return "DELETE";
   case ActionType::LOGIN:
     return "LOGIN";
+  case ActionType::LOGIN_FAILED:
+    return "LOGIN_FAILED";
   case ActionType::LOGOUT:
     return "LOGOUT";
   case ActionType::VALIDATE:
@@ -51,8 +53,10 @@ AuditEntry::ActionType AuditEntry::stringToAction(const std::string &str) {
       {"Erstellt", ActionType::CREATE},     {"CREATE", ActionType::CREATE},
       {"Aktualisiert", ActionType::UPDATE}, {"UPDATE", ActionType::UPDATE},
       {"Gelöscht", ActionType::DELETE},     {"DELETE", ActionType::DELETE},
-      {"Angemeldet", ActionType::LOGIN},    {"LOGIN", ActionType::LOGIN},
-      {"Abgemeldet", ActionType::LOGOUT},   {"LOGOUT", ActionType::LOGOUT},
+      {"Angemeldet", ActionType::LOGIN},           {"LOGIN", ActionType::LOGIN},
+      {"Anmeldeversuch fehlgeschlagen", ActionType::LOGIN_FAILED},
+      {"LOGIN_FAILED", ActionType::LOGIN_FAILED},
+      {"Abgemeldet", ActionType::LOGOUT},           {"LOGOUT", ActionType::LOGOUT},
       {"Validiert", ActionType::VALIDATE},  {"VALIDATE", ActionType::VALIDATE},
       {"Exportiert", ActionType::EXPORT},   {"EXPORT", ActionType::EXPORT},
       {"Zugriff", ActionType::ACCESS},      {"ACCESS", ActionType::ACCESS},

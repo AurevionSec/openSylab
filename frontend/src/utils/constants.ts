@@ -44,10 +44,10 @@ export const ORDER_PRIORITY_COLORS = {
 
 export const RESULT_STATUSES = {
   PENDING: 'Pending',
-  ENTERED: 'Erfasst',
+  ENTERED: 'Entered',
   VALIDATED: 'Validated',
   REJECTED: 'Rejected',
-  REPEATED: 'Wiederholt',
+  REPEATED: 'Repeated',
 } as const;
 
 export const RESULT_STATUS_COLORS = {
