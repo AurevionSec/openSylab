@@ -26,6 +26,9 @@ jobs:
 
       - name: Test
         run: ./build/bin/opensylab_tests
+        env:
+          OPENSYLAB_JWT_SECRET: ci-test-jwt-secret-key-for-github-actions-only-0000
+          OPENSYLAB_AUDIT_HMAC_KEY: ci-test-audit-hmac-key-for-github-actions-only-0000
 
   frontend:
     name: Frontend (TypeScript)
