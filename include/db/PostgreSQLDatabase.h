@@ -1,56 +1,71 @@
-#ifndef OPENSYLAB_DATABASE_H
-#define OPENSYLAB_DATABASE_H
+#pragma once
 
 #include "db/IDatabase.h"
-
-// Forward declaration für SQLite
-struct sqlite3;
+#include <string>
 
 namespace opensylab {
 namespace db {
 
 /**
- * @brief SQLite-backed implementation of IDatabase for OpenSylab LIMS.
+ * @brief PostgreSQL stub implementation of IDatabase.
  *
- * This class is the canonical production database backend. It implements
- * all IDatabase methods using SQLite via prepared statements.
+ * This class satisfies the IDatabase contract but every method returns a
+ * failure indicator and records a "not yet implemented" message in the
+ * last-error slot.  It exists so that:
  *
- * Consumers should depend on IDatabase, not on this concrete class.
+ *   1. The binary can be built with --db-backend=postgresql without linker
+ *      errors.
+ *   2. The full PostgreSQL implementation can be added in v1.1 without any
+ *      interface changes.
+ *
+ * Every public method that returns bool returns false.
+ * Every method that returns a pointer or optional returns nullptr /
+ * std::nullopt.  Every method that returns a collection returns an empty one.
+ * Numeric methods return 0.  String methods return "".
+ *
+ * DO NOT use this backend in production — it does not persist any data.
  */
-class Database : public IDatabase {
+class PostgreSQLDatabase : public IDatabase {
 public:
   /**
-   * @brief Konstruktor
-   * @param dbPath Pfad zur SQLite-Datenbankdatei
+   * @brief Construct with a libpq-style connection string.
+   *
+   * Example: "postgresql://user:pass\@localhost:5432/opensylab"
+   *
+   * The string is stored but not used until a full implementation lands in
+   * v1.1.
+   *
+   * @param connectionString PostgreSQL connection string (DSN).
    */
-  explicit Database(const std::string &dbPath);
+  explicit PostgreSQLDatabase(const std::string &connectionString);
+  ~PostgreSQLDatabase() override;
 
-  /**
-   * @brief Destruktor - schließt die Datenbankverbindung
-   */
-  ~Database() override;
+  // Non-copyable, non-movable (mirrors Database semantics)
+  PostgreSQLDatabase(const PostgreSQLDatabase &) = delete;
+  PostgreSQLDatabase &operator=(const PostgreSQLDatabase &) = delete;
+  PostgreSQLDatabase(PostgreSQLDatabase &&) = delete;
+  PostgreSQLDatabase &operator=(PostgreSQLDatabase &&) = delete;
 
-  // Nicht kopierbar oder bewegbar (hat SQLite-Handle)
-  Database(const Database &) = delete;
-  Database &operator=(const Database &) = delete;
-  Database(Database &&) = delete;
-  Database &operator=(Database &&) = delete;
-
-  // Datenbankoperationen
+  // -----------------------------------------------------------------------
+  // Lifecycle
+  // -----------------------------------------------------------------------
   [[nodiscard]] bool open() override;
-  bool close() override; // Kein nodiscard - wird im Destruktor ohne Check aufgerufen
-  [[nodiscard]] bool isOpen() const override { return isOpen_; }
+  bool close() override;
+  [[nodiscard]] bool isOpen() const override;
 
-  /**
-   * @brief Initialisiert das Datenbankschema
-   * @return true bei Erfolg
-   */
+  // -----------------------------------------------------------------------
+  // Schema
+  // -----------------------------------------------------------------------
   [[nodiscard]] bool initializeSchema() override;
 
-  // Systemstatus
+  // -----------------------------------------------------------------------
+  // System health
+  // -----------------------------------------------------------------------
   [[nodiscard]] HealthStatus getHealthStatus() override;
 
-  // Sample-Operationen (CRUD)
+  // -----------------------------------------------------------------------
+  // Samples
+  // -----------------------------------------------------------------------
   [[nodiscard]] bool createSample(const core::Sample &sample,
                                   const std::string &actor = "") override;
   [[nodiscard]] std::unique_ptr<core::Sample> getSample(int id) override;
@@ -66,8 +81,13 @@ public:
   [[nodiscard]] bool deleteSample(int id,
                                   const std::string &actor = "") override;
   [[nodiscard]] bool exportSamplesToCsv(const std::string &filePath) override;
+  [[nodiscard]] BatchInsertResult
+  createSamplesBatch(const std::vector<core::Sample> &samples,
+                     const std::string &actor = "") override;
 
-  // Order-Operationen (CRUD)
+  // -----------------------------------------------------------------------
+  // Orders
+  // -----------------------------------------------------------------------
   [[nodiscard]] bool createOrder(const core::Order &order,
                                  const std::string &actor = "") override;
   [[nodiscard]] std::unique_ptr<core::Order> getOrder(int id) override;
@@ -85,7 +105,9 @@ public:
   [[nodiscard]] bool deleteOrder(int id,
                                  const std::string &actor = "") override;
 
-  // TestResult-Operationen (CRUD)
+  // -----------------------------------------------------------------------
+  // TestResults
+  // -----------------------------------------------------------------------
   [[nodiscard]] bool createTestResult(const core::TestResult &result,
                                       const std::string &actor = "") override;
   [[nodiscard]] std::unique_ptr<core::TestResult> getTestResult(int id) override;
@@ -100,11 +122,6 @@ public:
   [[nodiscard]] std::vector<std::unique_ptr<core::TestResult>>
   getAllTestResults(std::optional<int> limit = std::nullopt,
                    std::optional<int> offset = std::nullopt) override;
-
-  [[nodiscard]] BatchInsertResult
-  createSamplesBatch(const std::vector<core::Sample> &samples,
-                     const std::string &actor = "") override;
-
   [[nodiscard]] BatchInsertResult
   createTestResultsBatch(const std::vector<core::TestResult> &results,
                          const std::string &actor = "") override;
@@ -113,15 +130,18 @@ public:
   [[nodiscard]] bool
   updateTestResultWithAudit(const core::TestResult &result,
                             const std::string &user) override;
-  [[nodiscard]] bool exportValidatedResultsToCsv(
-      const std::string &filePath, const std::string &user,
-      std::optional<int> orderId = std::nullopt) override;
+  [[nodiscard]] bool
+  exportValidatedResultsToCsv(const std::string &filePath,
+                               const std::string &user,
+                               std::optional<int> orderId = std::nullopt) override;
   [[nodiscard]] bool validateTestResult(const std::string &resultId,
                                         const std::string &user) override;
   [[nodiscard]] bool deleteTestResult(int id,
                                       const std::string &actor = "") override;
 
-  // Statistik-Operationen
+  // -----------------------------------------------------------------------
+  // Statistics
+  // -----------------------------------------------------------------------
   [[nodiscard]] EntityStats
   getSampleStats(const StatsFilter &filter = StatsFilter{}) override;
   [[nodiscard]] EntityStats
@@ -130,16 +150,20 @@ public:
   getResultStats(const StatsFilter &filter = StatsFilter{}) override;
   [[nodiscard]] std::vector<StatusCount> getOrderPriorityStats() override;
   [[nodiscard]] int getCriticalResultCount() override;
-  [[nodiscard]] bool exportStatsReportToCsv(
-      const std::string &filePath, const StatsFilter &sampleFilter,
-      const StatsFilter &orderFilter, const StatsFilter &resultFilter,
-      const std::string &actor) override;
+  [[nodiscard]] bool
+  exportStatsReportToCsv(const std::string &filePath,
+                          const StatsFilter &sampleFilter,
+                          const StatsFilter &orderFilter,
+                          const StatsFilter &resultFilter,
+                          const std::string &actor) override;
 
-  // Audit-Operationen
+  // -----------------------------------------------------------------------
+  // Audit log
+  // -----------------------------------------------------------------------
   [[nodiscard]] bool logAudit(const core::AuditEntry &entry) override;
   [[nodiscard]] std::string getLastAuditHash() override;
   [[nodiscard]] bool verifyAuditChain(std::string &firstBrokenAt) override;
-  void setAuditHmacKey(const std::string &key) override { auditHmacKey_ = key; }
+  void setAuditHmacKey(const std::string & /*key*/) override {}
   [[nodiscard]] std::vector<std::unique_ptr<core::AuditEntry>>
   getAuditLog(int limit = 100) override;
   [[nodiscard]] std::vector<std::unique_ptr<core::AuditEntry>>
@@ -147,10 +171,10 @@ public:
                       const std::string &entityId) override;
   [[nodiscard]] std::vector<std::unique_ptr<core::AuditEntry>>
   getAuditLogFiltered(const AuditLogFilter &filter) override;
-  [[nodiscard]] bool exportAuditLogToCsv(const std::string &filePath,
-                                         const AuditLogFilter &filter,
-                                         const std::string &actor,
-                                         int &exportedCount) override;
+  [[nodiscard]] bool
+  exportAuditLogToCsv(const std::string &filePath,
+                      const AuditLogFilter &filter, const std::string &actor,
+                      int &exportedCount) override;
   [[nodiscard]] std::vector<std::unique_ptr<core::AuditEntry>>
   getDiagnosticsLogs(const DiagnosticsFilter &filter) override;
   [[nodiscard]] bool
@@ -159,19 +183,9 @@ public:
                               const std::string &actor,
                               int &exportedCount) override;
 
-  // API Keys
-  [[nodiscard]] bool upsertApiKey(const std::string &key, bool active = true,
-                                  const std::string &role = "OPERATOR") override;
-  [[nodiscard]] std::optional<std::string>
-  isApiKeyValid(const std::string &key) override;
-
-  // Retention
-  [[nodiscard]] int getRetentionDays() override;
-  [[nodiscard]] bool setRetentionDays(int days) override;
-  [[nodiscard]] bool applyAuditRetention(const std::string &actor,
-                                         int &purgedCount) override;
-
-  // Audit-Hilfsmethoden
+  // -----------------------------------------------------------------------
+  // Audit helper actions
+  // -----------------------------------------------------------------------
   void logSampleAction(core::AuditEntry::ActionType action,
                        const std::string &sampleId, const std::string &user,
                        const std::string &details = "") override;
@@ -196,7 +210,25 @@ public:
                        const std::string &user,
                        const std::string &filePath) override;
 
-  // User-Operationen (CRUD)
+  // -----------------------------------------------------------------------
+  // API keys
+  // -----------------------------------------------------------------------
+  [[nodiscard]] bool upsertApiKey(const std::string &key, bool active = true,
+                                  const std::string &role = "OPERATOR") override;
+  [[nodiscard]] std::optional<std::string>
+  isApiKeyValid(const std::string &key) override;
+
+  // -----------------------------------------------------------------------
+  // Retention
+  // -----------------------------------------------------------------------
+  [[nodiscard]] int getRetentionDays() override;
+  [[nodiscard]] bool setRetentionDays(int days) override;
+  [[nodiscard]] bool applyAuditRetention(const std::string &actor,
+                                          int &purgedCount) override;
+
+  // -----------------------------------------------------------------------
+  // Users
+  // -----------------------------------------------------------------------
   [[nodiscard]] bool createUser(const core::User &user,
                                 const std::string &actor = "") override;
   [[nodiscard]] std::unique_ptr<core::User> getUser(int id) override;
@@ -207,20 +239,26 @@ public:
                                 const std::string &actor = "") override;
   [[nodiscard]] bool deleteUser(int id, const std::string &actor = "") override;
 
-  // Rollen & Berechtigungen
-  [[nodiscard]] bool createRole(const std::string &name,
-                                const std::vector<std::string> &permissions,
-                                const std::string &actor = "") override;
-  [[nodiscard]] bool updateRole(const std::string &name,
-                                const std::vector<std::string> &permissions,
-                                const std::string &actor = "") override;
+  // -----------------------------------------------------------------------
+  // Roles & permissions
+  // -----------------------------------------------------------------------
+  [[nodiscard]] bool
+  createRole(const std::string &name,
+             const std::vector<std::string> &permissions,
+             const std::string &actor = "") override;
+  [[nodiscard]] bool
+  updateRole(const std::string &name,
+             const std::vector<std::string> &permissions,
+             const std::string &actor = "") override;
   [[nodiscard]] std::vector<std::string>
   getRolePermissions(const std::string &name) override;
   [[nodiscard]] std::vector<std::string> getAllRoles() override;
   [[nodiscard]] bool assignUserRole(int userId, const std::string &roleName,
                                     const std::string &actor = "") override;
 
-  // Auth-Konfiguration, LDAP und MFA
+  // -----------------------------------------------------------------------
+  // Auth config, LDAP, MFA
+  // -----------------------------------------------------------------------
   [[nodiscard]] bool setAuthConfig(const std::string &key,
                                    const std::string &value) override;
   [[nodiscard]] std::optional<std::string>
@@ -240,19 +278,20 @@ public:
                                           const std::string &roleName) override;
   [[nodiscard]] bool verifyUserMfa(const std::string &username,
                                    const std::string &code) override;
-
-  // MFA Enrollment — Base32-compatible secrets for authenticator apps
   [[nodiscard]] std::string generateMfaSecret() override;
-  [[nodiscard]] std::string getMfaEnrollmentUri(const std::string &username,
-                                                const std::string &base32Secret) override;
+  [[nodiscard]] std::string
+  getMfaEnrollmentUri(const std::string &username,
+                      const std::string &base32Secret) override;
   [[nodiscard]] bool setUserMfaSecret(int userId,
                                       const std::string &base32Secret) override;
   [[nodiscard]] bool disableUserMfa(int userId) override;
-  // Verify a TOTP code against a raw Base32 secret (for enrollment confirmation)
-  [[nodiscard]] bool verifyMfaCodeForEnrollment(const std::string &base32Secret,
-                                                const std::string &code) override;
+  [[nodiscard]] bool
+  verifyMfaCodeForEnrollment(const std::string &base32Secret,
+                              const std::string &code) override;
 
-  // Sitzungsverfolgung
+  // -----------------------------------------------------------------------
+  // Session tracking
+  // -----------------------------------------------------------------------
   [[nodiscard]] bool startSession(int userId, const std::string &username,
                                   AuthMethod method,
                                   const std::string &details = "") override;
@@ -262,11 +301,14 @@ public:
   [[nodiscard]] int getActiveSessionCount(int userId) override;
   [[nodiscard]] int getSessionCount(int userId) override;
   [[nodiscard]] bool hasActiveSession(int userId) override;
-  [[nodiscard]] std::optional<SessionInfo> getSessionById(int sessionId) override;
+  [[nodiscard]] std::optional<SessionInfo>
+  getSessionById(int sessionId) override;
   [[nodiscard]] std::optional<SessionInfo>
   getLatestSessionForUser(int userId) override;
 
-  // Authentifizierung
+  // -----------------------------------------------------------------------
+  // Authentication
+  // -----------------------------------------------------------------------
   [[nodiscard]] AuthResult
   authenticatePrimary(const std::string &username,
                       const std::string &password) override;
@@ -274,36 +316,22 @@ public:
   authenticateUser(const std::string &username, const std::string &password,
                    const std::optional<std::string> &mfaCode = std::nullopt) override;
 
-  // Fehlerbehandlung
-  const std::string &getLastError() const override { return lastError_; }
-  bool hasError() const override { return !lastError_.empty(); }
-  void clearError() override { lastError_.clear(); }
+  // -----------------------------------------------------------------------
+  // Error handling
+  // -----------------------------------------------------------------------
+  [[nodiscard]] const std::string &getLastError() const override;
+  [[nodiscard]] bool hasError() const override;
+  void clearError() override;
 
 private:
-  std::string dbPath_;
-  sqlite3 *db_ = nullptr;
-  bool isOpen_ = false;
+  std::string connectionString_;
   std::string lastError_;
-  std::string auditHmacKey_;
 
-  // Migration
-  struct Migration {
-    int version;
-    std::string description;
-    std::string sql;
-  };
+  static constexpr const char *kNotImplemented =
+      "PostgreSQL backend not yet implemented (scheduled for v1.1)";
 
-  [[nodiscard]] bool applyMigration(const Migration &migration);
-  [[nodiscard]] bool runMigrations();
-  [[nodiscard]] int getCurrentSchemaVersion();
-  static const std::vector<Migration> &getMigrations();
-
-  // Hilfsfunktionen
-  void setError(const std::string &error);
-  [[nodiscard]] bool updateTestResultCore(const core::TestResult &result);
+  void setNotImplemented();
 };
 
 } // namespace db
 } // namespace opensylab
-
-#endif // OPENSYLAB_DATABASE_H

@@ -34,7 +34,7 @@ std::string firstNonEmpty(const std::string &a, const std::string &b) {
 
 } // namespace
 
-Hl7Exchange::Hl7Exchange(std::shared_ptr<db::Database> database)
+Hl7Exchange::Hl7Exchange(std::shared_ptr<db::IDatabase> database)
     : database_(std::move(database)) {}
 
 bool Hl7Exchange::importOruR01Message(const std::string &message,

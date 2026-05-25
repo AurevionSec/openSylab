@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.15)
 
 # Projektdefinition
 project(OpenSylab
-    VERSION 0.8.2
+    VERSION 0.9.0
     DESCRIPTION "Open Source Laboratory Information Management System (LIMS)"
     LANGUAGES CXX
 )
@@ -83,6 +83,24 @@ set(JWT_BUILD_TESTS OFF CACHE BOOL "")
 FetchContent_MakeAvailable(jwt-cpp)
 message(STATUS "JWT-CPP: Fetched successfully")
 
+FetchContent_Declare(
+    nlohmann_json
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG        v3.11.3
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(nlohmann_json)
+message(STATUS "nlohmann/json: Fetched successfully")
+
+FetchContent_Declare(
+    spdlog
+    GIT_REPOSITORY https://github.com/gabime/spdlog.git
+    GIT_TAG        v1.14.1
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(spdlog)
+message(STATUS "spdlog: Fetched successfully")
+
 # Quellcode-Dateien sammeln
 set(CORE_SOURCES
     src/core/Sample.cpp
@@ -94,14 +112,17 @@ set(CORE_SOURCES
 
 set(DB_SOURCES
     src/db/Database.cpp
+    src/db/PostgreSQLDatabase.cpp
 )
 
 set(UTILS_SOURCES
+    src/utils/Config.cpp
     src/utils/CsvImport.cpp
     src/utils/CsvResultImport.cpp
     src/utils/Hl7.cpp
     src/utils/Fhir.cpp
     src/utils/CliInterface.cpp
+    src/utils/Logger.cpp
 )
 
 set(API_SOURCES
@@ -131,6 +152,8 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     OpenSSL::SSL
     OpenSSL::Crypto
     jwt-cpp::jwt-cpp
+    nlohmann_json::nlohmann_json
+    spdlog::spdlog
 )
 
 # Installation

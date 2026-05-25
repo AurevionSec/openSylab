@@ -6,9 +6,8 @@
 #include <cerrno>
 #include <cstring>
 #include <ctime>
-#include <iomanip>
-#include <iostream>
 #include <mutex>
+#include <thread>
 #include <unordered_set>
 #include <netinet/in.h>
 #include <fstream>
@@ -18,6 +17,9 @@
 #include <unistd.h>
 #include "utils/Hl7.h"
 #include "utils/Fhir.h"
+#include "utils/Logger.h"
+#include <nlohmann/json.hpp>
+using json = nlohmann::json;
 
 namespace opensylab {
 namespace api {
@@ -87,49 +89,6 @@ std::unordered_map<std::string, std::string> parseQuery(const std::string &query
   return params;
 }
 
-std::string escapeJson(const std::string &value) {
-  std::ostringstream out;
-  for (char ch : value) {
-    switch (ch) {
-    case '\"':
-      out << "\\\"";
-      break;
-    case '\\':
-      out << "\\\\";
-      break;
-    case '\b':
-      out << "\\b";
-      break;
-    case '\f':
-      out << "\\f";
-      break;
-    case '\n':
-      out << "\\n";
-      break;
-    case '\r':
-      out << "\\r";
-      break;
-    case '\t':
-      out << "\\t";
-      break;
-    default:
-      if (static_cast<unsigned char>(ch) < 0x20) {
-        out << "\\u"
-            << std::hex << std::uppercase << std::setw(4) << std::setfill('0')
-            << static_cast<int>(static_cast<unsigned char>(ch))
-            << std::dec << std::nouppercase;
-      } else {
-        out << ch;
-      }
-    }
-  }
-  return out.str();
-}
-
-std::string jsonString(const std::string &value) {
-  return "\"" + escapeJson(value) + "\"";
-}
-
 std::string statusMessage(int status) {
   switch (status) {
   case 200: return "OK";
@@ -153,20 +112,12 @@ ApiResponse makeError(int status, const std::string &code,
                       const std::string &hint) {
   ApiResponse response;
   response.status = status;
-  std::ostringstream body;
-  body << "{"
-       << "\"error\":{"
-       << "\"code\":" << jsonString(code) << ","
-       << "\"message\":" << jsonString(message) << ","
-       << "\"hint\":" << jsonString(hint)
-       << "}"
-       << "}";
-  response.body = body.str();
+  response.body = json{{"error", {{"code", code}, {"message", message}, {"hint", hint}}}}.dump();
   return response;
 }
 
 ApiResponse makeDbErrorResponse(const std::string &message) {
-  std::cerr << "[DB] " << message << "\n";
+  LOG_ERROR("[DB] {}", message);
   const std::string lower = toLower(message);
   if (lower.find("nicht gefunden") != std::string::npos) {
     return makeError(404, "not_found", "Record not found",
@@ -385,204 +336,39 @@ std::string trimLeadingNewlines(const std::string &value) {
   return value.substr(start);
 }
 
-void skipWhitespace(const std::string &input, size_t &pos) {
-  while (pos < input.size() &&
-         std::isspace(static_cast<unsigned char>(input[pos])) != 0) {
-    ++pos;
-  }
-}
-
-bool parseJsonString(const std::string &input, size_t &pos, std::string &out,
-                     std::string &error) {
-  if (pos >= input.size() || input[pos] != '"') {
-    error = "Expected string";
+// Parse a JSON body string into an unordered_map<string,string>.
+// Numbers and booleans are converted to their string representations.
+// Null values and non-object inputs set ok=false.
+bool parseJsonBodyToMap(const std::string &body,
+                        std::unordered_map<std::string, std::string> &out,
+                        std::string &parseError) {
+  json j;
+  try {
+    j = json::parse(body);
+  } catch (const json::exception &e) {
+    parseError = e.what();
     return false;
   }
-  ++pos;
-  std::ostringstream value;
-  while (pos < input.size()) {
-    char ch = input[pos++];
-    if (ch == '"') {
-      out = value.str();
-      return true;
-    }
-    if (ch == '\\') {
-      if (pos >= input.size()) {
-        error = "Invalid escape sequence";
-        return false;
-      }
-      char esc = input[pos++];
-      switch (esc) {
-      case '"':
-        value << '"';
-        break;
-      case '\\':
-        value << '\\';
-        break;
-      case '/':
-        value << '/';
-        break;
-      case 'b':
-        value << '\b';
-        break;
-      case 'f':
-        value << '\f';
-        break;
-      case 'n':
-        value << '\n';
-        break;
-      case 'r':
-        value << '\r';
-        break;
-      case 't':
-        value << '\t';
-        break;
-      case 'u': {
-        if (pos + 4 > input.size()) {
-          error = "Invalid unicode escape";
-          return false;
-        }
-        unsigned int code = 0;
-        for (int i = 0; i < 4; ++i) {
-          char hex = input[pos++];
-          code <<= 4;
-          if (hex >= '0' && hex <= '9') {
-            code += static_cast<unsigned int>(hex - '0');
-          } else if (hex >= 'a' && hex <= 'f') {
-            code += static_cast<unsigned int>(hex - 'a' + 10);
-          } else if (hex >= 'A' && hex <= 'F') {
-            code += static_cast<unsigned int>(hex - 'A' + 10);
-          } else {
-            error = "Invalid unicode escape";
-            return false;
-          }
-        }
-        if (code <= 0x7F) {
-          value << static_cast<char>(code);
-        } else if (code <= 0x7FF) {
-          value << static_cast<char>(0xC0 | (code >> 6));
-          value << static_cast<char>(0x80 | (code & 0x3F));
-        } else {
-          value << static_cast<char>(0xE0 | (code >> 12));
-          value << static_cast<char>(0x80 | ((code >> 6) & 0x3F));
-          value << static_cast<char>(0x80 | (code & 0x3F));
-        }
-        break;
-      }
-      default:
-        error = "Unsupported escape sequence";
-        return false;
-      }
-      continue;
-    }
-    value << ch;
-  }
-  error = "Unterminated string";
-  return false;
-}
-
-bool parseJsonValue(const std::string &input, size_t &pos, std::string &out,
-                    std::string &error) {
-  skipWhitespace(input, pos);
-  if (pos >= input.size()) {
-    error = "Unexpected end of JSON";
+  if (!j.is_object()) {
+    parseError = "Expected a JSON object";
     return false;
   }
-  if (input[pos] == '"') {
-    return parseJsonString(input, pos, out, error);
-  }
-  if (input.compare(pos, 4, "true") == 0) {
-    out = "true";
-    pos += 4;
-    return true;
-  }
-  if (input.compare(pos, 5, "false") == 0) {
-    out = "false";
-    pos += 5;
-    return true;
-  }
-  if (input.compare(pos, 4, "null") == 0) {
-    out = "null";
-    pos += 4;
-    return true;
-  }
-  if (input[pos] == '-' || std::isdigit(static_cast<unsigned char>(input[pos])) != 0) {
-    size_t start = pos;
-    while (pos < input.size()) {
-      char ch = input[pos];
-      if (std::isdigit(static_cast<unsigned char>(ch)) != 0 || ch == '-' ||
-          ch == '+' || ch == '.' || ch == 'e' || ch == 'E') {
-        ++pos;
-        continue;
-      }
-      break;
+  for (auto it = j.begin(); it != j.end(); ++it) {
+    if (it.value().is_null()) continue;
+    std::string val;
+    if (it.value().is_string()) {
+      val = it.value().get<std::string>();
+    } else {
+      val = it.value().dump();
     }
-    if (start == pos) {
-      error = "Invalid number";
-      return false;
-    }
-    out = trim(input.substr(start, pos - start));
-    return true;
+    out[it.key()] = val;
   }
-  error = "Unsupported JSON value";
-  return false;
-}
-
-bool parseJsonObject(const std::string &input,
-                     std::unordered_map<std::string, std::string> &out,
-                     std::string &error) {
-  size_t pos = 0;
-  skipWhitespace(input, pos);
-  if (pos >= input.size() || input[pos] != '{') {
-    error = "Expected JSON object";
-    return false;
-  }
-  ++pos;
-  skipWhitespace(input, pos);
-  if (pos < input.size() && input[pos] == '}') {
-    ++pos;
-    return true;
-  }
-  while (pos < input.size()) {
-    std::string key;
-    if (!parseJsonString(input, pos, key, error)) {
-      return false;
-    }
-    skipWhitespace(input, pos);
-    if (pos >= input.size() || input[pos] != ':') {
-      error = "Expected ':' after key";
-      return false;
-    }
-    ++pos;
-    std::string value;
-    if (!parseJsonValue(input, pos, value, error)) {
-      return false;
-    }
-    out[toLower(key)] = value;
-    skipWhitespace(input, pos);
-    if (pos >= input.size()) {
-      error = "Unexpected end of JSON";
-      return false;
-    }
-    if (input[pos] == ',') {
-      ++pos;
-      skipWhitespace(input, pos);
-      continue;
-    }
-    if (input[pos] == '}') {
-      ++pos;
-      return true;
-    }
-    error = "Expected ',' or '}'";
-    return false;
-  }
-  error = "Unexpected end of JSON";
-  return false;
+  return true;
 }
 
 } // namespace
 
-ApiRouter::ApiRouter(std::shared_ptr<db::Database> database)
+ApiRouter::ApiRouter(std::shared_ptr<db::IDatabase> database)
     : database_(std::move(database)) {
   // Initialize JWT authentication from environment variable
   auth::JwtAuth::JwtConfig jwtConfig;
@@ -598,7 +384,7 @@ ApiRouter::ApiRouter(std::shared_ptr<db::Database> database)
     jwtConfig.secret = devSecret;
 
     // Log warning about using development secret
-    std::cerr << "[WARNING] Using development JWT secret! Set OPENSYLAB_JWT_SECRET environment variable for production.\n";
+    LOG_WARN("[WARNING] Using development JWT secret! Set OPENSYLAB_JWT_SECRET environment variable for production.");
   }
 
   jwtConfig.expirationMinutes = 60;
@@ -608,103 +394,88 @@ ApiRouter::ApiRouter(std::shared_ptr<db::Database> database)
 }
 
 std::string ApiRouter::sampleToJson(const core::Sample &sample) {
-  std::ostringstream out;
-  out << "{"
-      << "\"id\":" << sample.getId() << ","
-      << "\"sample_id\":" << jsonString(sample.getSampleId()) << ","
-      << "\"patient_id\":" << jsonString(sample.getPatientId()) << ","
-      << "\"patient_name\":" << jsonString(sample.getPatientName()) << ","
-      << "\"description\":" << jsonString(sample.getDescription()) << ","
-      << "\"status\":" << jsonString(sample.getStatusString()) << ","
-      << "\"registration_date\":" << static_cast<long long>(sample.getRegistrationDate()) << ","
-      << "\"updated_at\":" << static_cast<long long>(sample.getUpdatedAt())
-      << "}";
-  return out.str();
+  return json{
+    {"id",                sample.getId()},
+    {"sample_id",         sample.getSampleId()},
+    {"patient_id",        sample.getPatientId()},
+    {"patient_name",      sample.getPatientName()},
+    {"description",       sample.getDescription()},
+    {"status",            sample.getStatusString()},
+    {"registration_date", static_cast<long long>(sample.getRegistrationDate())},
+    {"updated_at",        static_cast<long long>(sample.getUpdatedAt())}
+  }.dump();
 }
 
 std::string ApiRouter::orderToJson(const core::Order &order) {
-  std::ostringstream out;
-  out << "{"
-      << "\"id\":" << order.getId() << ","
-      << "\"order_id\":" << jsonString(order.getOrderId()) << ","
-      << "\"sample_id\":" << jsonString(order.getSampleId()) << ","
-      << "\"test_type\":" << jsonString(order.getTestType()) << ","
-      << "\"status\":" << jsonString(order.getStatusString()) << ","
-      << "\"priority\":" << jsonString(order.getPriorityString()) << ","
-      << "\"requested_date\":" << static_cast<long long>(order.getRequestedDate()) << ","
-      << "\"completed_date\":" << static_cast<long long>(order.getCompletedDate()) << ","
-      << "\"requested_by\":" << jsonString(order.getRequestedBy()) << ","
-      << "\"notes\":" << jsonString(order.getNotes())
-      << "}";
-  return out.str();
+  return json{
+    {"id",             order.getId()},
+    {"order_id",       order.getOrderId()},
+    {"sample_id",      order.getSampleId()},
+    {"test_type",      order.getTestType()},
+    {"status",         order.getStatusString()},
+    {"priority",       order.getPriorityString()},
+    {"requested_date", static_cast<long long>(order.getRequestedDate())},
+    {"completed_date", static_cast<long long>(order.getCompletedDate())},
+    {"requested_by",   order.getRequestedBy()},
+    {"notes",          order.getNotes()}
+  }.dump();
 }
 
 std::string ApiRouter::resultToJson(const core::TestResult &result, const std::string &orderIdStr) {
-  std::ostringstream out;
-  out << "{"
-      << "\"id\":" << result.getId() << ","
-      << "\"result_id\":" << jsonString(result.getResultId()) << ","
-      << "\"order_id\":" << jsonString(orderIdStr.empty() ? std::to_string(result.getOrderId()) : orderIdStr) << ","
-      << "\"test_parameter\":" << jsonString(result.getTestParameter()) << ","
-      << "\"value\":" << jsonString(result.getValue()) << ","
-      << "\"unit\":" << jsonString(result.getUnit()) << ","
-      << "\"reference_range\":" << jsonString(result.getReferenceRange()) << ","
-      << "\"reference_low\":" << result.getReferenceLow() << ","
-      << "\"reference_high\":" << result.getReferenceHigh() << ","
-      << "\"status\":" << jsonString(result.getStatusString()) << ","
-      << "\"flag\":" << jsonString(result.getFlagString()) << ","
-      << "\"measured_date\":" << static_cast<long long>(result.getMeasuredDate()) << ","
-      << "\"measured_by\":" << jsonString(result.getMeasuredBy()) << ","
-      << "\"comment\":" << jsonString(result.getComment())
-      << "}";
-  return out.str();
+  return json{
+    {"id",              result.getId()},
+    {"result_id",       result.getResultId()},
+    {"order_id",        orderIdStr.empty() ? std::to_string(result.getOrderId()) : orderIdStr},
+    {"test_parameter",  result.getTestParameter()},
+    {"value",           result.getValue()},
+    {"unit",            result.getUnit()},
+    {"reference_range", result.getReferenceRange()},
+    {"reference_low",   result.getReferenceLow()},
+    {"reference_high",  result.getReferenceHigh()},
+    {"status",          result.getStatusString()},
+    {"flag",            result.getFlagString()},
+    {"measured_date",   static_cast<long long>(result.getMeasuredDate())},
+    {"measured_by",     result.getMeasuredBy()},
+    {"comment",         result.getComment()}
+  }.dump();
 }
 
 std::string userToJson(const core::User &user) {
-  std::ostringstream out;
-  out << "{"
-      << "\"id\":" << user.getId() << ","
-      << "\"username\":" << jsonString(user.getUsername()) << ","
-      << "\"role\":" << jsonString(user.getRoleString()) << ","
-      << "\"active\":" << (user.isActive() ? "true" : "false") << ","
-      << "\"must_change_password\":" << (user.mustChangePassword() ? "true" : "false") << ","
-      << "\"created_at\":" << static_cast<long long>(user.getCreatedDate()) << ","
-      << "\"last_login\":" << static_cast<long long>(user.getLastLogin()) << ","
-      << "\"full_name\":" << jsonString(user.getFullName()) << ","
-      << "\"email\":" << jsonString(user.getEmail());
-  out << "}";
-  return out.str();
+  return json{
+    {"id",                   user.getId()},
+    {"username",             user.getUsername()},
+    {"role",                 user.getRoleString()},
+    {"active",               user.isActive()},
+    {"must_change_password", user.mustChangePassword()},
+    {"created_at",           static_cast<long long>(user.getCreatedDate())},
+    {"last_login",           static_cast<long long>(user.getLastLogin())},
+    {"full_name",            user.getFullName()},
+    {"email",                user.getEmail()}
+  }.dump();
 }
 
 std::string auditEntryToJson(const core::AuditEntry &entry) {
-  std::ostringstream out;
-  out << "{"
-      << "\"id\":" << entry.getId() << ","
-      << "\"action\":" << jsonString(entry.getActionString()) << ","
-      << "\"entity\":" << jsonString(entry.getEntityString()) << ","
-      << "\"entity_id\":" << jsonString(entry.getEntityId()) << ","
-      << "\"user\":" << jsonString(entry.getUser()) << ","
-      << "\"timestamp\":" << static_cast<long long>(entry.getTimestamp()) << ","
-      << "\"details\":" << jsonString(entry.getDetails())
-      << "}";
-  return out.str();
+  return json{
+    {"id",        entry.getId()},
+    {"action",    entry.getActionString()},
+    {"entity",    entry.getEntityString()},
+    {"entity_id", entry.getEntityId()},
+    {"user",      entry.getUser()},
+    {"timestamp", static_cast<long long>(entry.getTimestamp())},
+    {"details",   entry.getDetails()}
+  }.dump();
 }
 
-std::string statsToJson(const db::Database::EntityStats &stats, const std::string &entityType) {
-  std::ostringstream out;
-  out << "{"
-      << "\"entity_type\":" << jsonString(entityType) << ","
-      << "\"total\":" << stats.total << ","
-      << "\"by_status\":[";
-  for (size_t i = 0; i < stats.byStatus.size(); ++i) {
-    if (i > 0) out << ",";
-    out << "{"
-        << "\"status\":" << jsonString(stats.byStatus[i].status) << ","
-        << "\"count\":" << stats.byStatus[i].count
-        << "}";
+std::string statsToJson(const db::IDatabase::EntityStats &stats, const std::string &entityType) {
+  json byStatus = json::array();
+  for (const auto &s : stats.byStatus) {
+    byStatus.push_back({{"status", s.status}, {"count", s.count}});
   }
-  out << "]}";
-  return out.str();
+  return json{
+    {"entity_type", entityType},
+    {"total",       stats.total},
+    {"by_status",   byStatus}
+  }.dump();
 }
 
 ApiResponse ApiRouter::handleLogin(const ApiRequest &request) {
@@ -715,34 +486,37 @@ ApiResponse ApiRouter::handleLogin(const ApiRequest &request) {
                      "Provide JSON with username and password.");
   }
 
-  std::unordered_map<std::string, std::string> payload;
-  std::string parseError;
-  if (!parseJsonObject(body, payload, parseError)) {
+  json payload;
+  try {
+    payload = json::parse(body);
+  } catch (const json::exception &) {
     return makeError(400, "validation_error", "Invalid JSON payload",
-                     parseError);
+                     "Request body is not valid JSON.");
+  }
+
+  if (!payload.is_object()) {
+    return makeError(400, "validation_error", "Invalid JSON payload",
+                     "Expected a JSON object.");
   }
 
   // Extract credentials
-  auto usernameIt = payload.find("username");
-  auto passwordIt = payload.find("password");
+  const std::string username = payload.value("username", std::string{});
+  const std::string password = payload.value("password", std::string{});
 
-  if (usernameIt == payload.end() || usernameIt->second.empty()) {
+  if (username.empty()) {
     return makeError(400, "validation_error", "Missing username",
                      "Provide username in request body.");
   }
-  if (passwordIt == payload.end() || passwordIt->second.empty()) {
+  if (password.empty()) {
     return makeError(400, "validation_error", "Missing password",
                      "Provide password in request body.");
   }
 
-  const std::string &username = usernameIt->second;
-  const std::string &password = passwordIt->second;
-
   // Extract optional MFA code
   std::optional<std::string> mfaCode;
-  auto mfaIt = payload.find("mfa_code");
-  if (mfaIt != payload.end() && !mfaIt->second.empty()) {
-    mfaCode = mfaIt->second;
+  const std::string mfaCodeStr = payload.value("mfa_code", std::string{});
+  if (!mfaCodeStr.empty()) {
+    mfaCode = mfaCodeStr;
   }
 
   // Authenticate user via database
@@ -774,19 +548,18 @@ ApiResponse ApiRouter::handleLogin(const ApiRequest &request) {
   const int expiresIn = jwtAuth_->getConfig().expirationMinutes * 60; // seconds
 
   // Build response JSON
-  std::ostringstream response;
-  response << "{"
-           << "\"token\":" << jsonString(token) << ","
-           << "\"user\":{"
-           << "\"id\":" << user->getId() << ","
-           << "\"username\":" << jsonString(user->getUsername()) << ","
-           << "\"role\":" << jsonString(user->getRoleString()) << ","
-           << "\"must_change_password\":" << (user->mustChangePassword() ? "true" : "false")
-           << "},"
-           << "\"expiresIn\":" << expiresIn
-           << "}";
+  const json response = {
+    {"token", token},
+    {"user", {
+      {"id",                   user->getId()},
+      {"username",             user->getUsername()},
+      {"role",                 user->getRoleString()},
+      {"must_change_password", user->mustChangePassword()}
+    }},
+    {"expiresIn", expiresIn}
+  };
 
-  return ApiResponse{200, response.str(), "application/json"};
+  return ApiResponse{200, response.dump(), "application/json"};
 }
 
 std::optional<auth::JwtAuth::TokenPayload>
@@ -845,13 +618,28 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
 
   // Route: GET /api/v1/health (unauthenticated)
   if (method == "get" && path == "/api/v1/health") {
-    std::ostringstream h;
-    h << "{"
-      << "\"status\":\"ok\","
-      << "\"version\":" << jsonString(OPENSYLAB_VERSION) << ","
-      << "\"service\":\"opensylab-lims\""
-      << "}";
-    return ApiResponse{200, h.str(), "application/json"};
+    return ApiResponse{200,
+      json{{"status", "ok"}, {"version", OPENSYLAB_VERSION}, {"service", "opensylab-lims"}}.dump(),
+      "application/json"};
+  }
+
+  // Route: GET /api/v1/openapi.yaml (unauthenticated — public spec)
+  if (method == "get" && path == "/api/v1/openapi.yaml") {
+    static constexpr const char* kSpecPaths[] = {
+        "docs/openapi.yaml",
+        "/usr/share/opensylab/openapi.yaml",
+    };
+    for (const char* specPath : kSpecPaths) {
+      std::ifstream specFile(specPath);
+      if (specFile.is_open()) {
+        std::ostringstream buf;
+        buf << specFile.rdbuf();
+        return ApiResponse{200, buf.str(), "application/yaml"};
+      }
+    }
+    return ApiResponse{404,
+        R"({"error":"OpenAPI specification file not found"})",
+        "application/json"};
   }
 
   // Route: POST /api/v1/auth/logout
@@ -927,11 +715,100 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       parseQuery(queryString);
 
   // RBAC: VIEWER role cannot write lab data (applies to POST, PUT, DELETE)
-  // Exception: allow VIEWER/CUSTOM to change their own password
+  // Exceptions: own password change, MFA enrollment, MFA disable
   if (!isGet && (effectiveRole == "VIEWER" || effectiveRole == "CUSTOM") &&
-      !(isPut && path == "/api/v1/users/me/password")) {
+      !(isPut && path == "/api/v1/users/me/password") &&
+      !(isPost && path == "/api/v1/auth/mfa/enroll") &&
+      !(isPost && path == "/api/v1/auth/mfa/verify-enrollment") &&
+      !(isDelete && path == "/api/v1/auth/mfa")) {
     return makeError(403, "forbidden", "Insufficient permissions",
                      "VIEWER and CUSTOM roles cannot create, update, or delete records.");
+  }
+
+  // -----------------------------------------------------------------------
+  // MFA Enrollment routes (authenticated, any role)
+  // -----------------------------------------------------------------------
+
+  // POST /api/v1/auth/mfa/enroll — generate and return a fresh TOTP secret
+  if (isPost && path == "/api/v1/auth/mfa/enroll") {
+    if (!jwtPayload.has_value()) {
+      return makeError(401, "unauthorized", "JWT required",
+                       "Use JWT authentication to enroll MFA.");
+    }
+    const std::string secret = database_->generateMfaSecret();
+    if (secret.empty()) {
+      return makeError(500, "internal_error", "Secret generation failed",
+                       database_->getLastError());
+    }
+    const std::string uri = database_->getMfaEnrollmentUri(
+        jwtPayload->username, secret);
+    const json resp = {
+      {"secret_base32",  secret},
+      {"otpauth_uri",    uri},
+      {"instructions",   "Scan this QR code with your authenticator app, "
+                         "then confirm by calling POST /api/v1/auth/mfa/verify-enrollment."}
+    };
+    return ApiResponse{200, resp.dump(), "application/json"};
+  }
+
+  // POST /api/v1/auth/mfa/verify-enrollment — verify code and persist secret
+  if (isPost && path == "/api/v1/auth/mfa/verify-enrollment") {
+    if (!jwtPayload.has_value()) {
+      return makeError(401, "unauthorized", "JWT required",
+                       "Use JWT authentication to verify MFA enrollment.");
+    }
+    const std::string enrollBody = trimLeadingNewlines(request.body);
+    if (enrollBody.empty()) {
+      return makeError(400, "validation_error", "Missing request body",
+                       "Provide JSON with secret_base32 and code.");
+    }
+    json enrollPayload;
+    try {
+      enrollPayload = json::parse(enrollBody);
+    } catch (const json::exception &) {
+      return makeError(400, "validation_error", "Invalid JSON payload",
+                       "Request body is not valid JSON.");
+    }
+    if (!enrollPayload.is_object()) {
+      return makeError(400, "validation_error", "Invalid JSON payload",
+                       "Expected a JSON object.");
+    }
+    const std::string enrollSecret = enrollPayload.value("secret_base32", std::string{});
+    const std::string enrollCode   = enrollPayload.value("code", std::string{});
+    if (enrollSecret.empty()) {
+      return makeError(400, "validation_error", "Missing secret_base32",
+                       "Provide the secret_base32 returned by the enroll endpoint.");
+    }
+    if (enrollCode.empty()) {
+      return makeError(400, "validation_error", "Missing code",
+                       "Provide the current 6-digit TOTP code.");
+    }
+    // Verify that the supplied code is valid for the supplied secret
+    if (!database_->verifyMfaCodeForEnrollment(enrollSecret, enrollCode)) {
+      return makeError(400, "invalid_code", "Invalid TOTP code",
+                       "The supplied code does not match the secret. "
+                       "Ensure your device clock is correct and retry.");
+    }
+    if (!database_->setUserMfaSecret(jwtPayload->userId, enrollSecret)) {
+      return makeDbErrorResponse(database_->getLastError());
+    }
+    return ApiResponse{200,
+      R"({"message":"MFA successfully enabled"})",
+      "application/json"};
+  }
+
+  // DELETE /api/v1/auth/mfa — disable MFA for the currently authenticated user
+  if (isDelete && path == "/api/v1/auth/mfa") {
+    if (!jwtPayload.has_value()) {
+      return makeError(401, "unauthorized", "JWT required",
+                       "Use JWT authentication to disable MFA.");
+    }
+    if (!database_->disableUserMfa(jwtPayload->userId)) {
+      return makeDbErrorResponse(database_->getLastError());
+    }
+    return ApiResponse{200,
+      R"({"message":"MFA disabled"})",
+      "application/json"};
   }
 
   if ((isPost || isPut) && path.rfind("/api/v1/users", 0) != 0) {
@@ -941,11 +818,30 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                        "Provide JSON payload in request body.");
     }
 
-    std::unordered_map<std::string, std::string> payload;
-    std::string parseError;
-    if (!parseJsonObject(body, payload, parseError)) {
+    json jsonPayload;
+    try {
+      jsonPayload = json::parse(body);
+    } catch (const json::exception &) {
       return makeError(400, "validation_error", "Invalid JSON payload",
-                       parseError);
+                       "Request body is not valid JSON.");
+    }
+    if (!jsonPayload.is_object()) {
+      return makeError(400, "validation_error", "Invalid JSON payload",
+                       "Expected a JSON object.");
+    }
+    // Build a string map from the JSON object so the downstream field-access
+    // code continues to work without modification. Numbers and booleans are
+    // converted to their string representations; null / absent keys are omitted.
+    std::unordered_map<std::string, std::string> payload;
+    for (auto it = jsonPayload.begin(); it != jsonPayload.end(); ++it) {
+      if (it.value().is_null()) continue;
+      std::string val;
+      if (it.value().is_string()) {
+        val = it.value().get<std::string>();
+      } else {
+        val = it.value().dump();
+      }
+      payload[it.key()] = val;
     }
 
     if (path == "/api/v1/samples" && isPost) {
@@ -1897,7 +1793,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
   }
 
   if (path == "/api/v1/samples") {
-    db::Database::SampleFilter filter;
+    db::IDatabase::SampleFilter filter;
     auto qIt = query.find("q");
     if (qIt != query.end()) {
       filter.query = qIt->second;
@@ -1980,15 +1876,11 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
         total = static_cast<int>(samples.size());
     }
 
-    std::ostringstream out;
-    out << "{\"data\":[";
-    for (size_t i = 0; i < samples.size(); ++i) {
-      if (i > 0) {
-        out << ",";
-      }
-      out << sampleToJson(*samples[i]);
+    json samplesArr = json::array();
+    for (const auto &s : samples) {
+      samplesArr.push_back(json::parse(sampleToJson(*s)));
     }
-    out << "],\"total\":" << total << "}";
+    const std::string out = json{{"data", samplesArr}, {"total", total}}.dump();
 
     std::ostringstream details;
     details << "API READ /samples"
@@ -2015,7 +1907,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                        database_->getLastError());
     }
 
-    return ApiResponse{200, out.str(), "application/json"};
+    return ApiResponse{200, out, "application/json"};
   }
 
   if (path.rfind("/api/v1/samples/", 0) == 0) {
@@ -2047,7 +1939,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
   }
 
   if (path == "/api/v1/orders") {
-    db::Database::OrderFilter filter;
+    db::IDatabase::OrderFilter filter;
     auto statusIt = query.find("status");
     if (statusIt != query.end()) {
       if (!core::Order::isValidStatusString(statusIt->second)) {
@@ -2103,20 +1995,16 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       return makeDbErrorResponse(database_->getLastError());
     }
 
-    std::ostringstream out;
-    out << "{\"data\":[";
-    for (size_t i = 0; i < orders.size(); ++i) {
-      if (i > 0) {
-        out << ",";
-      }
-      out << orderToJson(*orders[i]);
-    }
     int ordersTotal = database_->getOrdersCount(filter);
     if (database_->hasError()) {
       return makeDbErrorResponse(database_->getLastError());
     }
     if (ordersTotal < 0) ordersTotal = static_cast<int>(orders.size());
-    out << "],\"total\":" << ordersTotal << "}";
+    json ordersArr = json::array();
+    for (const auto &o : orders) {
+      ordersArr.push_back(json::parse(orderToJson(*o)));
+    }
+    const std::string out = json{{"data", ordersArr}, {"total", ordersTotal}}.dump();
 
     std::ostringstream details;
     details << "API READ /orders"
@@ -2140,7 +2028,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                        database_->getLastError());
     }
 
-    return ApiResponse{200, out.str(), "application/json"};
+    return ApiResponse{200, out, "application/json"};
   }
 
   if (path.rfind("/api/v1/orders/", 0) == 0) {
@@ -2290,18 +2178,14 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
         if (ord) { orderIdCache[oid] = ord->getOrderId(); }
       }
     }
-    std::ostringstream out;
-    out << "{\"data\":[";
-    for (size_t i = 0; i < results.size(); ++i) {
-      if (i > 0) {
-        out << ",";
-      }
-      const auto cit = orderIdCache.find(results[i]->getOrderId());
-      const std::string &oidStr = (cit != orderIdCache.end()) ? cit->second : "";
-      out << resultToJson(*results[i], oidStr);
-    }
     if (resultsTotal < 0) resultsTotal = static_cast<int>(results.size());
-    out << "],\"total\":" << resultsTotal << "}";
+    json resultsArr = json::array();
+    for (const auto &r : results) {
+      const auto cit = orderIdCache.find(r->getOrderId());
+      const std::string &oidStr = (cit != orderIdCache.end()) ? cit->second : "";
+      resultsArr.push_back(json::parse(resultToJson(*r, oidStr)));
+    }
+    const std::string out = json{{"data", resultsArr}, {"total", resultsTotal}}.dump();
 
     std::ostringstream details;
     details << "API READ /results"
@@ -2319,7 +2203,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
                        database_->getLastError());
     }
 
-    return ApiResponse{200, out.str(), "application/json"};
+    return ApiResponse{200, out, "application/json"};
   }
 
   if (path.rfind("/api/v1/results/", 0) == 0) {
@@ -2368,15 +2252,11 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       return makeDbErrorResponse(database_->getLastError());
     }
 
-    std::ostringstream out;
-    out << "{\"data\":[";
-    for (size_t i = 0; i < users.size(); ++i) {
-      if (i > 0) out << ",";
-      out << userToJson(*users[i]); // Don't include password hash
+    json usersArr = json::array();
+    for (const auto &u : users) {
+      usersArr.push_back(json::parse(userToJson(*u)));
     }
-    out << "]}";
-
-    return ApiResponse{200, out.str(), "application/json"};
+    return ApiResponse{200, json{{"data", usersArr}}.dump(), "application/json"};
   }
 
   // GET /api/v1/users/me - Get current user profile
@@ -2414,7 +2294,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
 
     std::unordered_map<std::string, std::string> payload;
     std::string parseError;
-    if (!parseJsonObject(body, payload, parseError)) {
+    if (!parseJsonBodyToMap(body, payload, parseError)) {
       return makeError(400, "validation_error", "Invalid JSON payload",
                        parseError);
     }
@@ -2526,7 +2406,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
 
     std::unordered_map<std::string, std::string> payload;
     std::string parseError;
-    if (!parseJsonObject(body, payload, parseError)) {
+    if (!parseJsonBodyToMap(body, payload, parseError)) {
       return makeError(400, "validation_error", "Invalid JSON payload",
                        parseError);
     }
@@ -2615,7 +2495,7 @@ after_user_update:
 
     std::unordered_map<std::string, std::string> payload;
     std::string parseError;
-    if (!parseJsonObject(body, payload, parseError)) {
+    if (!parseJsonBodyToMap(body, payload, parseError)) {
       return makeError(400, "validation_error", "Invalid JSON payload",
                        parseError);
     }
@@ -2712,7 +2592,7 @@ after_user_update:
                        "Only administrators can view audit logs.");
     }
 
-    db::Database::AuditLogFilter filter;
+    db::IDatabase::AuditLogFilter filter;
 
     auto limitIt = query.find("limit");
     if (limitIt != query.end()) {
@@ -2771,20 +2651,16 @@ after_user_update:
       return makeDbErrorResponse(database_->getLastError());
     }
 
-    std::ostringstream out;
-    out << "{\"data\":[";
-    for (size_t i = 0; i < entries.size(); ++i) {
-      if (i > 0) out << ",";
-      out << auditEntryToJson(*entries[i]);
+    json auditArr = json::array();
+    for (const auto &e : entries) {
+      auditArr.push_back(json::parse(auditEntryToJson(*e)));
     }
-    out << "]}";
-
-    return ApiResponse{200, out.str(), "application/json"};
+    return ApiResponse{200, json{{"data", auditArr}}.dump(), "application/json"};
   }
 
   // GET /api/v1/stats - Get dashboard statistics
   if (path == "/api/v1/stats" && isGet) {
-    db::Database::StatsFilter filter;
+    db::IDatabase::StatsFilter filter;
 
     auto fromIt = query.find("from");
     if (fromIt != query.end()) {
@@ -2818,22 +2694,40 @@ after_user_update:
     auto orderPriorityStats = database_->getOrderPriorityStats();
     const int criticalCount = database_->getCriticalResultCount();
 
-    std::ostringstream out;
-    out << "{"
-        << "\"samples\":" << statsToJson(sampleStats, "samples") << ","
-        << "\"orders\":" << statsToJson(orderStats, "orders") << ","
-        << "\"results\":" << statsToJson(resultStats, "results") << ","
-        << "\"order_priority\":[";
-    for (size_t i = 0; i < orderPriorityStats.size(); ++i) {
-      if (i > 0) out << ",";
-      out << "{" << "\"status\":" << jsonString(orderPriorityStats[i].status)
-          << ",\"count\":" << orderPriorityStats[i].count << "}";
+    json orderPriorityArr = json::array();
+    for (const auto &p : orderPriorityStats) {
+      orderPriorityArr.push_back({{"status", p.status}, {"count", p.count}});
     }
-    out << "],"
-        << "\"critical_count\":" << criticalCount
-        << "}";
+    const json statsOut = {
+      {"samples",        json::parse(statsToJson(sampleStats, "samples"))},
+      {"orders",         json::parse(statsToJson(orderStats,  "orders"))},
+      {"results",        json::parse(statsToJson(resultStats, "results"))},
+      {"order_priority", orderPriorityArr},
+      {"critical_count", criticalCount}
+    };
 
-    return ApiResponse{200, out.str(), "application/json"};
+    return ApiResponse{200, statsOut.dump(), "application/json"};
+  }
+
+  // GET /api/v1/audit/verify — Verify audit chain integrity (ADMIN only)
+  if (isGet && path == "/api/v1/audit/verify") {
+    if (!jwtPayload.has_value() || (jwtPayload->role != "ADMIN" && jwtPayload->role != "Administrator")) {
+      return makeError(403, "forbidden", "Admin access required",
+                       "Only administrators can verify the audit chain.");
+    }
+    std::string brokenAt;
+    const bool valid = database_->verifyAuditChain(brokenAt);
+    if (valid) {
+      return ApiResponse{200,
+          json{{"valid", true},
+               {"message", "Audit chain integrity verified"}}.dump(),
+          "application/json"};
+    }
+    return ApiResponse{200,
+        json{{"valid", false},
+             {"broken_at", brokenAt},
+             {"message", "Chain integrity violation"}}.dump(),
+        "application/json"};
   }
 
   // GET /api/v1/audit/export — Audit-Log als CSV herunterladen (ADMIN only)
@@ -2843,7 +2737,7 @@ after_user_update:
                        "Only administrators can export the audit log.");
     }
 
-    db::Database::AuditLogFilter filter;
+    db::IDatabase::AuditLogFilter filter;
     auto fromIt = query.find("from");
     if (fromIt != query.end()) {
       std::time_t ts{};
@@ -2904,13 +2798,13 @@ after_user_update:
       return makeError(422, "import_error", "HL7 import failed",
                        summary.lastError);
     }
-    std::ostringstream jsonBody;
-    jsonBody << "{\"imported\":{"
-             << "\"samples\":" << summary.samplesCreated << ","
-             << "\"orders\":" << summary.ordersCreated << ","
-             << "\"results\":" << summary.resultsCreated
-             << "}}";
-    return ApiResponse{200, jsonBody.str(), "application/json"};
+    return ApiResponse{200,
+      json{{"imported", {
+        {"samples", summary.samplesCreated},
+        {"orders",  summary.ordersCreated},
+        {"results", summary.resultsCreated}
+      }}}.dump(),
+      "application/json"};
   }
 
   // GET /api/v1/hl7/export/{id} - HL7 v2.5.1 Export
@@ -2979,13 +2873,13 @@ after_user_update:
       return makeError(422, "import_error", "FHIR import failed",
                        summary.lastError);
     }
-    std::ostringstream jsonBody;
-    jsonBody << "{\"imported\":{"
-             << "\"samples\":" << summary.samplesCreated << ","
-             << "\"orders\":" << summary.ordersCreated << ","
-             << "\"results\":" << summary.resultsCreated
-             << "}}";
-    return ApiResponse{200, jsonBody.str(), "application/json"};
+    return ApiResponse{200,
+      json{{"imported", {
+        {"samples", summary.samplesCreated},
+        {"orders",  summary.ordersCreated},
+        {"results", summary.resultsCreated}
+      }}}.dump(),
+      "application/json"};
   }
 
   // GET /api/v1/fhir/export/{id} - FHIR R4 Export
@@ -3041,7 +2935,7 @@ after_user_update:
                    "Check the requested path.");
 }
 
-ApiServer::ApiServer(std::shared_ptr<db::Database> database, int port)
+ApiServer::ApiServer(std::shared_ptr<db::IDatabase> database, int port)
     : database_(std::move(database)),
       router_(database_),
       port_(port),
@@ -3060,14 +2954,15 @@ ApiServer::ApiServer(std::shared_ptr<db::Database> database, int port)
   if (!jwtSecret || std::string(jwtSecret).find("dev") != std::string::npos ||
       std::string(jwtSecret).find("change") != std::string::npos ||
       std::string(jwtSecret).length() < 32) {
-    std::cerr << "[SECURITY WARNING] Unsicheres oder fehlendes JWT-Secret. "
-                 "Setze OPENSYLAB_JWT_SECRET (min. 32 Zeichen) fuer Produktion!\n";
+    LOG_WARN("[SECURITY WARNING] Unsicheres oder fehlendes JWT-Secret. "
+             "Setze OPENSYLAB_JWT_SECRET (min. 32 Zeichen) fuer Produktion!");
   }
 }
 
 ApiServer::~ApiServer() {
   running_ = false;
   if (serverFd_ >= 0) {
+    shutdown(serverFd_, SHUT_RDWR);
     close(serverFd_);
     serverFd_ = -1;
   }
@@ -3146,6 +3041,8 @@ bool ApiServer::run() {
 void ApiServer::stop() {
   running_ = false;
   if (serverFd_ >= 0) {
+    // shutdown() unblocks the accept() call in serveLoop() without data loss
+    shutdown(serverFd_, SHUT_RDWR);
     close(serverFd_);
     serverFd_ = -1;
   }
@@ -3193,26 +3090,49 @@ void ApiServer::serveLoop() {
     const int clientFd =
         accept(serverFd_, reinterpret_cast<sockaddr *>(&clientAddr), &clientLen);
     if (clientFd < 0) {
-      if (running_) {
+      const int err = errno;
+      if (err == EAGAIN || err == EWOULDBLOCK || err == EINTR) {
         continue;
       }
-      break;
+      if (!running_) {
+        break;
+      }
+      continue;
+    }
+
+    // Atomically reserve a connection slot. fetch_add returns the value BEFORE
+    // the increment, so prev >= kMaxThreads means we are over the limit and must
+    // undo the reservation immediately — no TOCTOU window.
+    const int prev = activeConnections_.fetch_add(1, std::memory_order_seq_cst);
+    if (prev >= kMaxThreads) {
+      activeConnections_.fetch_sub(1, std::memory_order_seq_cst);
+      const std::string busy =
+          "HTTP/1.1 503 Service Unavailable\r\n"
+          "Content-Type: application/json\r\n"
+          "Content-Length: 0\r\n"
+          "Connection: close\r\n\r\n";
+      send(clientFd, busy.c_str(), busy.size(), MSG_NOSIGNAL);
+      close(clientFd);
+      continue;
     }
 
     struct timeval tv{30, 0};
     if (setsockopt(clientFd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0 ||
         setsockopt(clientFd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)) < 0) {
+      activeConnections_.fetch_sub(1, std::memory_order_seq_cst);
       close(clientFd);
       continue;
     }
 
-    if (isTlsEnabled()) {
-      handleClientTls(clientFd);
-    } else {
-      handleClientPlain(clientFd);
-    }
-
-    close(clientFd);
+    std::thread([this, clientFd]() {
+      try {
+        handleClient(clientFd);
+      } catch (...) {
+        // Never propagate exceptions out of a detached thread
+      }
+      close(clientFd);
+      activeConnections_.fetch_sub(1, std::memory_order_seq_cst);
+    }).detach();
   }
 }
 

@@ -18,6 +18,9 @@ services:
       - OPENSYLAB_API_PORT=8080
       # IMPORTANT: Change this secret in production!
       - OPENSYLAB_JWT_SECRET=change-this-secret-key-in-production-min-32-chars-required
+      # REQUIRED: Audit HMAC key — must be set before production deployment.
+      # Generate with: openssl rand -hex 32
+      - OPENSYLAB_AUDIT_HMAC_KEY=CHANGE-THIS-BEFORE-PRODUCTION
       # Optional: Enable TLS
       # - OPENSYLAB_TLS_CERT=/app/certs/server.crt
       # - OPENSYLAB_TLS_KEY=/app/certs/server.key

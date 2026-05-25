@@ -1,0 +1,1362 @@
+openapi: 3.0.3
+info:
+  title: OpenSylab LIMS API
+  description: |
+    REST API for OpenSylab — an open-source Laboratory Information Management System
+    for small medical diagnostic laboratories.
+
+    **Authentication:** All endpoints except `/auth/login` and `/health` require a
+    Bearer JWT obtained from `POST /auth/login`.
+
+    **RBAC Roles:** `ADMIN > OPERATOR > VIEWER > CUSTOM`
+    — roles are enforced per endpoint.
+
+    **Audit Trail:** All write operations on samples, orders, results, and users
+    produce an immutable HMAC-SHA256 audit entry (ISO 15189).
+  version: "0.9.0"
+  contact:
+    name: OpenSylab Project
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Local development server
+  - url: https://your-host/api/v1
+    description: Production server (TLS required)
+
+tags:
+  - name: Health
+    description: System health and readiness
+  - name: Auth
+    description: Authentication and MFA
+  - name: Samples
+    description: Biobank sample management
+  - name: Orders
+    description: Test order management
+  - name: Results
+    description: Test result management
+  - name: Users
+    description: User management (ADMIN)
+  - name: Audit
+    description: Tamper-evident audit trail
+  - name: Stats
+    description: Aggregated statistics
+  - name: Import
+    description: HL7 and FHIR data import
+
+paths:
+
+  # ---------------------------------------------------------------------------
+  # Health
+  # ---------------------------------------------------------------------------
+  /health:
+    get:
+      summary: System health check
+      tags: [Health]
+      security: []
+      responses:
+        "200":
+          description: System is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  # ---------------------------------------------------------------------------
+  # Auth
+  # ---------------------------------------------------------------------------
+  /auth/login:
+    post:
+      summary: Authenticate and obtain a JWT
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Authentication successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /auth/logout:
+    post:
+      summary: Invalidate the current JWT (blacklists the token if provided)
+      description: |
+        Accepts an optional Bearer token and adds it to the server-side blacklist.
+        Returns 200 regardless of whether a token was present — the call is safe
+        to make without authentication (idempotent logout).
+      tags: [Auth]
+      security: []
+      responses:
+        "200":
+          description: Logged out (token blacklisted if provided)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  /auth/mfa/enroll:
+    post:
+      summary: Begin TOTP MFA enrollment — returns otpauth:// URI
+      description: |
+        Generates a new TOTP secret and returns the `otpauth://` URI for QR-code
+        display.  The secret is NOT yet activated; call
+        `POST /auth/mfa/verify-enrollment` with a valid code to confirm.
+      tags: [Auth]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Enrollment URI returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MfaEnrollResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/mfa/verify-enrollment:
+    post:
+      summary: Confirm TOTP enrollment with a valid code
+      tags: [Auth]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MfaVerifyRequest"
+      responses:
+        "200":
+          description: MFA enrolled successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/mfa:
+    delete:
+      summary: Disable TOTP MFA for the current user
+      tags: [Auth]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: MFA disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ---------------------------------------------------------------------------
+  # Samples
+  # ---------------------------------------------------------------------------
+  /samples:
+    get:
+      summary: List samples with optional filtering and pagination
+      tags: [Samples]
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: type
+          in: query
+          schema:
+            type: string
+        - name: barcode
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Paginated sample list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SampleListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+    post:
+      summary: Create a new sample
+      tags: [Samples]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SampleInput"
+      responses:
+        "201":
+          description: Sample created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SampleResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /samples/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      summary: Get a sample by ID
+      tags: [Samples]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Sample found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SampleResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+    put:
+      summary: Update a sample
+      tags: [Samples]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SampleInput"
+      responses:
+        "200":
+          description: Sample updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SampleResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      summary: Delete a sample
+      tags: [Samples]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Sample deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ---------------------------------------------------------------------------
+  # Orders
+  # ---------------------------------------------------------------------------
+  /orders:
+    get:
+      summary: List orders with optional filtering and pagination
+      tags: [Orders]
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: priority
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Paginated order list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+    post:
+      summary: Create a new order
+      tags: [Orders]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrderInput"
+      responses:
+        "201":
+          description: Order created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /orders/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      summary: Get an order by ID
+      tags: [Orders]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Order found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    put:
+      summary: Update an order
+      tags: [Orders]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrderInput"
+      responses:
+        "200":
+          description: Order updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      summary: Delete an order
+      tags: [Orders]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Order deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ---------------------------------------------------------------------------
+  # Results
+  # ---------------------------------------------------------------------------
+  /results:
+    get:
+      summary: List test results with optional filtering and pagination
+      tags: [Results]
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - name: order_id
+          in: query
+          schema:
+            type: integer
+        - name: validated
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Paginated result list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResultListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+    post:
+      summary: Create a new test result
+      tags: [Results]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResultInput"
+      responses:
+        "201":
+          description: Result created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResultResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /results/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      summary: Get a test result by ID
+      tags: [Results]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Result found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResultResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    put:
+      summary: Update a test result
+      tags: [Results]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResultInput"
+      responses:
+        "200":
+          description: Result updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResultResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      summary: Delete a test result
+      tags: [Results]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Result deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ---------------------------------------------------------------------------
+  # Users
+  # ---------------------------------------------------------------------------
+  /users:
+    get:
+      summary: List all users (ADMIN only)
+      tags: [Users]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: User list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+    post:
+      summary: Create a new user (ADMIN only)
+      tags: [Users]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserCreateInput"
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /users/me:
+    get:
+      summary: Get the currently authenticated user's profile
+      tags: [Users]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /users/me/password:
+    put:
+      summary: Change the current user's password
+      tags: [Users]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordChangeInput"
+      responses:
+        "200":
+          description: Password changed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /users/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      summary: Get a user by ID (ADMIN only)
+      tags: [Users]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: User found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    put:
+      summary: Update a user (ADMIN only)
+      tags: [Users]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserUpdateInput"
+      responses:
+        "200":
+          description: User updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      summary: Delete a user (ADMIN only)
+      tags: [Users]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: User deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ---------------------------------------------------------------------------
+  # Audit
+  # ---------------------------------------------------------------------------
+  /audit:
+    get:
+      summary: Retrieve audit log entries (ADMIN only)
+      tags: [Audit]
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - name: entity_type
+          in: query
+          schema:
+            type: string
+            enum: [SAMPLE, ORDER, RESULT, USER, ROLE, SYSTEM]
+        - name: action
+          in: query
+          schema:
+            type: string
+        - name: user
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Audit log entries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /audit/verify:
+    get:
+      summary: Verify HMAC-SHA256 audit hash chain integrity (ADMIN only)
+      tags: [Audit]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Chain is intact
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditVerifyResponse"
+        "409":
+          description: Chain integrity violation detected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditVerifyResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /audit/export:
+    get:
+      summary: Export audit log to CSV (ADMIN only)
+      description: |
+        Streams the audit log as a CSV download.  The server generates the file
+        internally; no client-supplied file path is accepted.
+      tags: [Audit]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: entity_type
+          in: query
+          schema:
+            type: string
+            enum: [SAMPLE, ORDER, RESULT, USER, ROLE, SYSTEM]
+        - name: action
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: CSV file download
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  # ---------------------------------------------------------------------------
+  # Stats
+  # ---------------------------------------------------------------------------
+  /stats:
+    get:
+      summary: Aggregated statistics for samples, orders, and results
+      tags: [Stats]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Statistics summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ---------------------------------------------------------------------------
+  # Import
+  # ---------------------------------------------------------------------------
+  /hl7/import:
+    post:
+      summary: Import HL7 v2.x message
+      tags: [Import]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Hl7ImportRequest"
+      responses:
+        "200":
+          description: HL7 message processed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /fhir/import:
+    post:
+      summary: Import FHIR R4 Bundle or DiagnosticReport resource
+      tags: [Import]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FhirImportRequest"
+      responses:
+        "200":
+          description: FHIR resource processed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  # ---------------------------------------------------------------------------
+  # OpenAPI spec self-serve
+  # ---------------------------------------------------------------------------
+  /openapi.yaml:
+    get:
+      summary: Serve this OpenAPI specification (YAML)
+      tags: [Health]
+      security: []
+      responses:
+        "200":
+          description: OpenAPI 3.0 specification
+          content:
+            application/yaml:
+              schema:
+                type: string
+
+# ==============================================================================
+components:
+# ==============================================================================
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    IdParam:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+
+    PageParam:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+
+    PageSizeParam:
+      name: page_size
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 500
+        default: 50
+
+  responses:
+    BadRequest:
+      description: Invalid request payload or parameters
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+    Unauthorized:
+      description: Missing or invalid JWT
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+    Forbidden:
+      description: Insufficient role permissions
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+    TooManyRequests:
+      description: Login rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    MessageResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+
+    ExportResponse:
+      type: object
+      required: [message, exported]
+      properties:
+        message:
+          type: string
+        exported:
+          type: integer
+
+    # ---- Auth ---------------------------------------------------------------
+
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+        mfa_code:
+          type: string
+          description: TOTP code (required if MFA is enabled for the user)
+
+    LoginResponse:
+      type: object
+      required: [token, role]
+      properties:
+        token:
+          type: string
+          description: JWT Bearer token
+        role:
+          type: string
+        mfa_required:
+          type: boolean
+          description: Present and true when a second-step MFA code is needed
+
+    MfaEnrollResponse:
+      type: object
+      required: [uri, secret]
+      properties:
+        uri:
+          type: string
+          description: "otpauth://totp/... URI for QR-code scanning"
+        secret:
+          type: string
+          description: Base32-encoded TOTP secret for manual entry
+
+    MfaVerifyRequest:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+          description: 6-digit TOTP code from authenticator app
+
+    # ---- Health -------------------------------------------------------------
+
+    HealthResponse:
+      type: object
+      required: [status, database]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded, error]
+        database:
+          type: string
+          enum: [ok, error]
+        version:
+          type: string
+        uptime_seconds:
+          type: integer
+
+    # ---- Sample -------------------------------------------------------------
+
+    SampleInput:
+      type: object
+      required: [barcode, type]
+      properties:
+        barcode:
+          type: string
+        type:
+          type: string
+        status:
+          type: string
+        patient_id:
+          type: string
+        collection_date:
+          type: string
+          format: date-time
+        notes:
+          type: string
+
+    SampleResponse:
+      allOf:
+        - $ref: "#/components/schemas/SampleInput"
+        - type: object
+          required: [id, created_at]
+          properties:
+            id:
+              type: integer
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+
+    SampleListResponse:
+      type: object
+      required: [data, total, page, page_size]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/SampleResponse"
+        total:
+          type: integer
+        page:
+          type: integer
+        page_size:
+          type: integer
+
+    # ---- Order --------------------------------------------------------------
+
+    OrderInput:
+      type: object
+      required: [order_id, sample_id, test_type]
+      properties:
+        order_id:
+          type: string
+        sample_id:
+          type: string
+        test_type:
+          type: string
+        priority:
+          type: string
+          enum: [ROUTINE, STAT, URGENT]
+        status:
+          type: string
+        requested_by:
+          type: string
+        notes:
+          type: string
+
+    OrderResponse:
+      allOf:
+        - $ref: "#/components/schemas/OrderInput"
+        - type: object
+          required: [id, created_at]
+          properties:
+            id:
+              type: integer
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+
+    OrderListResponse:
+      type: object
+      required: [data, total, page, page_size]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrderResponse"
+        total:
+          type: integer
+        page:
+          type: integer
+        page_size:
+          type: integer
+
+    # ---- Result -------------------------------------------------------------
+
+    ResultInput:
+      type: object
+      required: [result_id, order_id, test_name, value, unit]
+      properties:
+        result_id:
+          type: string
+        order_id:
+          type: integer
+        test_name:
+          type: string
+        value:
+          type: string
+        unit:
+          type: string
+        reference_range:
+          type: string
+        status:
+          type: string
+        validated:
+          type: boolean
+        notes:
+          type: string
+
+    ResultResponse:
+      allOf:
+        - $ref: "#/components/schemas/ResultInput"
+        - type: object
+          required: [id, created_at]
+          properties:
+            id:
+              type: integer
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+
+    ResultListResponse:
+      type: object
+      required: [data, total, page, page_size]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ResultResponse"
+        total:
+          type: integer
+        page:
+          type: integer
+        page_size:
+          type: integer
+
+    # ---- User ---------------------------------------------------------------
+
+    UserCreateInput:
+      type: object
+      required: [username, password, role]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+        role:
+          type: string
+        email:
+          type: string
+          format: email
+        active:
+          type: boolean
+          default: true
+
+    UserUpdateInput:
+      type: object
+      properties:
+        role:
+          type: string
+        email:
+          type: string
+          format: email
+        active:
+          type: boolean
+
+    UserResponse:
+      type: object
+      required: [id, username, role, active]
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        role:
+          type: string
+        email:
+          type: string
+        active:
+          type: boolean
+        mfa_enabled:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    UserListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/UserResponse"
+
+    PasswordChangeInput:
+      type: object
+      required: [current_password, new_password]
+      properties:
+        current_password:
+          type: string
+        new_password:
+          type: string
+
+    # ---- Audit --------------------------------------------------------------
+
+    AuditEntry:
+      type: object
+      required: [id, action, entity_type, entity_id, user, timestamp, hash]
+      properties:
+        id:
+          type: integer
+        action:
+          type: string
+        entity_type:
+          type: string
+          enum: [SAMPLE, ORDER, RESULT, USER, ROLE, SYSTEM]
+        entity_id:
+          type: string
+        user:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        details:
+          type: string
+        hash:
+          type: string
+          description: HMAC-SHA256 hash linking this entry to the previous one
+
+    AuditListResponse:
+      type: object
+      required: [data, total]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditEntry"
+        total:
+          type: integer
+
+    AuditVerifyResponse:
+      type: object
+      required: [valid]
+      properties:
+        valid:
+          type: boolean
+        first_broken_at:
+          type: string
+          description: Timestamp of the first entry with a broken hash (only present when valid=false)
+
+    # ---- Stats --------------------------------------------------------------
+
+    EntityStats:
+      type: object
+      required: [total, today, this_week, this_month]
+      properties:
+        total:
+          type: integer
+        today:
+          type: integer
+        this_week:
+          type: integer
+        this_month:
+          type: integer
+
+    StatsResponse:
+      type: object
+      required: [samples, orders, results]
+      properties:
+        samples:
+          $ref: "#/components/schemas/EntityStats"
+        orders:
+          $ref: "#/components/schemas/EntityStats"
+        results:
+          $ref: "#/components/schemas/EntityStats"
+        critical_results:
+          type: integer
+
+    # ---- Import -------------------------------------------------------------
+
+    Hl7ImportRequest:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          description: Raw HL7 v2.x message text
+
+    FhirImportRequest:
+      type: object
+      required: [resource]
+      properties:
+        resource:
+          type: object
+          description: FHIR R4 Bundle or DiagnosticReport as JSON object
+
+    ImportResponse:
+      type: object
+      required: [message, imported]
+      properties:
+        message:
+          type: string
+        imported:
+          type: integer
+        errors:
+          type: array
+          items:
+            type: string

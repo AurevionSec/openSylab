@@ -1,5 +1,4 @@
 #include "utils/Fhir.h"
-#include <algorithm>
 #include <cctype>
 #include <ctime>
 #include <sstream>
@@ -420,7 +419,7 @@ void FhirParser::addError(const std::string &path, const std::string &code,
   errors_.push_back(std::move(error));
 }
 
-FhirExchange::FhirExchange(std::shared_ptr<db::Database> database)
+FhirExchange::FhirExchange(std::shared_ptr<db::IDatabase> database)
     : database_(std::move(database)) {}
 
 bool FhirExchange::importBundle(const std::string &payload,

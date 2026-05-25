@@ -1,0 +1,88 @@
+# opensylab.conf — Example configuration for OpenSylab LIMS
+#
+# Copy this file to one of the following locations (searched in order):
+#   1. Path passed via --config <path> CLI flag
+#   2. Path in the OPENSYLAB_CONFIG environment variable
+#   3. ./opensylab.conf  (current working directory)
+#   4. /etc/opensylab/opensylab.conf
+#
+# Format rules:
+#   - Lines starting with '#' are comments.
+#   - Blank lines are ignored.
+#   - Key/value pairs use the format: key = value
+#   - Leading and trailing whitespace around keys and values is ignored.
+#   - Unknown keys are silently ignored.
+#   - CLI flags always override values set in this file.
+#
+# -----------------------------------------------------------------------
+
+# -----------------------------------------------------------------------
+# Database
+# -----------------------------------------------------------------------
+
+# Path to the SQLite database file.
+# Default: opensylab.db  (in the current working directory)
+# Env override: OPENSYLAB_DB_PATH
+db_path = /var/lib/opensylab/opensylab.db
+
+# -----------------------------------------------------------------------
+# HTTP / API Server
+# -----------------------------------------------------------------------
+
+# TCP port the API server listens on.
+# Default: 8080
+api_port = 8080
+
+# CORS allowed origin returned in the Access-Control-Allow-Origin header.
+# Use '*' to allow all origins (not recommended in production).
+# Default: *
+cors_origin = *
+
+# -----------------------------------------------------------------------
+# TLS / HTTPS
+# -----------------------------------------------------------------------
+
+# Path to the PEM-encoded TLS certificate file.
+# Leave empty to disable TLS.
+# Env override: OPENSYLAB_TLS_CERT
+tls_cert = /etc/opensylab/cert.pem
+
+# Path to the PEM-encoded TLS private key file.
+# Leave empty to disable TLS.
+# Env override: OPENSYLAB_TLS_KEY
+tls_key = /etc/opensylab/key.pem
+
+# Reject all plain HTTP connections and require HTTPS.
+# Only effective when tls_cert and tls_key are set.
+# Accepted values: true / false / yes / no / 1 / 0
+# Default: false
+force_https = false
+
+# -----------------------------------------------------------------------
+# Authentication
+# -----------------------------------------------------------------------
+
+# Path to a file containing the JWT signing secret (one line, no newline).
+# If empty, a random in-memory secret is generated at startup (sessions do
+# not survive restarts — not suitable for production).
+jwt_secret_file = /etc/opensylab/jwt.secret
+
+# Number of login attempts allowed per minute per IP address.
+# Default: 10
+login_rate_limit_per_minute = 10
+
+# Duration of an authenticated session before the JWT expires (minutes).
+# Default: 60
+session_timeout_minutes = 60
+
+# -----------------------------------------------------------------------
+# Logging
+# -----------------------------------------------------------------------
+
+# Log verbosity level.  Accepted values: debug / info / warn / error
+# Default: info
+log_level = info
+
+# Path to the log file.  Leave empty to write only to stderr.
+# Default: (empty — stderr only)
+log_file = /var/log/opensylab/opensylab.log

@@ -4,7 +4,7 @@
 #include "core/Order.h"
 #include "core/Sample.h"
 #include "core/TestResult.h"
-#include "db/Database.h"
+#include "db/IDatabase.h"
 #include "api/TlsContext.h"
 #include "auth/JwtAuth.h"
 #include <atomic>
@@ -40,7 +40,7 @@ struct ApiResponse {
 
 class ApiRouter {
 public:
-  explicit ApiRouter(std::shared_ptr<db::Database> database);
+  explicit ApiRouter(std::shared_ptr<db::IDatabase> database);
 
   ApiResponse handleRequest(const ApiRequest &request);
 
@@ -56,7 +56,7 @@ private:
   std::optional<auth::JwtAuth::TokenPayload>
   extractAndValidateJwt(const std::unordered_map<std::string, std::string> &headers);
 
-  std::shared_ptr<db::Database> database_;
+  std::shared_ptr<db::IDatabase> database_;
   std::unique_ptr<auth::JwtAuth> jwtAuth_;
   mutable std::unordered_set<std::string> tokenBlacklist_;
   mutable std::mutex blacklistMutex_;
@@ -64,7 +64,7 @@ private:
 
 class ApiServer {
 public:
-  ApiServer(std::shared_ptr<db::Database> database, int port = 8080);
+  ApiServer(std::shared_ptr<db::IDatabase> database, int port = 8080);
 
   bool run();
   void stop();
@@ -105,11 +105,15 @@ private:
   void handleClientTls(int clientFd);
   void handleClientPlain(int clientFd);
 
-  std::shared_ptr<db::Database> database_;
+  // Thread-pool configuration
+  static constexpr int kMaxThreads = 32;
+
+  std::shared_ptr<db::IDatabase> database_;
   ApiRouter router_;
   int port_;
   int serverFd_;
   std::atomic<bool> running_;
+  std::atomic<int> activeConnections_{0};
   std::unique_ptr<TlsContext> tlsContext_;
   bool tlsEnabled_;
   std::string corsOrigin_;

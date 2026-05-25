@@ -5,14 +5,12 @@
 #include <algorithm>
 #include <unordered_map>
 #include <cctype>
-#include <chrono>
 #include <ctime>
 #include <iomanip>
 #include <iostream>
 #include <limits>
 #include <optional>
 #include <sstream>
-#include <thread>
 #include <vector>
 #ifdef __unix__
 #include <sys/select.h>
@@ -99,7 +97,7 @@ std::string normalizeStatusInput(const std::string &input,
 namespace opensylab {
 namespace utils {
 
-CliInterface::CliInterface(std::shared_ptr<db::Database> database)
+CliInterface::CliInterface(std::shared_ptr<db::IDatabase> database)
     : database_(database), running_(false), currentUser_(nullptr),
       startTime_(std::time(nullptr)) {}
 
@@ -388,7 +386,7 @@ void CliInterface::handleListSamples() {
   printSeparator();
   std::cout << "\n";
 
-  db::Database::SampleFilter filter;
+  db::IDatabase::SampleFilter filter;
   bool useFilter = false;
 
   std::string useFilterInput = readInput("Filter anwenden? (j/n)");
@@ -602,7 +600,7 @@ void CliInterface::handleListSamples() {
     return;
   }
 
-  db::Database::SampleFilter activeFilter = filter;
+  db::IDatabase::SampleFilter activeFilter = filter;
   std::string activeTitle = hasCriteria ? "Suchergebnisse" : "Alle Proben";
 
   if (useFilter && hasCriteria) {
@@ -615,7 +613,7 @@ void CliInterface::handleListSamples() {
         (resetInput == "j" || resetInput == "ja" || resetInput == "y" ||
          resetInput == "yes")) {
       database_->clearError();
-      db::Database::SampleFilter resetFilter;
+      db::IDatabase::SampleFilter resetFilter;
       resetFilter.excludeArchived = true;
       auto allSamples = database_->getSamplesByFilter(resetFilter);
       printSamples("Alle Proben", allSamples, supportView);
@@ -1098,11 +1096,11 @@ void CliInterface::handleStatistics() {
   printSeparator();
   std::cout << "\n";
 
-  db::Database::StatsFilter sampleFilter;
-  db::Database::StatsFilter orderFilter;
-  db::Database::StatsFilter resultFilter;
+  db::IDatabase::StatsFilter sampleFilter;
+  db::IDatabase::StatsFilter orderFilter;
+  db::IDatabase::StatsFilter resultFilter;
 
-  auto countFor = [](const std::vector<db::Database::StatusCount> &entries,
+  auto countFor = [](const std::vector<db::IDatabase::StatusCount> &entries,
                      const std::string &status) {
     for (const auto &entry : entries) {
       if (entry.status == status) {
@@ -1375,9 +1373,9 @@ void CliInterface::handleStatistics() {
       continue;
     }
     if (choice == "2") {
-      sampleFilter = db::Database::StatsFilter{};
-      orderFilter = db::Database::StatsFilter{};
-      resultFilter = db::Database::StatsFilter{};
+      sampleFilter = db::IDatabase::StatsFilter{};
+      orderFilter = db::IDatabase::StatsFilter{};
+      resultFilter = db::IDatabase::StatsFilter{};
       continue;
     }
     if (choice == "3") {
@@ -1674,7 +1672,7 @@ void CliInterface::handleDiagnosticsLogs() {
     return;
   }
 
-  db::Database::DiagnosticsFilter filter;
+  db::IDatabase::DiagnosticsFilter filter;
 
   std::string fromInput = readInput("Von-Datum (YYYY-MM-DD, optional)");
   if (!running_)
@@ -1924,7 +1922,7 @@ void CliInterface::handleListOrders() {
     }
   }
 
-  db::Database::OrderFilter filter;
+  db::IDatabase::OrderFilter filter;
   filter.status = statusFilter;
   filter.sampleId = sampleFilter;
   filter.priority = priorityFilter;
@@ -1986,7 +1984,7 @@ void CliInterface::handleListOrders() {
       hasFilters || filter.limit.has_value() || filter.offset.has_value();
   auto orders = useFilteredQuery ? database_->getOrdersByFilter(filter)
                                  : database_->getAllOrders();
-  db::Database::OrderFilter activeFilter = filter;
+  db::IDatabase::OrderFilter activeFilter = filter;
   bool activeHasFilters = hasFilters;
 
   if (database_->hasError()) {
@@ -2000,7 +1998,7 @@ void CliInterface::handleListOrders() {
     if (!running_)
       return;
     if (!reset.empty() && (reset[0] == 'y' || reset[0] == 'Y')) {
-      db::Database::OrderFilter resetFilter = filter;
+      db::IDatabase::OrderFilter resetFilter = filter;
       resetFilter.status.clear();
       resetFilter.sampleId.clear();
       resetFilter.priority.clear();
@@ -2052,7 +2050,7 @@ void CliInterface::handleListOrders() {
     reset = trim(reset);
     if (!reset.empty() && (reset == "j" || reset == "ja" || reset == "y" ||
                            reset == "yes")) {
-      db::Database::OrderFilter resetFilter = activeFilter;
+      db::IDatabase::OrderFilter resetFilter = activeFilter;
       resetFilter.status.clear();
       resetFilter.sampleId.clear();
       resetFilter.priority.clear();
@@ -3408,7 +3406,7 @@ void CliInterface::handleShowAuditLog() {
        (filterInput == "j" || filterInput == "ja" || filterInput == "y" ||
         filterInput == "yes"));
 
-  db::Database::AuditLogFilter filter;
+  db::IDatabase::AuditLogFilter filter;
 
   if (applyFilters) {
     std::cout << "\nFilter (leer lassen = kein Filter):\n";
@@ -3599,7 +3597,7 @@ void CliInterface::handleShowAuditLog() {
     reset = trim(reset);
     if (!reset.empty() &&
         (reset == "j" || reset == "ja" || reset == "y" || reset == "yes")) {
-      db::Database::AuditLogFilter resetFilter;
+      db::IDatabase::AuditLogFilter resetFilter;
       resetFilter.limit = limit;
       auto resetEntries = database_->getAuditLogFiltered(resetFilter);
       printEntries(resetEntries);
@@ -3812,7 +3810,7 @@ void CliInterface::handleExportAuditLog() {
        (filterInput == "j" || filterInput == "ja" || filterInput == "y" ||
         filterInput == "yes"));
 
-  db::Database::AuditLogFilter filter;
+  db::IDatabase::AuditLogFilter filter;
 
   if (applyFilters) {
     std::cout << "\nFilter (leer lassen = kein Filter):\n";

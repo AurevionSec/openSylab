@@ -1,10 +1,9 @@
 #include "utils/CsvImport.h"
+#include "utils/Logger.h"
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
 #include <fstream>
-#include <iostream>
-#include <sstream>
 
 namespace {
 constexpr size_t kMaxImportBytes = 10 * 1024 * 1024;
@@ -43,9 +42,7 @@ bool isEmptyRecord(const std::string &record) {
 
 void printErrorSummary(int importedCount, int errorCount) {
   if (errorCount > 0) {
-    std::cerr << "\nImport-Zusammenfassung:\n";
-    std::cerr << "  ✓ Erfolgreich: " << importedCount << "\n";
-    std::cerr << "  ✗ Fehler: " << errorCount << "\n";
+    LOG_WARN("Import-Zusammenfassung: Erfolgreich={}, Fehler={}", importedCount, errorCount);
   }
 }
 } // namespace
@@ -57,7 +54,7 @@ bool CsvImport::processRecord(const std::string &record, int recordNumber,
   if (fields.size() < 2) {
     const std::string error =
         "Zu wenig Felder (erwartet mindestens 2)";
-    std::cerr << "✗ Fehler Record " << recordNumber << ": " << error << "\n";
+    LOG_ERROR("Fehler Record {}: {}", recordNumber, error);
     addFailedRecord(recordNumber, record, error);
     return false;
   }
@@ -69,11 +66,10 @@ bool CsvImport::processRecord(const std::string &record, int recordNumber,
     importedRecords_.push_back({sample, recordNumber, record});
     return true;
   } catch (const std::invalid_argument &e) {
-    std::cerr << "✗ Fehler Record " << recordNumber << ": " << e.what() << "\n";
+    LOG_ERROR("Fehler Record {}: {}", recordNumber, e.what());
     addFailedRecord(recordNumber, record, e.what());
   } catch (const std::exception &e) {
-    std::cerr << "✗ Unerwarteter Fehler Record " << recordNumber << ": "
-              << e.what() << "\n";
+    LOG_ERROR("Unerwarteter Fehler Record {}: {}", recordNumber, e.what());
     addFailedRecord(recordNumber, record, e.what());
   }
   return false;
@@ -110,7 +106,7 @@ CsvImport::importSamples(const std::string &filePath) {
     std::string headerLine;
     if (std::getline(file, headerLine)) {
       headerLine_ = headerLine;
-      std::cerr << "Header: " << headerLine << std::endl;
+      LOG_DEBUG("Header: {}", headerLine);
       if (!validateHeader(headerLine_)) {
         setError("Ungueltiger CSV-Header. Erwartet: sample_id,patient_id,"
                  "patient_name,description,status");
@@ -145,8 +141,7 @@ CsvImport::importSamples(const std::string &filePath) {
   // Prüfen auf nicht geschlossene Anführungszeichen
   if (inQuotes) {
     errorCount++;
-    std::cerr
-        << "✗ Fehler: Datei endet mit nicht geschlossenem Anführungszeichen\n";
+    LOG_ERROR("Fehler: Datei endet mit nicht geschlossenem Anführungszeichen");
   }
 
   // Letzten Record verarbeiten (falls Datei nicht mit Newline endet)
@@ -161,8 +156,7 @@ CsvImport::importSamples(const std::string &filePath) {
   file.close();
 
   if (importedCount_ > 0) {
-    std::cerr << "\n✓ CSV-Import erfolgreich: " << importedCount_
-              << " Proben importiert\n";
+    LOG_INFO("CSV-Import erfolgreich: {} Proben importiert", importedCount_);
   } else {
     setError(errorCount > 0
                  ? "Keine Proben importiert - alle Zeilen enthielten Fehler"
@@ -307,7 +301,7 @@ void CsvImport::addFailedRecord(int recordNumber, const std::string &record,
 
 void CsvImport::setError(const std::string &error) {
   lastError_ = error;
-  std::cerr << "CSV-Import-Fehler: " << error << std::endl;
+  LOG_ERROR("CSV-Import-Fehler: {}", error);
 }
 
 } // namespace utils

@@ -47,6 +47,9 @@ extern void registerHl7Tests();
 extern void registerFhirTests();
 extern void registerStatisticsTests();
 extern void registerUtilsTests();
+extern void registerConfigTests();
+extern void registerMigrationTests();
+extern void registerAuditChainTests();
 
 int main() {
   std::cout << "\n";
@@ -70,6 +73,9 @@ int main() {
   registerFhirTests();
   registerStatisticsTests();
   registerUtilsTests();
+  registerConfigTests();
+  registerMigrationTests();
+  registerAuditChainTests();
 
   int passed = 0;
   int failed = 0;

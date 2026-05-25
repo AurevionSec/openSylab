@@ -4,7 +4,7 @@
 #include "core/Order.h"
 #include "core/Sample.h"
 #include "core/TestResult.h"
-#include "db/Database.h"
+#include "db/IDatabase.h"
 #include <memory>
 #include <string>
 #include <vector>
@@ -73,7 +73,7 @@ public:
     std::string lastError;
   };
 
-  explicit FhirExchange(std::shared_ptr<db::Database> database);
+  explicit FhirExchange(std::shared_ptr<db::IDatabase> database);
 
   bool importBundle(const std::string &payload, const std::string &actor,
                     ImportSummary &summary);
@@ -81,7 +81,7 @@ public:
                            const std::vector<core::TestResult> &results);
 
 private:
-  std::shared_ptr<db::Database> database_;
+  std::shared_ptr<db::IDatabase> database_;
 
   void logErrors(const std::vector<FhirParser::Error> &errors,
                  const std::string &actor);
