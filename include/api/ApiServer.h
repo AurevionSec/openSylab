@@ -52,6 +52,11 @@ private:
   // Authentication handlers
   ApiResponse handleLogin(const ApiRequest &request);
 
+  // Route handlers extracted from handleRequest (Phase A decomposition).
+  // Behaviour-preserving: each returns exactly what the former inline branch did.
+  ApiResponse handleHealth() const;
+  ApiResponse handleOpenApiSpec() const;
+
   // JWT validation helper
   std::optional<auth::JwtAuth::TokenPayload>
   extractAndValidateJwt(const std::unordered_map<std::string, std::string> &headers);

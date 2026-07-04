@@ -644,6 +644,30 @@ std::optional<auth::JwtAuth::TokenPayload> ApiRouter::extractAndValidateJwt(
   return jwtAuth_->validateToken(token);
 }
 
+ApiResponse ApiRouter::handleHealth() const {
+  return ApiResponse{
+      200, json{{"status", "ok"}, {"service", "opensylab-lims"}}.dump(),
+      "application/json"};
+}
+
+ApiResponse ApiRouter::handleOpenApiSpec() const {
+  static constexpr const char *kSpecPaths[] = {
+      "docs/openapi.yaml",
+      "/usr/share/opensylab/openapi.yaml",
+  };
+  for (const char *specPath : kSpecPaths) {
+    std::ifstream specFile(specPath);
+    if (specFile.is_open()) {
+      std::ostringstream buf;
+      buf << specFile.rdbuf();
+      return ApiResponse{200, buf.str(), "application/yaml"};
+    }
+  }
+  return ApiResponse{404,
+                     R"({"error":"OpenAPI specification file not found"})",
+                     "application/json"};
+}
+
 ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
   if (!database_) {
     return makeError(500, "internal_error", "Database unavailable",
@@ -666,28 +690,12 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
 
   // Route: GET /api/v1/health (unauthenticated)
   if (method == "get" && path == "/api/v1/health") {
-    return ApiResponse{
-        200, json{{"status", "ok"}, {"service", "opensylab-lims"}}.dump(),
-        "application/json"};
+    return handleHealth();
   }
 
   // Route: GET /api/v1/openapi.yaml (unauthenticated — public spec)
   if (method == "get" && path == "/api/v1/openapi.yaml") {
-    static constexpr const char *kSpecPaths[] = {
-        "docs/openapi.yaml",
-        "/usr/share/opensylab/openapi.yaml",
-    };
-    for (const char *specPath : kSpecPaths) {
-      std::ifstream specFile(specPath);
-      if (specFile.is_open()) {
-        std::ostringstream buf;
-        buf << specFile.rdbuf();
-        return ApiResponse{200, buf.str(), "application/yaml"};
-      }
-    }
-    return ApiResponse{404,
-                       R"({"error":"OpenAPI specification file not found"})",
-                       "application/json"};
+    return handleOpenApiSpec();
   }
 
   // Route: POST /api/v1/auth/logout
