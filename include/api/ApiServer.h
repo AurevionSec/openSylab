@@ -95,6 +95,12 @@ private:
   ApiResponse handleUpdateUser(const RouteContext &ctx) const;
   ApiResponse handleChangeOwnPassword(const RouteContext &ctx) const;
   ApiResponse handleDeleteUser(const RouteContext &ctx) const;
+  ApiResponse handleListSamples(const RouteContext &ctx) const;
+  ApiResponse handleGetSample(const RouteContext &ctx) const;
+  ApiResponse handleListOrders(const RouteContext &ctx) const;
+  ApiResponse handleGetOrder(const RouteContext &ctx) const;
+  ApiResponse handleListResults(const RouteContext &ctx) const;
+  ApiResponse handleGetResult(const RouteContext &ctx) const;
 
   // JWT validation helper
   std::optional<auth::JwtAuth::TokenPayload>

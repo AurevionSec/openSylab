@@ -1563,6 +1563,511 @@ ApiResponse ApiRouter::handleDeleteUser(const RouteContext &ctx) const {
   return ApiResponse{204, "", "application/json"};
 }
 
+ApiResponse ApiRouter::handleListSamples(const RouteContext &ctx) const {
+  db::IDatabase::SampleFilter filter;
+  auto qIt = ctx.query.find("q");
+  if (qIt != ctx.query.end()) {
+    if (qIt->second.size() > 255) {
+      return makeError(400, "validation_error", "Query too long",
+                       "Search query must not exceed 255 characters.");
+    }
+    filter.query = qIt->second;
+  }
+  auto statusIt = ctx.query.find("status");
+  if (statusIt != ctx.query.end()) {
+    if (!core::Sample::isValidStatusString(statusIt->second)) {
+      return makeError(
+          400, "validation_error", "Invalid status",
+          "Use Erfasst, In Analyse, Analysiert, Validiert, Archiviert.");
+    }
+    filter.status = core::Sample::statusToString(
+        core::Sample::stringToStatus(statusIt->second));
+  }
+  auto limitIt = ctx.query.find("limit");
+  if (limitIt != ctx.query.end()) {
+    int limitValue = 0;
+    if (!parseIntValue(limitIt->second, limitValue)) {
+      return makeError(400, "validation_error", "Invalid limit",
+                       "Provide integer limit.");
+    }
+    // Validate and cap limit to prevent DoS
+    std::string validationError;
+    if (!validateAndCapLimit(limitValue, validationError)) {
+      return makeError(400, "validation_error", "Invalid limit",
+                       validationError);
+    }
+    filter.limit = limitValue;
+  }
+  auto offsetIt = ctx.query.find("offset");
+  if (offsetIt != ctx.query.end()) {
+    int offsetValue = 0;
+    if (!parseIntValue(offsetIt->second, offsetValue) || offsetValue < 0) {
+      return makeError(400, "validation_error", "Invalid offset",
+                       "Provide non-negative integer offset.");
+    }
+    if (offsetValue > MAX_PAGINATION_OFFSET) {
+      return makeError(400, "validation_error", "Offset too large",
+                       "offset must not exceed " +
+                           std::to_string(MAX_PAGINATION_OFFSET) + ".");
+    }
+    if (!filter.limit.has_value()) {
+      return makeError(400, "validation_error", "Offset requires limit",
+                       "Provide limit when using offset.");
+    }
+    filter.offset = offsetValue;
+  }
+  auto fromIt = ctx.query.find("from");
+  auto toIt = ctx.query.find("to");
+  bool hasFrom = false;
+  bool hasTo = false;
+
+  if (fromIt != ctx.query.end()) {
+    std::time_t ts{};
+    if (!parseTimeValue(fromIt->second, ts)) {
+      return makeError(400, "validation_error", "Invalid 'from' value",
+                       "Provide Unix timestamp for from.");
+    }
+    filter.fromDate = ts;
+    hasFrom = true;
+  }
+  if (toIt != ctx.query.end()) {
+    std::time_t ts{};
+    if (!parseTimeValue(toIt->second, ts)) {
+      return makeError(400, "validation_error", "Invalid 'to' value",
+                       "Provide Unix timestamp for to.");
+    }
+    filter.toDate = ts;
+    hasTo = true;
+  }
+  // Validate that from <= to when both are provided
+  if (hasFrom && hasTo && filter.fromDate > filter.toDate) {
+    return makeError(400, "validation_error", "Invalid date range",
+                     "'from' date must be less than or equal to 'to' date.");
+  }
+
+  auto samples = database_->getSamplesByFilter(filter);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+
+  int total = database_->getSamplesCount(filter);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  if (total < 0) {
+    total = static_cast<int>(samples.size());
+  }
+
+  json samplesArr = json::array();
+  for (const auto &s : samples) {
+    samplesArr.push_back(json::parse(sampleToJson(*s)));
+  }
+  const std::string out = json{{"data", samplesArr}, {"total", total}}.dump();
+
+  std::ostringstream details;
+  details
+      << "API READ /samples"
+      << "; count=" << samples.size()
+      << "; q=" << (filter.query.empty() ? "any" : filter.query)
+      << "; status=" << (filter.status.empty() ? "any" : filter.status)
+      << "; from="
+      << (filter.fromDate.has_value() ? std::to_string(*filter.fromDate)
+                                      : "any")
+      << "; to="
+      << (filter.toDate.has_value() ? std::to_string(*filter.toDate) : "any")
+      << "; limit="
+      << (filter.limit.has_value() ? std::to_string(*filter.limit) : "any")
+      << "; offset="
+      << (filter.offset.has_value() ? std::to_string(*filter.offset) : "any");
+  core::AuditEntry entry(core::AuditEntry::ActionType::ACCESS,
+                         core::AuditEntry::EntityType::SAMPLE, "*", ctx.actor,
+                         details.str());
+  if (!database_->logAudit(entry)) {
+    LOG_ERROR("[Audit] logAudit failed: {}", database_->getLastError());
+    return makeError(500, "internal_error", "Audit log failed",
+                     "Please contact the system administrator.");
+  }
+
+  return ApiResponse{200, out, "application/json"};
+}
+
+ApiResponse ApiRouter::handleGetSample(const RouteContext &ctx) const {
+  const std::string sampleId =
+      ctx.path.substr(std::string("/api/v1/samples/").size());
+  if (sampleId.empty()) {
+    return makeError(400, "validation_error", "Missing sample_id",
+                     "Provide sample_id in URL path.");
+  }
+  auto sample = database_->getSampleByBarcode(sampleId);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  if (!sample) {
+    return makeError(404, "not_found", "Sample not found",
+                     "Verify the sample_id.");
+  }
+
+  core::AuditEntry entry(core::AuditEntry::ActionType::ACCESS,
+                         core::AuditEntry::EntityType::SAMPLE, sampleId,
+                         ctx.actor, "API READ /samples/" + sampleId);
+  if (!database_->logAudit(entry)) {
+    LOG_ERROR("[Audit] logAudit failed: {}", database_->getLastError());
+    return makeError(500, "internal_error", "Audit log failed",
+                     "Please contact the system administrator.");
+  }
+
+  return ApiResponse{200, "{\"data\":" + sampleToJson(*sample) + "}",
+                     "application/json"};
+}
+
+ApiResponse ApiRouter::handleListOrders(const RouteContext &ctx) const {
+  db::IDatabase::OrderFilter filter;
+  auto statusIt = ctx.query.find("status");
+  if (statusIt != ctx.query.end()) {
+    if (!core::Order::isValidStatusString(statusIt->second)) {
+      return makeError(
+          400, "validation_error", "Invalid status",
+          "Use REQUESTED, IN_PROGRESS, COMPLETED, VALIDATED, CANCELLED.");
+    }
+    filter.status = core::Order::statusToString(
+        core::Order::stringToStatus(statusIt->second));
+  }
+  auto sampleIt = ctx.query.find("sample_id");
+  if (sampleIt != ctx.query.end()) {
+    if (sampleIt->second.size() > 64) {
+      return makeError(400, "validation_error", "sample_id too long",
+                       "sample_id filter must not exceed 64 characters.");
+    }
+    filter.sampleId = sampleIt->second;
+  }
+  auto priorityIt = ctx.query.find("priority");
+  if (priorityIt != ctx.query.end()) {
+    if (!core::Order::isValidPriorityString(priorityIt->second)) {
+      return makeError(400, "validation_error", "Invalid priority",
+                       "Use NORMAL, URGENT, EMERGENCY.");
+    }
+    filter.priority = core::Order::priorityToString(
+        core::Order::stringToPriority(priorityIt->second));
+  }
+  auto limitIt = ctx.query.find("limit");
+  if (limitIt != ctx.query.end()) {
+    int limitValue = 0;
+    if (!parseIntValue(limitIt->second, limitValue)) {
+      return makeError(400, "validation_error", "Invalid limit",
+                       "Provide integer limit.");
+    }
+    // Validate and cap limit to prevent DoS
+    std::string validationError;
+    if (!validateAndCapLimit(limitValue, validationError)) {
+      return makeError(400, "validation_error", "Invalid limit",
+                       validationError);
+    }
+    filter.limit = limitValue;
+  }
+  auto offsetIt = ctx.query.find("offset");
+  if (offsetIt != ctx.query.end()) {
+    int offsetValue = 0;
+    if (!parseIntValue(offsetIt->second, offsetValue) || offsetValue < 0) {
+      return makeError(400, "validation_error", "Invalid offset",
+                       "Provide non-negative integer offset.");
+    }
+    if (offsetValue > MAX_PAGINATION_OFFSET) {
+      return makeError(400, "validation_error", "Offset too large",
+                       "offset must not exceed " +
+                           std::to_string(MAX_PAGINATION_OFFSET) + ".");
+    }
+    if (!filter.limit.has_value()) {
+      return makeError(400, "validation_error", "Offset requires limit",
+                       "Provide limit when using offset.");
+    }
+    filter.offset = offsetValue;
+  }
+
+  auto orders = database_->getOrdersByFilter(filter);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+
+  int ordersTotal = database_->getOrdersCount(filter);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  if (ordersTotal < 0)
+    ordersTotal = static_cast<int>(orders.size());
+  json ordersArr = json::array();
+  for (const auto &o : orders) {
+    ordersArr.push_back(json::parse(orderToJson(*o)));
+  }
+  const std::string out =
+      json{{"data", ordersArr}, {"total", ordersTotal}}.dump();
+
+  std::ostringstream details;
+  details
+      << "API READ /orders"
+      << "; count=" << orders.size()
+      << "; status=" << (filter.status.empty() ? "any" : filter.status)
+      << "; sample_id=" << (filter.sampleId.empty() ? "any" : filter.sampleId)
+      << "; priority=" << (filter.priority.empty() ? "any" : filter.priority)
+      << "; limit="
+      << (filter.limit.has_value() ? std::to_string(*filter.limit) : "any")
+      << "; offset="
+      << (filter.offset.has_value() ? std::to_string(*filter.offset) : "any");
+  core::AuditEntry entry(core::AuditEntry::ActionType::ACCESS,
+                         core::AuditEntry::EntityType::ORDER, "*", ctx.actor,
+                         details.str());
+  if (!database_->logAudit(entry)) {
+    LOG_ERROR("[Audit] logAudit failed: {}", database_->getLastError());
+    return makeError(500, "internal_error", "Audit log failed",
+                     "Please contact the system administrator.");
+  }
+
+  return ApiResponse{200, out, "application/json"};
+}
+
+ApiResponse ApiRouter::handleGetOrder(const RouteContext &ctx) const {
+  const std::string orderId =
+      ctx.path.substr(std::string("/api/v1/orders/").size());
+  if (orderId.empty()) {
+    return makeError(400, "validation_error", "Missing order_id",
+                     "Provide order_id in URL path.");
+  }
+  auto order = database_->getOrderByOrderId(orderId);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  if (!order) {
+    return makeError(404, "not_found", "Order not found",
+                     "Verify the order_id.");
+  }
+
+  core::AuditEntry entry(core::AuditEntry::ActionType::ACCESS,
+                         core::AuditEntry::EntityType::ORDER, orderId, ctx.actor,
+                         "API READ /orders/" + orderId);
+  if (!database_->logAudit(entry)) {
+    LOG_ERROR("[Audit] logAudit failed: {}", database_->getLastError());
+    return makeError(500, "internal_error", "Audit log failed",
+                     "Please contact the system administrator.");
+  }
+
+  return ApiResponse{200, "{\"data\":" + orderToJson(*order) + "}",
+                     "application/json"};
+}
+
+ApiResponse ApiRouter::handleListResults(const RouteContext &ctx) const {
+  std::vector<std::unique_ptr<core::TestResult>> results;
+  std::optional<int> limit;
+  std::optional<int> offset;
+  auto limitIt = ctx.query.find("limit");
+  if (limitIt != ctx.query.end()) {
+    int limitValue = 0;
+    if (!parseIntValue(limitIt->second, limitValue)) {
+      return makeError(400, "validation_error", "Invalid limit",
+                       "Provide integer limit.");
+    }
+    // Validate and cap limit to prevent DoS
+    std::string validationError;
+    if (!validateAndCapLimit(limitValue, validationError)) {
+      return makeError(400, "validation_error", "Invalid limit",
+                       validationError);
+    }
+    limit = limitValue;
+  }
+  auto offsetIt = ctx.query.find("offset");
+  if (offsetIt != ctx.query.end()) {
+    int offsetValue = 0;
+    if (!parseIntValue(offsetIt->second, offsetValue) || offsetValue < 0) {
+      return makeError(400, "validation_error", "Invalid offset",
+                       "Provide non-negative integer offset.");
+    }
+    if (offsetValue > MAX_PAGINATION_OFFSET) {
+      return makeError(400, "validation_error", "Offset too large",
+                       "offset must not exceed " +
+                           std::to_string(MAX_PAGINATION_OFFSET) + ".");
+    }
+    if (!limit.has_value()) {
+      return makeError(400, "validation_error", "Offset requires limit",
+                       "Provide limit when using offset.");
+    }
+    offset = offsetValue;
+  }
+  // Parse optional status and flag filters
+  std::string statusFilter;
+  std::string flagFilter;
+  static const std::unordered_set<std::string> kValidResultStatuses{
+      "PENDING", "ENTERED", "VALIDATED", "REJECTED", "REPEATED"};
+  static const std::unordered_set<std::string> kValidResultFlags{
+      "NORMAL", "LOW", "HIGH", "CRITICAL", "UNDEFINED"};
+  auto statusResultIt = ctx.query.find("status");
+  if (statusResultIt != ctx.query.end() && !statusResultIt->second.empty()) {
+    if (kValidResultStatuses.find(statusResultIt->second) ==
+        kValidResultStatuses.end()) {
+      return makeError(400, "validation_error", "Invalid status",
+                       "status must be one of: PENDING, ENTERED, VALIDATED, "
+                       "REJECTED, REPEATED");
+    }
+    statusFilter = statusResultIt->second;
+  }
+
+  auto flagResultIt = ctx.query.find("flag");
+  if (flagResultIt != ctx.query.end() && !flagResultIt->second.empty()) {
+    if (kValidResultFlags.find(flagResultIt->second) ==
+        kValidResultFlags.end()) {
+      return makeError(
+          400, "validation_error", "Invalid flag",
+          "flag must be one of: NORMAL, LOW, HIGH, CRITICAL, UNDEFINED");
+    }
+    flagFilter = flagResultIt->second;
+  }
+
+  std::optional<int> resultsOrderIdFilter;
+  auto orderIt = ctx.query.find("order_id");
+  // When in-memory filters are active, fetch a capped window then filter.
+  // Cap prevents unbounded table scans into RAM on large result sets.
+  constexpr int kMemFilterFetchCap = 10000;
+  bool hasMemFilter = !statusFilter.empty() || !flagFilter.empty();
+  std::optional<int> dbLimit =
+      hasMemFilter ? std::make_optional(kMemFilterFetchCap) : limit;
+  std::optional<int> dbOffset = hasMemFilter ? std::make_optional(0) : offset;
+  if (orderIt != ctx.query.end()) {
+    int orderId = 0;
+    if (!parseIntValue(orderIt->second, orderId) || orderId <= 0) {
+      return makeError(400, "validation_error", "Invalid order_id",
+                       "Provide numeric order_id.");
+    }
+    results = database_->getTestResultsByOrderId(orderId, dbLimit, dbOffset);
+    resultsOrderIdFilter = orderId;
+  } else {
+    results = database_->getAllTestResults(dbLimit, dbOffset);
+  }
+
+  // Apply status filter in-memory if provided
+  if (!statusFilter.empty()) {
+    std::vector<std::unique_ptr<core::TestResult>> filtered;
+    for (auto &r : results) {
+      if (r->getStatusString() == statusFilter) {
+        filtered.push_back(std::move(r));
+      }
+    }
+    results = std::move(filtered);
+  }
+  // Apply flag filter in-memory if provided
+  if (!flagFilter.empty()) {
+    std::vector<std::unique_ptr<core::TestResult>> filtered;
+    for (auto &r : results) {
+      if (r->getFlagString() == flagFilter) {
+        filtered.push_back(std::move(r));
+      }
+    }
+    results = std::move(filtered);
+  }
+
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+
+  // Total is now accurate: either filtered count (hasMem) or DB count (no
+  // filter)
+  int resultsTotal =
+      hasMemFilter ? static_cast<int>(results.size())
+                   : database_->getTestResultsCount(resultsOrderIdFilter);
+  if (!hasMemFilter && database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  // When in-memory filters ran (no DB limit/offset), apply pagination now
+  if (hasMemFilter && (limit.has_value() || offset.has_value())) {
+    int startIdx = offset.value_or(0);
+    int endIdx =
+        limit.has_value()
+            ? std::min(startIdx + *limit, static_cast<int>(results.size()))
+            : static_cast<int>(results.size());
+    if (startIdx < static_cast<int>(results.size())) {
+      std::vector<std::unique_ptr<core::TestResult>> paged;
+      for (int pi = startIdx; pi < endIdx; ++pi) {
+        paged.push_back(std::move(results[static_cast<size_t>(pi)]));
+      }
+      results = std::move(paged);
+    } else {
+      results.clear();
+    }
+  }
+  std::unordered_map<int, std::string> orderIdCache;
+  for (const auto &r : results) {
+    const int oid = r->getOrderId();
+    if (orderIdCache.find(oid) == orderIdCache.end()) {
+      auto ord = database_->getOrder(oid);
+      if (ord) {
+        orderIdCache[oid] = ord->getOrderId();
+      }
+    }
+  }
+  if (resultsTotal < 0)
+    resultsTotal = static_cast<int>(results.size());
+  json resultsArr = json::array();
+  for (const auto &r : results) {
+    const auto cit = orderIdCache.find(r->getOrderId());
+    const std::string &oidStr =
+        (cit != orderIdCache.end()) ? cit->second : "";
+    resultsArr.push_back(json::parse(resultToJson(*r, oidStr)));
+  }
+  const std::string out =
+      json{{"data", resultsArr}, {"total", resultsTotal}}.dump();
+
+  std::ostringstream details;
+  details << "API READ /results"
+          << "; count=" << results.size() << "; order_id="
+          << (orderIt != ctx.query.end() ? orderIt->second : "any") << "; limit="
+          << (limit.has_value() ? std::to_string(*limit) : "any")
+          << "; offset="
+          << (offset.has_value() ? std::to_string(*offset) : "any");
+  core::AuditEntry entry(core::AuditEntry::ActionType::ACCESS,
+                         core::AuditEntry::EntityType::RESULT, "*", ctx.actor,
+                         details.str());
+  if (!database_->logAudit(entry)) {
+    LOG_ERROR("[Audit] logAudit failed: {}", database_->getLastError());
+    return makeError(500, "internal_error", "Audit log failed",
+                     "Please contact the system administrator.");
+  }
+
+  return ApiResponse{200, out, "application/json"};
+}
+
+ApiResponse ApiRouter::handleGetResult(const RouteContext &ctx) const {
+  const std::string resultId =
+      ctx.path.substr(std::string("/api/v1/results/").size());
+  if (resultId.empty()) {
+    return makeError(400, "validation_error", "Missing result_id",
+                     "Provide result_id in URL path.");
+  }
+  auto result = database_->getTestResultByResultId(resultId);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  if (!result) {
+    return makeError(404, "not_found", "Result not found",
+                     "Verify the result_id.");
+  }
+
+  core::AuditEntry entry(core::AuditEntry::ActionType::ACCESS,
+                         core::AuditEntry::EntityType::RESULT, resultId,
+                         ctx.actor, "API READ /results/" + resultId);
+  if (!database_->logAudit(entry)) {
+    LOG_ERROR("[Audit] logAudit failed: {}", database_->getLastError());
+    return makeError(500, "internal_error", "Audit log failed",
+                     "Please contact the system administrator.");
+  }
+
+  {
+    std::string oidStr;
+    auto parentOrder = database_->getOrder(result->getOrderId());
+    if (parentOrder) {
+      oidStr = parentOrder->getOrderId();
+    }
+    return ApiResponse{200,
+                       "{\"data\":" + resultToJson(*result, oidStr) + "}",
+                       "application/json"};
+  }
+}
+
 ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
   if (!database_) {
     return makeError(500, "internal_error", "Database unavailable",
@@ -2925,508 +3430,27 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
   }
 
   if (path == "/api/v1/samples") {
-    db::IDatabase::SampleFilter filter;
-    auto qIt = query.find("q");
-    if (qIt != query.end()) {
-      if (qIt->second.size() > 255) {
-        return makeError(400, "validation_error", "Query too long",
-                         "Search query must not exceed 255 characters.");
-      }
-      filter.query = qIt->second;
-    }
-    auto statusIt = query.find("status");
-    if (statusIt != query.end()) {
-      if (!core::Sample::isValidStatusString(statusIt->second)) {
-        return makeError(
-            400, "validation_error", "Invalid status",
-            "Use Erfasst, In Analyse, Analysiert, Validiert, Archiviert.");
-      }
-      filter.status = core::Sample::statusToString(
-          core::Sample::stringToStatus(statusIt->second));
-    }
-    auto limitIt = query.find("limit");
-    if (limitIt != query.end()) {
-      int limitValue = 0;
-      if (!parseIntValue(limitIt->second, limitValue)) {
-        return makeError(400, "validation_error", "Invalid limit",
-                         "Provide integer limit.");
-      }
-      // Validate and cap limit to prevent DoS
-      std::string validationError;
-      if (!validateAndCapLimit(limitValue, validationError)) {
-        return makeError(400, "validation_error", "Invalid limit",
-                         validationError);
-      }
-      filter.limit = limitValue;
-    }
-    auto offsetIt = query.find("offset");
-    if (offsetIt != query.end()) {
-      int offsetValue = 0;
-      if (!parseIntValue(offsetIt->second, offsetValue) || offsetValue < 0) {
-        return makeError(400, "validation_error", "Invalid offset",
-                         "Provide non-negative integer offset.");
-      }
-      if (offsetValue > MAX_PAGINATION_OFFSET) {
-        return makeError(400, "validation_error", "Offset too large",
-                         "offset must not exceed " +
-                             std::to_string(MAX_PAGINATION_OFFSET) + ".");
-      }
-      if (!filter.limit.has_value()) {
-        return makeError(400, "validation_error", "Offset requires limit",
-                         "Provide limit when using offset.");
-      }
-      filter.offset = offsetValue;
-    }
-    auto fromIt = query.find("from");
-    auto toIt = query.find("to");
-    bool hasFrom = false;
-    bool hasTo = false;
-
-    if (fromIt != query.end()) {
-      std::time_t ts{};
-      if (!parseTimeValue(fromIt->second, ts)) {
-        return makeError(400, "validation_error", "Invalid 'from' value",
-                         "Provide Unix timestamp for from.");
-      }
-      filter.fromDate = ts;
-      hasFrom = true;
-    }
-    if (toIt != query.end()) {
-      std::time_t ts{};
-      if (!parseTimeValue(toIt->second, ts)) {
-        return makeError(400, "validation_error", "Invalid 'to' value",
-                         "Provide Unix timestamp for to.");
-      }
-      filter.toDate = ts;
-      hasTo = true;
-    }
-    // Validate that from <= to when both are provided
-    if (hasFrom && hasTo && filter.fromDate > filter.toDate) {
-      return makeError(400, "validation_error", "Invalid date range",
-                       "'from' date must be less than or equal to 'to' date.");
-    }
-
-    auto samples = database_->getSamplesByFilter(filter);
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-
-    int total = database_->getSamplesCount(filter);
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-    if (total < 0) {
-      total = static_cast<int>(samples.size());
-    }
-
-    json samplesArr = json::array();
-    for (const auto &s : samples) {
-      samplesArr.push_back(json::parse(sampleToJson(*s)));
-    }
-    const std::string out = json{{"data", samplesArr}, {"total", total}}.dump();
-
-    std::ostringstream details;
-    details
-        << "API READ /samples"
-        << "; count=" << samples.size()
-        << "; q=" << (filter.query.empty() ? "any" : filter.query)
-        << "; status=" << (filter.status.empty() ? "any" : filter.status)
-        << "; from="
-        << (filter.fromDate.has_value() ? std::to_string(*filter.fromDate)
-                                        : "any")
-        << "; to="
-        << (filter.toDate.has_value() ? std::to_string(*filter.toDate) : "any")
-        << "; limit="
-        << (filter.limit.has_value() ? std::to_string(*filter.limit) : "any")
-        << "; offset="
-        << (filter.offset.has_value() ? std::to_string(*filter.offset) : "any");
-    core::AuditEntry entry(core::AuditEntry::ActionType::ACCESS,
-                           core::AuditEntry::EntityType::SAMPLE, "*", actor,
-                           details.str());
-    if (!database_->logAudit(entry)) {
-      LOG_ERROR("[Audit] logAudit failed: {}", database_->getLastError());
-      return makeError(500, "internal_error", "Audit log failed",
-                       "Please contact the system administrator.");
-    }
-
-    return ApiResponse{200, out, "application/json"};
+    return handleListSamples(ctx);
   }
 
   if (path.rfind("/api/v1/samples/", 0) == 0) {
-    const std::string sampleId =
-        path.substr(std::string("/api/v1/samples/").size());
-    if (sampleId.empty()) {
-      return makeError(400, "validation_error", "Missing sample_id",
-                       "Provide sample_id in URL path.");
-    }
-    auto sample = database_->getSampleByBarcode(sampleId);
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-    if (!sample) {
-      return makeError(404, "not_found", "Sample not found",
-                       "Verify the sample_id.");
-    }
-
-    core::AuditEntry entry(core::AuditEntry::ActionType::ACCESS,
-                           core::AuditEntry::EntityType::SAMPLE, sampleId,
-                           actor, "API READ /samples/" + sampleId);
-    if (!database_->logAudit(entry)) {
-      LOG_ERROR("[Audit] logAudit failed: {}", database_->getLastError());
-      return makeError(500, "internal_error", "Audit log failed",
-                       "Please contact the system administrator.");
-    }
-
-    return ApiResponse{200, "{\"data\":" + sampleToJson(*sample) + "}",
-                       "application/json"};
+    return handleGetSample(ctx);
   }
 
   if (path == "/api/v1/orders") {
-    db::IDatabase::OrderFilter filter;
-    auto statusIt = query.find("status");
-    if (statusIt != query.end()) {
-      if (!core::Order::isValidStatusString(statusIt->second)) {
-        return makeError(
-            400, "validation_error", "Invalid status",
-            "Use REQUESTED, IN_PROGRESS, COMPLETED, VALIDATED, CANCELLED.");
-      }
-      filter.status = core::Order::statusToString(
-          core::Order::stringToStatus(statusIt->second));
-    }
-    auto sampleIt = query.find("sample_id");
-    if (sampleIt != query.end()) {
-      if (sampleIt->second.size() > 64) {
-        return makeError(400, "validation_error", "sample_id too long",
-                         "sample_id filter must not exceed 64 characters.");
-      }
-      filter.sampleId = sampleIt->second;
-    }
-    auto priorityIt = query.find("priority");
-    if (priorityIt != query.end()) {
-      if (!core::Order::isValidPriorityString(priorityIt->second)) {
-        return makeError(400, "validation_error", "Invalid priority",
-                         "Use NORMAL, URGENT, EMERGENCY.");
-      }
-      filter.priority = core::Order::priorityToString(
-          core::Order::stringToPriority(priorityIt->second));
-    }
-    auto limitIt = query.find("limit");
-    if (limitIt != query.end()) {
-      int limitValue = 0;
-      if (!parseIntValue(limitIt->second, limitValue)) {
-        return makeError(400, "validation_error", "Invalid limit",
-                         "Provide integer limit.");
-      }
-      // Validate and cap limit to prevent DoS
-      std::string validationError;
-      if (!validateAndCapLimit(limitValue, validationError)) {
-        return makeError(400, "validation_error", "Invalid limit",
-                         validationError);
-      }
-      filter.limit = limitValue;
-    }
-    auto offsetIt = query.find("offset");
-    if (offsetIt != query.end()) {
-      int offsetValue = 0;
-      if (!parseIntValue(offsetIt->second, offsetValue) || offsetValue < 0) {
-        return makeError(400, "validation_error", "Invalid offset",
-                         "Provide non-negative integer offset.");
-      }
-      if (offsetValue > MAX_PAGINATION_OFFSET) {
-        return makeError(400, "validation_error", "Offset too large",
-                         "offset must not exceed " +
-                             std::to_string(MAX_PAGINATION_OFFSET) + ".");
-      }
-      if (!filter.limit.has_value()) {
-        return makeError(400, "validation_error", "Offset requires limit",
-                         "Provide limit when using offset.");
-      }
-      filter.offset = offsetValue;
-    }
-
-    auto orders = database_->getOrdersByFilter(filter);
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-
-    int ordersTotal = database_->getOrdersCount(filter);
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-    if (ordersTotal < 0)
-      ordersTotal = static_cast<int>(orders.size());
-    json ordersArr = json::array();
-    for (const auto &o : orders) {
-      ordersArr.push_back(json::parse(orderToJson(*o)));
-    }
-    const std::string out =
-        json{{"data", ordersArr}, {"total", ordersTotal}}.dump();
-
-    std::ostringstream details;
-    details
-        << "API READ /orders"
-        << "; count=" << orders.size()
-        << "; status=" << (filter.status.empty() ? "any" : filter.status)
-        << "; sample_id=" << (filter.sampleId.empty() ? "any" : filter.sampleId)
-        << "; priority=" << (filter.priority.empty() ? "any" : filter.priority)
-        << "; limit="
-        << (filter.limit.has_value() ? std::to_string(*filter.limit) : "any")
-        << "; offset="
-        << (filter.offset.has_value() ? std::to_string(*filter.offset) : "any");
-    core::AuditEntry entry(core::AuditEntry::ActionType::ACCESS,
-                           core::AuditEntry::EntityType::ORDER, "*", actor,
-                           details.str());
-    if (!database_->logAudit(entry)) {
-      LOG_ERROR("[Audit] logAudit failed: {}", database_->getLastError());
-      return makeError(500, "internal_error", "Audit log failed",
-                       "Please contact the system administrator.");
-    }
-
-    return ApiResponse{200, out, "application/json"};
+    return handleListOrders(ctx);
   }
 
   if (path.rfind("/api/v1/orders/", 0) == 0) {
-    const std::string orderId =
-        path.substr(std::string("/api/v1/orders/").size());
-    if (orderId.empty()) {
-      return makeError(400, "validation_error", "Missing order_id",
-                       "Provide order_id in URL path.");
-    }
-    auto order = database_->getOrderByOrderId(orderId);
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-    if (!order) {
-      return makeError(404, "not_found", "Order not found",
-                       "Verify the order_id.");
-    }
-
-    core::AuditEntry entry(core::AuditEntry::ActionType::ACCESS,
-                           core::AuditEntry::EntityType::ORDER, orderId, actor,
-                           "API READ /orders/" + orderId);
-    if (!database_->logAudit(entry)) {
-      LOG_ERROR("[Audit] logAudit failed: {}", database_->getLastError());
-      return makeError(500, "internal_error", "Audit log failed",
-                       "Please contact the system administrator.");
-    }
-
-    return ApiResponse{200, "{\"data\":" + orderToJson(*order) + "}",
-                       "application/json"};
+    return handleGetOrder(ctx);
   }
 
   if (path == "/api/v1/results") {
-    std::vector<std::unique_ptr<core::TestResult>> results;
-    std::optional<int> limit;
-    std::optional<int> offset;
-    auto limitIt = query.find("limit");
-    if (limitIt != query.end()) {
-      int limitValue = 0;
-      if (!parseIntValue(limitIt->second, limitValue)) {
-        return makeError(400, "validation_error", "Invalid limit",
-                         "Provide integer limit.");
-      }
-      // Validate and cap limit to prevent DoS
-      std::string validationError;
-      if (!validateAndCapLimit(limitValue, validationError)) {
-        return makeError(400, "validation_error", "Invalid limit",
-                         validationError);
-      }
-      limit = limitValue;
-    }
-    auto offsetIt = query.find("offset");
-    if (offsetIt != query.end()) {
-      int offsetValue = 0;
-      if (!parseIntValue(offsetIt->second, offsetValue) || offsetValue < 0) {
-        return makeError(400, "validation_error", "Invalid offset",
-                         "Provide non-negative integer offset.");
-      }
-      if (offsetValue > MAX_PAGINATION_OFFSET) {
-        return makeError(400, "validation_error", "Offset too large",
-                         "offset must not exceed " +
-                             std::to_string(MAX_PAGINATION_OFFSET) + ".");
-      }
-      if (!limit.has_value()) {
-        return makeError(400, "validation_error", "Offset requires limit",
-                         "Provide limit when using offset.");
-      }
-      offset = offsetValue;
-    }
-    // Parse optional status and flag filters
-    std::string statusFilter;
-    std::string flagFilter;
-    static const std::unordered_set<std::string> kValidResultStatuses{
-        "PENDING", "ENTERED", "VALIDATED", "REJECTED", "REPEATED"};
-    static const std::unordered_set<std::string> kValidResultFlags{
-        "NORMAL", "LOW", "HIGH", "CRITICAL", "UNDEFINED"};
-    auto statusResultIt = query.find("status");
-    if (statusResultIt != query.end() && !statusResultIt->second.empty()) {
-      if (kValidResultStatuses.find(statusResultIt->second) ==
-          kValidResultStatuses.end()) {
-        return makeError(400, "validation_error", "Invalid status",
-                         "status must be one of: PENDING, ENTERED, VALIDATED, "
-                         "REJECTED, REPEATED");
-      }
-      statusFilter = statusResultIt->second;
-    }
-
-    auto flagResultIt = query.find("flag");
-    if (flagResultIt != query.end() && !flagResultIt->second.empty()) {
-      if (kValidResultFlags.find(flagResultIt->second) ==
-          kValidResultFlags.end()) {
-        return makeError(
-            400, "validation_error", "Invalid flag",
-            "flag must be one of: NORMAL, LOW, HIGH, CRITICAL, UNDEFINED");
-      }
-      flagFilter = flagResultIt->second;
-    }
-
-    std::optional<int> resultsOrderIdFilter;
-    auto orderIt = query.find("order_id");
-    // When in-memory filters are active, fetch a capped window then filter.
-    // Cap prevents unbounded table scans into RAM on large result sets.
-    constexpr int kMemFilterFetchCap = 10000;
-    bool hasMemFilter = !statusFilter.empty() || !flagFilter.empty();
-    std::optional<int> dbLimit =
-        hasMemFilter ? std::make_optional(kMemFilterFetchCap) : limit;
-    std::optional<int> dbOffset = hasMemFilter ? std::make_optional(0) : offset;
-    if (orderIt != query.end()) {
-      int orderId = 0;
-      if (!parseIntValue(orderIt->second, orderId) || orderId <= 0) {
-        return makeError(400, "validation_error", "Invalid order_id",
-                         "Provide numeric order_id.");
-      }
-      results = database_->getTestResultsByOrderId(orderId, dbLimit, dbOffset);
-      resultsOrderIdFilter = orderId;
-    } else {
-      results = database_->getAllTestResults(dbLimit, dbOffset);
-    }
-
-    // Apply status filter in-memory if provided
-    if (!statusFilter.empty()) {
-      std::vector<std::unique_ptr<core::TestResult>> filtered;
-      for (auto &r : results) {
-        if (r->getStatusString() == statusFilter) {
-          filtered.push_back(std::move(r));
-        }
-      }
-      results = std::move(filtered);
-    }
-    // Apply flag filter in-memory if provided
-    if (!flagFilter.empty()) {
-      std::vector<std::unique_ptr<core::TestResult>> filtered;
-      for (auto &r : results) {
-        if (r->getFlagString() == flagFilter) {
-          filtered.push_back(std::move(r));
-        }
-      }
-      results = std::move(filtered);
-    }
-
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-
-    // Total is now accurate: either filtered count (hasMem) or DB count (no
-    // filter)
-    int resultsTotal =
-        hasMemFilter ? static_cast<int>(results.size())
-                     : database_->getTestResultsCount(resultsOrderIdFilter);
-    if (!hasMemFilter && database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-    // When in-memory filters ran (no DB limit/offset), apply pagination now
-    if (hasMemFilter && (limit.has_value() || offset.has_value())) {
-      int startIdx = offset.value_or(0);
-      int endIdx =
-          limit.has_value()
-              ? std::min(startIdx + *limit, static_cast<int>(results.size()))
-              : static_cast<int>(results.size());
-      if (startIdx < static_cast<int>(results.size())) {
-        std::vector<std::unique_ptr<core::TestResult>> paged;
-        for (int pi = startIdx; pi < endIdx; ++pi) {
-          paged.push_back(std::move(results[static_cast<size_t>(pi)]));
-        }
-        results = std::move(paged);
-      } else {
-        results.clear();
-      }
-    }
-    std::unordered_map<int, std::string> orderIdCache;
-    for (const auto &r : results) {
-      const int oid = r->getOrderId();
-      if (orderIdCache.find(oid) == orderIdCache.end()) {
-        auto ord = database_->getOrder(oid);
-        if (ord) {
-          orderIdCache[oid] = ord->getOrderId();
-        }
-      }
-    }
-    if (resultsTotal < 0)
-      resultsTotal = static_cast<int>(results.size());
-    json resultsArr = json::array();
-    for (const auto &r : results) {
-      const auto cit = orderIdCache.find(r->getOrderId());
-      const std::string &oidStr =
-          (cit != orderIdCache.end()) ? cit->second : "";
-      resultsArr.push_back(json::parse(resultToJson(*r, oidStr)));
-    }
-    const std::string out =
-        json{{"data", resultsArr}, {"total", resultsTotal}}.dump();
-
-    std::ostringstream details;
-    details << "API READ /results"
-            << "; count=" << results.size() << "; order_id="
-            << (orderIt != query.end() ? orderIt->second : "any") << "; limit="
-            << (limit.has_value() ? std::to_string(*limit) : "any")
-            << "; offset="
-            << (offset.has_value() ? std::to_string(*offset) : "any");
-    core::AuditEntry entry(core::AuditEntry::ActionType::ACCESS,
-                           core::AuditEntry::EntityType::RESULT, "*", actor,
-                           details.str());
-    if (!database_->logAudit(entry)) {
-      LOG_ERROR("[Audit] logAudit failed: {}", database_->getLastError());
-      return makeError(500, "internal_error", "Audit log failed",
-                       "Please contact the system administrator.");
-    }
-
-    return ApiResponse{200, out, "application/json"};
+    return handleListResults(ctx);
   }
 
   if (path.rfind("/api/v1/results/", 0) == 0) {
-    const std::string resultId =
-        path.substr(std::string("/api/v1/results/").size());
-    if (resultId.empty()) {
-      return makeError(400, "validation_error", "Missing result_id",
-                       "Provide result_id in URL path.");
-    }
-    auto result = database_->getTestResultByResultId(resultId);
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-    if (!result) {
-      return makeError(404, "not_found", "Result not found",
-                       "Verify the result_id.");
-    }
-
-    core::AuditEntry entry(core::AuditEntry::ActionType::ACCESS,
-                           core::AuditEntry::EntityType::RESULT, resultId,
-                           actor, "API READ /results/" + resultId);
-    if (!database_->logAudit(entry)) {
-      LOG_ERROR("[Audit] logAudit failed: {}", database_->getLastError());
-      return makeError(500, "internal_error", "Audit log failed",
-                       "Please contact the system administrator.");
-    }
-
-    {
-      std::string oidStr;
-      auto parentOrder = database_->getOrder(result->getOrderId());
-      if (parentOrder) {
-        oidStr = parentOrder->getOrderId();
-      }
-      return ApiResponse{200,
-                         "{\"data\":" + resultToJson(*result, oidStr) + "}",
-                         "application/json"};
-    }
+    return handleGetResult(ctx);
   }
 
   // GET /api/v1/users - List all users (admin only)
