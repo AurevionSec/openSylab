@@ -8,7 +8,7 @@ Modern React TypeScript frontend for the OpenSylab Laboratory Information Manage
 
 ## Tech Stack
 
-- **Framework**: React 18 with TypeScript
+- **Framework**: React 19 with TypeScript
 - **Build Tool**: Vite 5 with Hot Module Replacement
 - **Routing**: React Router v6
 - **HTTP Client**: Axios with JWT interceptors

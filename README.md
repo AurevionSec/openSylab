@@ -154,14 +154,14 @@ OpenSylab is **not** suitable for: high-throughput laboratories with >100 concur
 ### Frontend / UX
 | Feature | Description |
 |---------|-------------|
-| **React 18 + TypeScript strict** | No `any` types in production code, 0 TypeScript errors |
+| **React 19 + TypeScript strict** | No `any` types in production code, 0 TypeScript errors |
 | **RBAC in the UI** | `canWrite` guards on all Create/Edit/Delete buttons; sidebar links role-dependent |
 | **Dark mode** | Terminal-industrial aesthetic via `sudo` key sequence (Easter egg) |
 | **Responsive tables** | Secondary columns hidden on tablet (`md:hidden`) |
 | **useEntityList hook** | Universal paginated list hook with abort mechanism, race-condition-safe |
 | **MFA login flow** | Two-step login: credentials → TOTP code |
 | **Secure logout navigation** | Sidebar logout navigates immediately to `/login` |
-| **Health endpoint** | `GET /api/v1/health` — unauthenticated, returns `{"status":"ok","version":"0.9.0"}` |
+| **Health endpoint** | `GET /api/v1/health` — unauthenticated, returns `{"status":"ok","service":"opensylab-lims"}` |
 | **Version SSOT** | `CMakeLists.txt` → `include/version.h` (C++); `package.json` → `VITE_APP_VERSION` (frontend) |
 | **IDatabase interface** | Abstraction layer for testability; `Database` (SQLite) and `PostgreSQLDatabase` both implement `IDatabase` |
 
@@ -188,7 +188,7 @@ OpenSylab is **not** suitable for: high-throughput laboratories with >100 concur
 - **Build**: CMake 3.15+
 
 ### Frontend
-- **Framework**: React 18 + TypeScript (strict mode)
+- **Framework**: React 19 + TypeScript (strict mode)
 - **Build**: Vite 7
 - **Routing**: React Router v6
 - **HTTP**: Axios with JWT interceptor + token-expiry guard
@@ -270,7 +270,7 @@ OPENSYLAB_CORS_ORIGIN="https://lims.meinlabor.de" \
 
 ```
 ┌─────────────────────────────────────────────────┐
-│  Frontend (React 18 / TypeScript)               │
+│  Frontend (React 19 / TypeScript)               │
 │  http://localhost:5173                          │
 └──────────────────┬──────────────────────────────┘
                    │ HTTPS / JWT
