@@ -2,6 +2,47 @@
 
 All notable changes to this project are documented in this file.
 
+## [Unreleased]
+
+Changes landed on `main` since the v0.9.0 release, tracked toward v1.0.0
+(see `TODO.md` → *v1.0.0 Release Roadmap*).
+
+### Security
+
+- **Resolved all open Dependabot (11) and CodeQL (3) alerts** (#46): `vitest`
+  2.x → 3.2.6 (critical — arbitrary file read/exec via UI server),
+  `vite` → 7.3.5 (high — `server.fs.deny` bypass), `react-router-dom` → 7.15.1
+  (CSRF), plus transitive fixes (`form-data`, `@babel/core`, `esbuild`,
+  `js-yaml`); `npm audit` clean. Least-privilege `permissions: contents: read`
+  added to the CI workflow. Test-data generator (`tools/generate_testdata.py`)
+  now hashes with PBKDF2-HMAC-SHA256 in the backend format instead of plain
+  SHA256.
+
+### Added
+
+- **Project governance** — `SECURITY.md` (private vulnerability reporting),
+  `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1),
+  `.github/ISSUE_TEMPLATE/` and `PULL_REQUEST_TEMPLATE.md`.
+- **`docs/SECRET_ROTATION.md`** — JWT-secret rotation runbook, including the
+  caveat that `OPENSYLAB_AUDIT_HMAC_KEY` must not be rotated on a populated
+  database (breaks the audit hash chain).
+- **`TODO.md`** — v1.0.0 release roadmap.
+
+### CI / tooling
+
+- Bump `actions/checkout` and `actions/setup-node` to v5; Node.js 20 → 22.
+- Set `OPENSYLAB_JWT_SECRET` for the CI test runner; remove unused test imports.
+- Fix `.github/dependabot.yml`: invalid `package-ecosystem: "OpenSylab"` replaced
+  with real `npm` (`/frontend`) and `github-actions` (`/`) ecosystems.
+
+### Fixed (documentation)
+
+- Corrected stale framework version in README docs: React 18 → 19 (matches
+  `frontend/package.json`).
+- Corrected the `/api/v1/health` response example to
+  `{"status":"ok","service":"opensylab-lims"}` (the endpoint returns no
+  `version` field).
+
 ## [0.9.0] - 2026-05-25
 
 ### Architecture
