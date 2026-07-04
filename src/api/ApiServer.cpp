@@ -1049,6 +1049,143 @@ ApiResponse ApiRouter::handleFhirExport(const RouteContext &ctx) const {
   return ApiResponse{200, fhirBody, "application/fhir+json"};
 }
 
+ApiResponse ApiRouter::handleMfaEnroll(const RouteContext &ctx) {
+  if (!ctx.jwtPayload.has_value()) {
+    return makeError(401, "unauthorized", "JWT required",
+                     "Use JWT authentication to enroll MFA.");
+  }
+  const std::string secret = database_->generateMfaSecret();
+  if (secret.empty()) {
+    LOG_ERROR("[MFA] Secret generation failed: {}",
+              database_->getLastError());
+    return makeError(500, "internal_error", "Secret generation failed",
+                     "Please contact the system administrator.");
+  }
+  // Store server-side so verify-enrollment can retrieve it without trusting
+  // the client. Reject a new request if a non-expired session already exists
+  // — avoids confusing the user whose authenticator app was already
+  // configured with the first secret.
+  {
+    std::lock_guard<std::mutex> lock(enrollmentMutex_);
+    const auto now = std::chrono::steady_clock::now();
+    auto existing = pendingEnrollments_.find(ctx.jwtPayload->userId);
+    if (existing != pendingEnrollments_.end() &&
+        existing->second.expiry > now) {
+      return makeError(409, "conflict", "Enrollment already in progress",
+                       "An active enrollment session exists. Complete it or "
+                       "wait for it to expire before starting a new one.");
+    }
+    pendingEnrollments_[ctx.jwtPayload->userId] = {
+        secret, now + std::chrono::minutes(10)};
+  }
+  const std::string uri =
+      database_->getMfaEnrollmentUri(ctx.jwtPayload->username, secret);
+  const json resp = {
+      {"secret_base32", secret},
+      {"otpauth_uri", uri},
+      {"instructions",
+       "Scan this QR code with your authenticator app, "
+       "then confirm by calling POST /api/v1/auth/mfa/verify-enrollment."}};
+  return ApiResponse{200, resp.dump(), "application/json"};
+}
+
+ApiResponse ApiRouter::handleMfaVerifyEnrollment(const RouteContext &ctx) {
+  if (!ctx.jwtPayload.has_value()) {
+    return makeError(401, "unauthorized", "JWT required",
+                     "Use JWT authentication to verify MFA enrollment.");
+  }
+  const std::string enrollBody = trimLeadingNewlines(ctx.request.body);
+  if (enrollBody.empty()) {
+    return makeError(400, "validation_error", "Missing request body",
+                     "Provide JSON with secret_base32 and code.");
+  }
+  json enrollPayload;
+  try {
+    enrollPayload = json::parse(enrollBody);
+  } catch (const json::exception &) {
+    return makeError(400, "validation_error", "Invalid JSON payload",
+                     "Request body is not valid JSON.");
+  }
+  if (!enrollPayload.is_object()) {
+    return makeError(400, "validation_error", "Invalid JSON payload",
+                     "Expected a JSON object.");
+  }
+  const std::string enrollCode = enrollPayload.value("code", std::string{});
+  if (enrollCode.empty()) {
+    return makeError(400, "validation_error", "Missing code",
+                     "Provide the current 6-digit TOTP code.");
+  }
+  // Retrieve secret from server-side map — reject any client-supplied secret
+  std::string enrollSecret;
+  {
+    std::lock_guard<std::mutex> lock(enrollmentMutex_);
+    auto it = pendingEnrollments_.find(ctx.jwtPayload->userId);
+    if (it == pendingEnrollments_.end() ||
+        it->second.expiry <= std::chrono::steady_clock::now()) {
+      pendingEnrollments_.erase(ctx.jwtPayload->userId);
+      return makeError(
+          400, "enrollment_expired", "Enrollment session expired",
+          "Start enrollment again with POST /api/v1/auth/mfa/enroll.");
+    }
+    enrollSecret = it->second.secret;
+    pendingEnrollments_.erase(it);
+  }
+  int64_t enrollStep = -1;
+  if (!database_->verifyMfaCodeForEnrollment(enrollSecret, enrollCode,
+                                             enrollStep)) {
+    return makeError(400, "invalid_code", "Invalid TOTP code",
+                     "The supplied code does not match the secret. "
+                     "Ensure your device clock is correct and retry.");
+  }
+  if (!database_->setUserMfaSecret(ctx.jwtPayload->userId, enrollSecret,
+                                   enrollStep)) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  return ApiResponse{200, R"({"message":"MFA successfully enabled"})",
+                     "application/json"};
+}
+
+ApiResponse ApiRouter::handleMfaDisable(const RouteContext &ctx) const {
+  if (!ctx.jwtPayload.has_value()) {
+    return makeError(401, "unauthorized", "JWT required",
+                     "Use JWT authentication to disable MFA.");
+  }
+  const std::string mfaDisableBody = trimLeadingNewlines(ctx.request.body);
+  if (mfaDisableBody.empty()) {
+    return makeError(
+        400, "validation_error", "Missing request body",
+        "Provide JSON with current_password to confirm MFA disable.");
+  }
+  std::unordered_map<std::string, std::string> mfaDisablePayload;
+  std::string mfaDisableParseErr;
+  if (!parseJsonBodyToMap(mfaDisableBody, mfaDisablePayload,
+                          mfaDisableParseErr)) {
+    return makeError(400, "validation_error", "Invalid JSON payload",
+                     mfaDisableParseErr);
+  }
+  const auto mfaDisablePwdIt = mfaDisablePayload.find("current_password");
+  if (mfaDisablePwdIt == mfaDisablePayload.end() ||
+      mfaDisablePwdIt->second.empty()) {
+    return makeError(400, "validation_error", "Missing current_password",
+                     "Provide current_password to confirm MFA disable.");
+  }
+  auto mfaDisableUser = database_->getUser(ctx.jwtPayload->userId);
+  if (!mfaDisableUser) {
+    return makeError(404, "not_found", "User not found",
+                     "User account not found.");
+  }
+  if (!mfaDisableUser->verifyPassword(mfaDisablePwdIt->second)) {
+    return makeError(401, "unauthorized", "Invalid password",
+                     "Current password is incorrect.");
+  }
+  if (!database_->disableUserMfa(ctx.jwtPayload->userId,
+                                 ctx.jwtPayload->username)) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  return ApiResponse{200, R"({"message":"MFA disabled"})",
+                     "application/json"};
+}
+
 ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
   if (!database_) {
     return makeError(500, "internal_error", "Database unavailable",
@@ -1273,141 +1410,17 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
 
   // POST /api/v1/auth/mfa/enroll — generate and return a fresh TOTP secret
   if (isPost && path == "/api/v1/auth/mfa/enroll") {
-    if (!jwtPayload.has_value()) {
-      return makeError(401, "unauthorized", "JWT required",
-                       "Use JWT authentication to enroll MFA.");
-    }
-    const std::string secret = database_->generateMfaSecret();
-    if (secret.empty()) {
-      LOG_ERROR("[MFA] Secret generation failed: {}",
-                database_->getLastError());
-      return makeError(500, "internal_error", "Secret generation failed",
-                       "Please contact the system administrator.");
-    }
-    // Store server-side so verify-enrollment can retrieve it without trusting
-    // the client. Reject a new request if a non-expired session already exists
-    // — avoids confusing the user whose authenticator app was already
-    // configured with the first secret.
-    {
-      std::lock_guard<std::mutex> lock(enrollmentMutex_);
-      const auto now = std::chrono::steady_clock::now();
-      auto existing = pendingEnrollments_.find(jwtPayload->userId);
-      if (existing != pendingEnrollments_.end() &&
-          existing->second.expiry > now) {
-        return makeError(409, "conflict", "Enrollment already in progress",
-                         "An active enrollment session exists. Complete it or "
-                         "wait for it to expire before starting a new one.");
-      }
-      pendingEnrollments_[jwtPayload->userId] = {
-          secret, now + std::chrono::minutes(10)};
-    }
-    const std::string uri =
-        database_->getMfaEnrollmentUri(jwtPayload->username, secret);
-    const json resp = {
-        {"secret_base32", secret},
-        {"otpauth_uri", uri},
-        {"instructions",
-         "Scan this QR code with your authenticator app, "
-         "then confirm by calling POST /api/v1/auth/mfa/verify-enrollment."}};
-    return ApiResponse{200, resp.dump(), "application/json"};
+    return handleMfaEnroll(ctx);
   }
 
   // POST /api/v1/auth/mfa/verify-enrollment — verify code and persist secret
   if (isPost && path == "/api/v1/auth/mfa/verify-enrollment") {
-    if (!jwtPayload.has_value()) {
-      return makeError(401, "unauthorized", "JWT required",
-                       "Use JWT authentication to verify MFA enrollment.");
-    }
-    const std::string enrollBody = trimLeadingNewlines(request.body);
-    if (enrollBody.empty()) {
-      return makeError(400, "validation_error", "Missing request body",
-                       "Provide JSON with secret_base32 and code.");
-    }
-    json enrollPayload;
-    try {
-      enrollPayload = json::parse(enrollBody);
-    } catch (const json::exception &) {
-      return makeError(400, "validation_error", "Invalid JSON payload",
-                       "Request body is not valid JSON.");
-    }
-    if (!enrollPayload.is_object()) {
-      return makeError(400, "validation_error", "Invalid JSON payload",
-                       "Expected a JSON object.");
-    }
-    const std::string enrollCode = enrollPayload.value("code", std::string{});
-    if (enrollCode.empty()) {
-      return makeError(400, "validation_error", "Missing code",
-                       "Provide the current 6-digit TOTP code.");
-    }
-    // Retrieve secret from server-side map — reject any client-supplied secret
-    std::string enrollSecret;
-    {
-      std::lock_guard<std::mutex> lock(enrollmentMutex_);
-      auto it = pendingEnrollments_.find(jwtPayload->userId);
-      if (it == pendingEnrollments_.end() ||
-          it->second.expiry <= std::chrono::steady_clock::now()) {
-        pendingEnrollments_.erase(jwtPayload->userId);
-        return makeError(
-            400, "enrollment_expired", "Enrollment session expired",
-            "Start enrollment again with POST /api/v1/auth/mfa/enroll.");
-      }
-      enrollSecret = it->second.secret;
-      pendingEnrollments_.erase(it);
-    }
-    int64_t enrollStep = -1;
-    if (!database_->verifyMfaCodeForEnrollment(enrollSecret, enrollCode,
-                                               enrollStep)) {
-      return makeError(400, "invalid_code", "Invalid TOTP code",
-                       "The supplied code does not match the secret. "
-                       "Ensure your device clock is correct and retry.");
-    }
-    if (!database_->setUserMfaSecret(jwtPayload->userId, enrollSecret,
-                                     enrollStep)) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-    return ApiResponse{200, R"({"message":"MFA successfully enabled"})",
-                       "application/json"};
+    return handleMfaVerifyEnrollment(ctx);
   }
 
   // DELETE /api/v1/auth/mfa — disable MFA for the currently authenticated user
   if (isDelete && path == "/api/v1/auth/mfa") {
-    if (!jwtPayload.has_value()) {
-      return makeError(401, "unauthorized", "JWT required",
-                       "Use JWT authentication to disable MFA.");
-    }
-    const std::string mfaDisableBody = trimLeadingNewlines(request.body);
-    if (mfaDisableBody.empty()) {
-      return makeError(
-          400, "validation_error", "Missing request body",
-          "Provide JSON with current_password to confirm MFA disable.");
-    }
-    std::unordered_map<std::string, std::string> mfaDisablePayload;
-    std::string mfaDisableParseErr;
-    if (!parseJsonBodyToMap(mfaDisableBody, mfaDisablePayload,
-                            mfaDisableParseErr)) {
-      return makeError(400, "validation_error", "Invalid JSON payload",
-                       mfaDisableParseErr);
-    }
-    const auto mfaDisablePwdIt = mfaDisablePayload.find("current_password");
-    if (mfaDisablePwdIt == mfaDisablePayload.end() ||
-        mfaDisablePwdIt->second.empty()) {
-      return makeError(400, "validation_error", "Missing current_password",
-                       "Provide current_password to confirm MFA disable.");
-    }
-    auto mfaDisableUser = database_->getUser(jwtPayload->userId);
-    if (!mfaDisableUser) {
-      return makeError(404, "not_found", "User not found",
-                       "User account not found.");
-    }
-    if (!mfaDisableUser->verifyPassword(mfaDisablePwdIt->second)) {
-      return makeError(401, "unauthorized", "Invalid password",
-                       "Current password is incorrect.");
-    }
-    if (!database_->disableUserMfa(jwtPayload->userId, jwtPayload->username)) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-    return ApiResponse{200, R"({"message":"MFA disabled"})",
-                       "application/json"};
+    return handleMfaDisable(ctx);
   }
 
   if ((isPost || isPut) && path.rfind("/api/v1/users", 0) != 0 &&

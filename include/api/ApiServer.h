@@ -83,6 +83,10 @@ private:
   ApiResponse handleHl7Export(const RouteContext &ctx) const;
   ApiResponse handleFhirImport(const RouteContext &ctx) const;
   ApiResponse handleFhirExport(const RouteContext &ctx) const;
+  // MFA enrollment mutates pendingEnrollments_, so these are non-const.
+  ApiResponse handleMfaEnroll(const RouteContext &ctx);
+  ApiResponse handleMfaVerifyEnrollment(const RouteContext &ctx);
+  ApiResponse handleMfaDisable(const RouteContext &ctx) const;
 
   // JWT validation helper
   std::optional<auth::JwtAuth::TokenPayload>
