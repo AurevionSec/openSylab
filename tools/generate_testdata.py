@@ -7,6 +7,8 @@ Generates realistic test data for LIMS demonstration
 import sqlite3
 import random
 import hashlib
+import os
+import base64
 from datetime import datetime, timedelta
 
 # Configuration
@@ -86,8 +88,19 @@ USERNAMES = ["admin", "labor1", "labor2", "labor3", "arzt1", "arzt2", "validieru
 USER_ROLES = ["ADMIN", "TECHNICIAN", "TECHNICIAN", "TECHNICIAN", "DOCTOR", "DOCTOR", "ADMIN", "TECHNICIAN", "TECHNICIAN", "ADMIN"]
 
 def hash_password(password: str) -> str:
-    """Generate password hash using SHA256"""
-    return hashlib.sha256(password.encode()).hexdigest()
+    """Generate a password hash matching the backend format
+    (src/core/User.cpp): pbkdf2_sha256$iterations$saltB64$hashB64.
+
+    Uses PBKDF2-HMAC-SHA256 with the same parameters as the C++ backend so
+    generated test users can authenticate, and to avoid using a fast,
+    non-iterated hash on credentials.
+    """
+    iterations = 210000  # OWASP recommendation for PBKDF2-SHA256 (matches backend)
+    salt = os.urandom(16)  # 128-bit salt
+    derived = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, iterations, dklen=32)
+    salt_b64 = base64.b64encode(salt).decode("ascii")
+    hash_b64 = base64.b64encode(derived).decode("ascii")
+    return f"pbkdf2_sha256${iterations}${salt_b64}${hash_b64}"
 
 def random_date(start_days_ago: int, end_days_ago: int = 0) -> int:
     """Generate random Unix timestamp"""
