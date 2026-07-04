@@ -79,6 +79,10 @@ private:
   ApiResponse handleGetStats(const RouteContext &ctx) const;
   ApiResponse handleAuditVerify(const RouteContext &ctx) const;
   ApiResponse handleAuditExport(const RouteContext &ctx) const;
+  ApiResponse handleHl7Import(const RouteContext &ctx) const;
+  ApiResponse handleHl7Export(const RouteContext &ctx) const;
+  ApiResponse handleFhirImport(const RouteContext &ctx) const;
+  ApiResponse handleFhirExport(const RouteContext &ctx) const;
 
   // JWT validation helper
   std::optional<auth::JwtAuth::TokenPayload>

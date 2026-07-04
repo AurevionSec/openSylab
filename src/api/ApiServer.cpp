@@ -896,6 +896,159 @@ ApiResponse ApiRouter::handleAuditExport(const RouteContext &ctx) const {
   return csvResp;
 }
 
+ApiResponse ApiRouter::handleHl7Import(const RouteContext &ctx) const {
+  if (ctx.effectiveRole == "VIEWER" || ctx.effectiveRole == "CUSTOM") {
+    return makeError(403, "forbidden", "Insufficient permissions",
+                     "OPERATOR or ADMIN role required.");
+  }
+  const std::string hl7Body = trimLeadingNewlines(ctx.request.body);
+  if (hl7Body.empty()) {
+    return makeError(400, "validation_error", "Missing request body",
+                     "Provide HL7 v2.5.1 message in request body.");
+  }
+  utils::Hl7Exchange exchange(database_);
+  utils::Hl7Exchange::ImportSummary summary;
+  if (!exchange.importOruR01Message(hl7Body, ctx.actor, summary)) {
+    LOG_ERROR("[HL7] Import failed: {}", summary.lastError);
+    return makeError(
+        422, "import_error", "HL7 import failed",
+        "Message could not be processed. Check server logs for details.");
+  }
+  return ApiResponse{200,
+                     json{{"imported",
+                           {{"samples", summary.samplesCreated},
+                            {"orders", summary.ordersCreated},
+                            {"results", summary.resultsCreated}}}}
+                         .dump(),
+                     "application/json"};
+}
+
+ApiResponse ApiRouter::handleHl7Export(const RouteContext &ctx) const {
+  if (ctx.effectiveRole == "VIEWER" || ctx.effectiveRole == "CUSTOM") {
+    return makeError(403, "forbidden", "Insufficient permissions",
+                     "OPERATOR or ADMIN role required.");
+  }
+  const std::string pathSegment = ctx.path.substr(ctx.path.rfind('/') + 1);
+  if (pathSegment.empty()) {
+    return makeError(400, "validation_error", "Missing sample id",
+                     "Provide sample id in URL path.");
+  }
+  int sampleId = 0;
+  if (!parseIntValue(pathSegment, sampleId) || sampleId <= 0) {
+    return makeError(400, "validation_error", "Invalid sample id",
+                     "Provide numeric sample id.");
+  }
+  auto sample = database_->getSample(sampleId);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  if (!sample) {
+    return makeError(404, "not_found", "Sample not found",
+                     "Verify the sample id.");
+  }
+  auto orders = database_->getOrdersBySampleId(sample->getSampleId());
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  if (orders.empty()) {
+    return makeError(404, "not_found", "No orders found",
+                     "Sample has no associated orders.");
+  }
+  const core::Order &order = *orders[0];
+  auto resultPtrs = database_->getTestResultsByOrderId(
+      order.getId(), std::nullopt, std::nullopt);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+
+  std::vector<core::TestResult> resultCopies;
+  resultCopies.reserve(resultPtrs.size());
+  for (const auto &r : resultPtrs) {
+    resultCopies.push_back(*r);
+  }
+
+  utils::Hl7Exchange exchange(database_);
+  std::string hl7Body =
+      exchange.exportOruR01Message(*sample, order, resultCopies);
+  return ApiResponse{200, hl7Body, "application/hl7-v2"};
+}
+
+ApiResponse ApiRouter::handleFhirImport(const RouteContext &ctx) const {
+  if (ctx.effectiveRole == "VIEWER" || ctx.effectiveRole == "CUSTOM") {
+    return makeError(403, "forbidden", "Insufficient permissions",
+                     "OPERATOR or ADMIN role required.");
+  }
+  const std::string fhirBody = trimLeadingNewlines(ctx.request.body);
+  if (fhirBody.empty()) {
+    return makeError(400, "validation_error", "Missing request body",
+                     "Provide FHIR R4 Bundle JSON in request body.");
+  }
+  utils::FhirExchange exchange(database_);
+  utils::FhirExchange::ImportSummary summary;
+  if (!exchange.importBundle(fhirBody, ctx.actor, summary)) {
+    LOG_ERROR("[FHIR] Import failed: {}", summary.lastError);
+    return makeError(
+        422, "import_error", "FHIR import failed",
+        "Bundle could not be processed. Check server logs for details.");
+  }
+  return ApiResponse{200,
+                     json{{"imported",
+                           {{"samples", summary.samplesCreated},
+                            {"orders", summary.ordersCreated},
+                            {"results", summary.resultsCreated}}}}
+                         .dump(),
+                     "application/json"};
+}
+
+ApiResponse ApiRouter::handleFhirExport(const RouteContext &ctx) const {
+  if (ctx.effectiveRole == "VIEWER" || ctx.effectiveRole == "CUSTOM") {
+    return makeError(403, "forbidden", "Insufficient permissions",
+                     "OPERATOR or ADMIN role required.");
+  }
+  const std::string pathSegment = ctx.path.substr(ctx.path.rfind('/') + 1);
+  if (pathSegment.empty()) {
+    return makeError(400, "validation_error", "Missing sample id",
+                     "Provide sample id in URL path.");
+  }
+  int sampleId = 0;
+  if (!parseIntValue(pathSegment, sampleId) || sampleId <= 0) {
+    return makeError(400, "validation_error", "Invalid sample id",
+                     "Provide numeric sample id.");
+  }
+  auto sample = database_->getSample(sampleId);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  if (!sample) {
+    return makeError(404, "not_found", "Sample not found",
+                     "Verify the sample id.");
+  }
+  auto orders = database_->getOrdersBySampleId(sample->getSampleId());
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  if (orders.empty()) {
+    return makeError(404, "not_found", "No orders found",
+                     "Sample has no associated orders.");
+  }
+  const core::Order &order = *orders[0];
+  auto resultPtrs = database_->getTestResultsByOrderId(
+      order.getId(), std::nullopt, std::nullopt);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+
+  std::vector<core::TestResult> resultCopies;
+  resultCopies.reserve(resultPtrs.size());
+  for (const auto &r : resultPtrs) {
+    resultCopies.push_back(*r);
+  }
+
+  utils::FhirExchange exchange(database_);
+  std::string fhirBody = exchange.exportBundle(*sample, order, resultCopies);
+  return ApiResponse{200, fhirBody, "application/fhir+json"};
+}
+
 ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
   if (!database_) {
     return makeError(500, "internal_error", "Database unavailable",
@@ -3297,159 +3450,22 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
 
   // POST /api/v1/hl7/import - HL7 v2.5.1 Import
   if (method == "post" && path == "/api/v1/hl7/import") {
-    if (effectiveRole == "VIEWER" || effectiveRole == "CUSTOM") {
-      return makeError(403, "forbidden", "Insufficient permissions",
-                       "OPERATOR or ADMIN role required.");
-    }
-    const std::string hl7Body = trimLeadingNewlines(request.body);
-    if (hl7Body.empty()) {
-      return makeError(400, "validation_error", "Missing request body",
-                       "Provide HL7 v2.5.1 message in request body.");
-    }
-    utils::Hl7Exchange exchange(database_);
-    utils::Hl7Exchange::ImportSummary summary;
-    if (!exchange.importOruR01Message(hl7Body, actor, summary)) {
-      LOG_ERROR("[HL7] Import failed: {}", summary.lastError);
-      return makeError(
-          422, "import_error", "HL7 import failed",
-          "Message could not be processed. Check server logs for details.");
-    }
-    return ApiResponse{200,
-                       json{{"imported",
-                             {{"samples", summary.samplesCreated},
-                              {"orders", summary.ordersCreated},
-                              {"results", summary.resultsCreated}}}}
-                           .dump(),
-                       "application/json"};
+    return handleHl7Import(ctx);
   }
 
   // GET /api/v1/hl7/export/{id} - HL7 v2.5.1 Export
   if (method == "get" && path.rfind("/api/v1/hl7/export/", 0) == 0) {
-    if (effectiveRole == "VIEWER" || effectiveRole == "CUSTOM") {
-      return makeError(403, "forbidden", "Insufficient permissions",
-                       "OPERATOR or ADMIN role required.");
-    }
-    const std::string pathSegment = path.substr(path.rfind('/') + 1);
-    if (pathSegment.empty()) {
-      return makeError(400, "validation_error", "Missing sample id",
-                       "Provide sample id in URL path.");
-    }
-    int sampleId = 0;
-    if (!parseIntValue(pathSegment, sampleId) || sampleId <= 0) {
-      return makeError(400, "validation_error", "Invalid sample id",
-                       "Provide numeric sample id.");
-    }
-    auto sample = database_->getSample(sampleId);
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-    if (!sample) {
-      return makeError(404, "not_found", "Sample not found",
-                       "Verify the sample id.");
-    }
-    auto orders = database_->getOrdersBySampleId(sample->getSampleId());
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-    if (orders.empty()) {
-      return makeError(404, "not_found", "No orders found",
-                       "Sample has no associated orders.");
-    }
-    const core::Order &order = *orders[0];
-    auto resultPtrs = database_->getTestResultsByOrderId(
-        order.getId(), std::nullopt, std::nullopt);
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-
-    std::vector<core::TestResult> resultCopies;
-    resultCopies.reserve(resultPtrs.size());
-    for (const auto &r : resultPtrs) {
-      resultCopies.push_back(*r);
-    }
-
-    utils::Hl7Exchange exchange(database_);
-    std::string hl7Body =
-        exchange.exportOruR01Message(*sample, order, resultCopies);
-    return ApiResponse{200, hl7Body, "application/hl7-v2"};
+    return handleHl7Export(ctx);
   }
 
   // POST /api/v1/fhir/import - FHIR R4 Import
   if (method == "post" && path == "/api/v1/fhir/import") {
-    if (effectiveRole == "VIEWER" || effectiveRole == "CUSTOM") {
-      return makeError(403, "forbidden", "Insufficient permissions",
-                       "OPERATOR or ADMIN role required.");
-    }
-    const std::string fhirBody = trimLeadingNewlines(request.body);
-    if (fhirBody.empty()) {
-      return makeError(400, "validation_error", "Missing request body",
-                       "Provide FHIR R4 Bundle JSON in request body.");
-    }
-    utils::FhirExchange exchange(database_);
-    utils::FhirExchange::ImportSummary summary;
-    if (!exchange.importBundle(fhirBody, actor, summary)) {
-      LOG_ERROR("[FHIR] Import failed: {}", summary.lastError);
-      return makeError(
-          422, "import_error", "FHIR import failed",
-          "Bundle could not be processed. Check server logs for details.");
-    }
-    return ApiResponse{200,
-                       json{{"imported",
-                             {{"samples", summary.samplesCreated},
-                              {"orders", summary.ordersCreated},
-                              {"results", summary.resultsCreated}}}}
-                           .dump(),
-                       "application/json"};
+    return handleFhirImport(ctx);
   }
 
   // GET /api/v1/fhir/export/{id} - FHIR R4 Export
   if (method == "get" && path.rfind("/api/v1/fhir/export/", 0) == 0) {
-    if (effectiveRole == "VIEWER" || effectiveRole == "CUSTOM") {
-      return makeError(403, "forbidden", "Insufficient permissions",
-                       "OPERATOR or ADMIN role required.");
-    }
-    const std::string pathSegment = path.substr(path.rfind('/') + 1);
-    if (pathSegment.empty()) {
-      return makeError(400, "validation_error", "Missing sample id",
-                       "Provide sample id in URL path.");
-    }
-    int sampleId = 0;
-    if (!parseIntValue(pathSegment, sampleId) || sampleId <= 0) {
-      return makeError(400, "validation_error", "Invalid sample id",
-                       "Provide numeric sample id.");
-    }
-    auto sample = database_->getSample(sampleId);
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-    if (!sample) {
-      return makeError(404, "not_found", "Sample not found",
-                       "Verify the sample id.");
-    }
-    auto orders = database_->getOrdersBySampleId(sample->getSampleId());
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-    if (orders.empty()) {
-      return makeError(404, "not_found", "No orders found",
-                       "Sample has no associated orders.");
-    }
-    const core::Order &order = *orders[0];
-    auto resultPtrs = database_->getTestResultsByOrderId(
-        order.getId(), std::nullopt, std::nullopt);
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-
-    std::vector<core::TestResult> resultCopies;
-    resultCopies.reserve(resultPtrs.size());
-    for (const auto &r : resultPtrs) {
-      resultCopies.push_back(*r);
-    }
-
-    utils::FhirExchange exchange(database_);
-    std::string fhirBody = exchange.exportBundle(*sample, order, resultCopies);
-    return ApiResponse{200, fhirBody, "application/fhir+json"};
+    return handleFhirExport(ctx);
   }
 
   return makeError(404, "not_found", "Endpoint not found",
