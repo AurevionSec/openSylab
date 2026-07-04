@@ -1186,6 +1186,383 @@ ApiResponse ApiRouter::handleMfaDisable(const RouteContext &ctx) const {
                      "application/json"};
 }
 
+ApiResponse ApiRouter::handleListUsers(const RouteContext &ctx) const {
+  // Check if user is admin
+  if (ctx.effectiveRole != "ADMIN") {
+    return makeError(403, "forbidden", "Admin access required",
+                     "Only administrators can list users.");
+  }
+
+  auto users = database_->getAllUsers();
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+
+  json usersArr = json::array();
+  for (const auto &u : users) {
+    usersArr.push_back(json::parse(userToJson(*u)));
+  }
+  (void)database_->logAudit(core::AuditEntry(
+      core::AuditEntry::ActionType::ACCESS,
+      core::AuditEntry::EntityType::USER, "all",
+      ctx.jwtPayload.has_value() ? ctx.jwtPayload->username : "unknown",
+      "Admin listed all users"));
+  return ApiResponse{200, json{{"data", usersArr}}.dump(),
+                     "application/json"};
+}
+
+ApiResponse ApiRouter::handleGetOwnProfile(const RouteContext &ctx) const {
+  if (!ctx.jwtPayload.has_value()) {
+    return makeError(401, "unauthorized", "JWT required",
+                     "Use JWT authentication to access profile.");
+  }
+
+  auto user = database_->getUser(ctx.jwtPayload->userId);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  if (!user) {
+    return makeError(404, "not_found", "User not found",
+                     "User profile not found.");
+  }
+
+  (void)database_->logAudit(core::AuditEntry(
+      core::AuditEntry::ActionType::ACCESS, core::AuditEntry::EntityType::USER,
+      std::to_string(ctx.jwtPayload->userId), ctx.jwtPayload->username,
+      "User accessed own profile"));
+  return ApiResponse{200, "{\"data\":" + userToJson(*user) + "}",
+                     "application/json"};
+}
+
+ApiResponse ApiRouter::handleCreateUser(const RouteContext &ctx) const {
+  if (ctx.effectiveRole != "ADMIN") {
+    return makeError(403, "forbidden", "Admin access required",
+                     "Only administrators can create users.");
+  }
+
+  const std::string body = trimLeadingNewlines(ctx.request.body);
+  if (body.empty()) {
+    return makeError(400, "validation_error", "Missing request body",
+                     "Provide JSON payload in request body.");
+  }
+
+  std::unordered_map<std::string, std::string> payload;
+  std::string parseError;
+  if (!parseJsonBodyToMap(body, payload, parseError)) {
+    return makeError(400, "validation_error", "Invalid JSON payload",
+                     parseError);
+  }
+
+  auto usernameIt = payload.find("username");
+  auto passwordIt = payload.find("password");
+  auto roleIt = payload.find("role");
+
+  if (usernameIt == payload.end() || usernameIt->second.empty()) {
+    return makeError(400, "validation_error", "Missing username",
+                     "Provide username in request body.");
+  }
+  if (passwordIt == payload.end() || passwordIt->second.empty()) {
+    return makeError(400, "validation_error", "Missing password",
+                     "Provide password in request body.");
+  }
+
+  // Validate username format
+  std::string validationError;
+  if (!validateUsername(usernameIt->second, validationError)) {
+    return makeError(400, "validation_error", "Invalid username",
+                     validationError);
+  }
+
+  // Validate password strength
+  if (!validatePassword(passwordIt->second, validationError)) {
+    return makeError(400, "validation_error", "Invalid password",
+                     validationError);
+  }
+
+  core::User::Role role = core::User::Role::OPERATOR; // Default
+  if (roleIt != payload.end() && !roleIt->second.empty()) {
+    static const std::unordered_set<std::string> kValidRoles{
+        "ADMIN", "OPERATOR", "VIEWER", "CUSTOM"};
+    if (kValidRoles.find(roleIt->second) == kValidRoles.end()) {
+      return makeError(400, "validation_error", "Invalid role",
+                       "Role must be one of: ADMIN, OPERATOR, VIEWER, CUSTOM");
+    }
+    role = core::User::stringToRole(roleIt->second);
+  }
+
+  core::User newUser(usernameIt->second, "", role);
+  newUser.setPassword(passwordIt->second);
+  newUser.setMustChangePassword(true);
+
+  auto fullNameIt = payload.find("full_name");
+  if (fullNameIt != payload.end()) {
+    if (!fullNameIt->second.empty() &&
+        !validateStringLength(fullNameIt->second, 1, 255, validationError)) {
+      return makeError(400, "validation_error", "Invalid full_name",
+                       validationError);
+    }
+    newUser.setFullName(fullNameIt->second);
+  }
+  auto emailIt = payload.find("email");
+  if (emailIt != payload.end()) {
+    if (!emailIt->second.empty() &&
+        !validateEmail(emailIt->second, validationError)) {
+      return makeError(400, "validation_error", "Invalid email",
+                       validationError);
+    }
+    newUser.setEmail(emailIt->second);
+  }
+  auto activeIt = payload.find("active");
+  if (activeIt != payload.end()) {
+    newUser.setActive(activeIt->second == "true" || activeIt->second == "1");
+  }
+
+  if (!database_->createUser(newUser, ctx.actor)) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+
+  auto created = database_->getUserByUsername(newUser.getUsername());
+  database_->clearError(); // Read-back failure is non-fatal; fall back to
+                           // in-memory object
+  const core::User &responseUser = created ? *created : newUser;
+  return ApiResponse{201, "{\"data\":" + userToJson(responseUser) + "}",
+                     "application/json"};
+}
+
+ApiResponse ApiRouter::handleUpdateUser(const RouteContext &ctx) const {
+  const std::string userIdStr =
+      ctx.path.substr(std::string("/api/v1/users/").size());
+  if (userIdStr.rfind("me/", 0) == 0) {
+    return makeError(404, "not_found", "Unknown endpoint",
+                     "The requested endpoint does not exist.");
+  }
+
+  // RBAC check before ID parsing — non-admins always get 403
+  if (ctx.effectiveRole != "ADMIN") {
+    return makeError(403, "forbidden", "Admin access required",
+                     "Only administrators can update users.");
+  }
+
+  int userId = 0;
+  if (!parseIntValue(userIdStr, userId) || userId <= 0) {
+    return makeError(400, "validation_error", "Invalid user_id",
+                     "Provide numeric user_id.");
+  }
+
+  auto existing = database_->getUser(userId);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  if (!existing) {
+    return makeError(404, "not_found", "User not found",
+                     "Verify the user_id.");
+  }
+
+  const std::string body = trimLeadingNewlines(ctx.request.body);
+  if (body.empty()) {
+    return makeError(400, "validation_error", "Missing request body",
+                     "Provide JSON payload in request body.");
+  }
+
+  std::unordered_map<std::string, std::string> payload;
+  std::string parseError;
+  if (!parseJsonBodyToMap(body, payload, parseError)) {
+    return makeError(400, "validation_error", "Invalid JSON payload",
+                     parseError);
+  }
+
+  core::User updated = *existing;
+
+  auto usernameIt = payload.find("username");
+  if (usernameIt != payload.end()) {
+    // Validate username format
+    std::string validationError;
+    if (!validateUsername(usernameIt->second, validationError)) {
+      return makeError(400, "validation_error", "Invalid username",
+                       validationError);
+    }
+    updated.setUsername(usernameIt->second);
+  }
+  auto roleIt = payload.find("role");
+  if (roleIt != payload.end() && !roleIt->second.empty()) {
+    static const std::unordered_set<std::string> kValidRoles{
+        "ADMIN", "OPERATOR", "VIEWER", "CUSTOM"};
+    if (kValidRoles.find(roleIt->second) == kValidRoles.end()) {
+      return makeError(400, "validation_error", "Invalid role",
+                       "Role must be one of: ADMIN, OPERATOR, VIEWER, CUSTOM");
+    }
+    updated.setRole(core::User::stringToRole(roleIt->second));
+  }
+  auto fullNameIt = payload.find("full_name");
+  if (fullNameIt != payload.end()) {
+    // Validate full_name length if provided and not empty
+    if (!fullNameIt->second.empty()) {
+      std::string validationError;
+      if (!validateStringLength(fullNameIt->second, 1, 255, validationError)) {
+        return makeError(400, "validation_error", "Invalid full_name",
+                         validationError);
+      }
+    }
+    updated.setFullName(fullNameIt->second);
+  }
+  auto emailIt = payload.find("email");
+  if (emailIt != payload.end()) {
+    // Validate email format if provided and not empty
+    if (!emailIt->second.empty()) {
+      std::string validationError;
+      if (!validateEmail(emailIt->second, validationError)) {
+        return makeError(400, "validation_error", "Invalid email",
+                         validationError);
+      }
+    }
+    updated.setEmail(emailIt->second);
+  }
+  auto activeIt = payload.find("active");
+  if (activeIt != payload.end()) {
+    updated.setActive(activeIt->second == "true" || activeIt->second == "1");
+  }
+  auto passwordIt = payload.find("password");
+  const bool passwordChanged =
+      passwordIt != payload.end() && !passwordIt->second.empty();
+  if (passwordChanged) {
+    // Validate password strength
+    std::string validationError;
+    if (!validatePassword(passwordIt->second, validationError)) {
+      return makeError(400, "validation_error", "Invalid password",
+                       validationError);
+    }
+    updated.setPassword(passwordIt->second);
+    updated.setMustChangePassword(false);
+  }
+
+  if (!database_->updateUser(updated, ctx.actor)) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+
+  // Re-fetch from DB so the response reflects the committed state
+  // (e.g. auto-cleared must_change_password) rather than the in-memory
+  // copy.
+  auto refreshed = database_->getUser(updated.getId());
+  const core::User &rspUser = refreshed ? *refreshed : updated;
+  return ApiResponse{200, "{\"data\":" + userToJson(rspUser) + "}",
+                     "application/json"};
+}
+
+ApiResponse ApiRouter::handleChangeOwnPassword(const RouteContext &ctx) const {
+  if (!ctx.jwtPayload.has_value()) {
+    return makeError(401, "unauthorized", "JWT required",
+                     "Use JWT authentication to change password.");
+  }
+
+  const std::string body = trimLeadingNewlines(ctx.request.body);
+  if (body.empty()) {
+    return makeError(400, "validation_error", "Missing request body",
+                     "Provide JSON payload in request body.");
+  }
+
+  std::unordered_map<std::string, std::string> payload;
+  std::string parseError;
+  if (!parseJsonBodyToMap(body, payload, parseError)) {
+    return makeError(400, "validation_error", "Invalid JSON payload",
+                     parseError);
+  }
+
+  auto currentPwdIt = payload.find("current_password");
+  auto newPwdIt = payload.find("new_password");
+
+  if (currentPwdIt == payload.end() || currentPwdIt->second.empty()) {
+    return makeError(400, "validation_error", "Missing current_password",
+                     "Provide current_password in request body.");
+  }
+  if (newPwdIt == payload.end() || newPwdIt->second.empty()) {
+    return makeError(400, "validation_error", "Missing new_password",
+                     "Provide new_password in request body.");
+  }
+
+  if (newPwdIt->second == currentPwdIt->second) {
+    return makeError(400, "validation_error", "Password unchanged",
+                     "New password must differ from the current password.");
+  }
+
+  // Validate new password strength
+  std::string validationError;
+  if (!validatePassword(newPwdIt->second, validationError)) {
+    return makeError(400, "validation_error", "Invalid new_password",
+                     validationError);
+  }
+
+  auto user = database_->getUser(ctx.jwtPayload->userId);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  if (!user) {
+    return makeError(404, "not_found", "User not found",
+                     "User profile not found.");
+  }
+
+  // Verify current password
+  if (!user->verifyPassword(currentPwdIt->second)) {
+    return makeError(401, "unauthorized", "Invalid current password",
+                     "Current password is incorrect.");
+  }
+
+  // Update password and clear forced-change flag
+  user->setPassword(newPwdIt->second);
+  user->setMustChangePassword(false);
+  if (!database_->updateUser(*user, ctx.actor)) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+
+  return ApiResponse{200, "{\"success\":true}", "application/json"};
+}
+
+ApiResponse ApiRouter::handleDeleteUser(const RouteContext &ctx) const {
+  const std::string userIdStr =
+      ctx.path.substr(std::string("/api/v1/users/").size());
+  if (userIdStr.empty()) {
+    return makeError(400, "validation_error", "Missing user_id",
+                     "Provide user_id in URL path.");
+  }
+
+  // RBAC check before ID parsing — non-admins always get 403
+  if (ctx.effectiveRole != "ADMIN") {
+    return makeError(403, "forbidden", "Admin access required",
+                     "Only administrators can delete users.");
+  }
+
+  int userId = 0;
+  if (!parseIntValue(userIdStr, userId) || userId <= 0) {
+    return makeError(400, "validation_error", "Invalid user_id",
+                     "Provide numeric user_id.");
+  }
+
+  // Account deletion must be session-bound (JWT) so the self-delete guard
+  // is always enforceable. API-key auth cannot identify the caller's userId.
+  if (!ctx.jwtPayload.has_value()) {
+    return makeError(401, "unauthorized", "JWT required",
+                     "User deletion requires JWT session authentication.");
+  }
+  if (ctx.jwtPayload->userId == userId) {
+    return makeError(400, "validation_error", "Cannot delete own account",
+                     "Administrators cannot delete their own account.");
+  }
+
+  auto existing = database_->getUser(userId);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  if (!existing) {
+    return makeError(404, "not_found", "User not found",
+                     "Verify the user_id.");
+  }
+
+  if (!database_->deleteUser(userId, ctx.actor)) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+
+  return ApiResponse{204, "", "application/json"};
+}
+
 ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
   if (!database_) {
     return makeError(500, "internal_error", "Database unavailable",
@@ -3054,149 +3431,17 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
 
   // GET /api/v1/users - List all users (admin only)
   if (path == "/api/v1/users" && isGet) {
-    // Check if user is admin
-    if (effectiveRole != "ADMIN") {
-      return makeError(403, "forbidden", "Admin access required",
-                       "Only administrators can list users.");
-    }
-
-    auto users = database_->getAllUsers();
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-
-    json usersArr = json::array();
-    for (const auto &u : users) {
-      usersArr.push_back(json::parse(userToJson(*u)));
-    }
-    (void)database_->logAudit(core::AuditEntry(
-        core::AuditEntry::ActionType::ACCESS,
-        core::AuditEntry::EntityType::USER, "all",
-        jwtPayload.has_value() ? jwtPayload->username : "unknown",
-        "Admin listed all users"));
-    return ApiResponse{200, json{{"data", usersArr}}.dump(),
-                       "application/json"};
+    return handleListUsers(ctx);
   }
 
   // GET /api/v1/users/me - Get current user profile
   if (path == "/api/v1/users/me" && isGet) {
-    if (!jwtPayload.has_value()) {
-      return makeError(401, "unauthorized", "JWT required",
-                       "Use JWT authentication to access profile.");
-    }
-
-    auto user = database_->getUser(jwtPayload->userId);
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-    if (!user) {
-      return makeError(404, "not_found", "User not found",
-                       "User profile not found.");
-    }
-
-    (void)database_->logAudit(core::AuditEntry(
-        core::AuditEntry::ActionType::ACCESS,
-        core::AuditEntry::EntityType::USER, std::to_string(jwtPayload->userId),
-        jwtPayload->username, "User accessed own profile"));
-    return ApiResponse{200, "{\"data\":" + userToJson(*user) + "}",
-                       "application/json"};
+    return handleGetOwnProfile(ctx);
   }
 
   // POST /api/v1/users - Create new user (admin only)
   if (path == "/api/v1/users" && isPost) {
-    if (effectiveRole != "ADMIN") {
-      return makeError(403, "forbidden", "Admin access required",
-                       "Only administrators can create users.");
-    }
-
-    const std::string body = trimLeadingNewlines(request.body);
-    if (body.empty()) {
-      return makeError(400, "validation_error", "Missing request body",
-                       "Provide JSON payload in request body.");
-    }
-
-    std::unordered_map<std::string, std::string> payload;
-    std::string parseError;
-    if (!parseJsonBodyToMap(body, payload, parseError)) {
-      return makeError(400, "validation_error", "Invalid JSON payload",
-                       parseError);
-    }
-
-    auto usernameIt = payload.find("username");
-    auto passwordIt = payload.find("password");
-    auto roleIt = payload.find("role");
-
-    if (usernameIt == payload.end() || usernameIt->second.empty()) {
-      return makeError(400, "validation_error", "Missing username",
-                       "Provide username in request body.");
-    }
-    if (passwordIt == payload.end() || passwordIt->second.empty()) {
-      return makeError(400, "validation_error", "Missing password",
-                       "Provide password in request body.");
-    }
-
-    // Validate username format
-    std::string validationError;
-    if (!validateUsername(usernameIt->second, validationError)) {
-      return makeError(400, "validation_error", "Invalid username",
-                       validationError);
-    }
-
-    // Validate password strength
-    if (!validatePassword(passwordIt->second, validationError)) {
-      return makeError(400, "validation_error", "Invalid password",
-                       validationError);
-    }
-
-    core::User::Role role = core::User::Role::OPERATOR; // Default
-    if (roleIt != payload.end() && !roleIt->second.empty()) {
-      static const std::unordered_set<std::string> kValidRoles{
-          "ADMIN", "OPERATOR", "VIEWER", "CUSTOM"};
-      if (kValidRoles.find(roleIt->second) == kValidRoles.end()) {
-        return makeError(
-            400, "validation_error", "Invalid role",
-            "Role must be one of: ADMIN, OPERATOR, VIEWER, CUSTOM");
-      }
-      role = core::User::stringToRole(roleIt->second);
-    }
-
-    core::User newUser(usernameIt->second, "", role);
-    newUser.setPassword(passwordIt->second);
-    newUser.setMustChangePassword(true);
-
-    auto fullNameIt = payload.find("full_name");
-    if (fullNameIt != payload.end()) {
-      if (!fullNameIt->second.empty() &&
-          !validateStringLength(fullNameIt->second, 1, 255, validationError)) {
-        return makeError(400, "validation_error", "Invalid full_name",
-                         validationError);
-      }
-      newUser.setFullName(fullNameIt->second);
-    }
-    auto emailIt = payload.find("email");
-    if (emailIt != payload.end()) {
-      if (!emailIt->second.empty() &&
-          !validateEmail(emailIt->second, validationError)) {
-        return makeError(400, "validation_error", "Invalid email",
-                         validationError);
-      }
-      newUser.setEmail(emailIt->second);
-    }
-    auto activeIt = payload.find("active");
-    if (activeIt != payload.end()) {
-      newUser.setActive(activeIt->second == "true" || activeIt->second == "1");
-    }
-
-    if (!database_->createUser(newUser, actor)) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-
-    auto created = database_->getUserByUsername(newUser.getUsername());
-    database_->clearError(); // Read-back failure is non-fatal; fall back to
-                             // in-memory object
-    const core::User &responseUser = created ? *created : newUser;
-    return ApiResponse{201, "{\"data\":" + userToJson(responseUser) + "}",
-                       "application/json"};
+    return handleCreateUser(ctx);
   }
 
   // PUT /api/v1/users/:id - Update user (admin only)
@@ -3204,241 +3449,18 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
     const std::string userIdStr =
         path.substr(std::string("/api/v1/users/").size());
     if (!userIdStr.empty() && userIdStr != "me" && userIdStr != "me/password") {
-      if (userIdStr.rfind("me/", 0) == 0) {
-        return makeError(404, "not_found", "Unknown endpoint",
-                         "The requested endpoint does not exist.");
-      }
-
-      // RBAC check before ID parsing — non-admins always get 403
-      if (effectiveRole != "ADMIN") {
-        return makeError(403, "forbidden", "Admin access required",
-                         "Only administrators can update users.");
-      }
-
-      int userId = 0;
-      if (!parseIntValue(userIdStr, userId) || userId <= 0) {
-        return makeError(400, "validation_error", "Invalid user_id",
-                         "Provide numeric user_id.");
-      }
-
-      auto existing = database_->getUser(userId);
-      if (database_->hasError()) {
-        return makeDbErrorResponse(database_->getLastError());
-      }
-      if (!existing) {
-        return makeError(404, "not_found", "User not found",
-                         "Verify the user_id.");
-      }
-
-      const std::string body = trimLeadingNewlines(request.body);
-      if (body.empty()) {
-        return makeError(400, "validation_error", "Missing request body",
-                         "Provide JSON payload in request body.");
-      }
-
-      std::unordered_map<std::string, std::string> payload;
-      std::string parseError;
-      if (!parseJsonBodyToMap(body, payload, parseError)) {
-        return makeError(400, "validation_error", "Invalid JSON payload",
-                         parseError);
-      }
-
-      core::User updated = *existing;
-
-      auto usernameIt = payload.find("username");
-      if (usernameIt != payload.end()) {
-        // Validate username format
-        std::string validationError;
-        if (!validateUsername(usernameIt->second, validationError)) {
-          return makeError(400, "validation_error", "Invalid username",
-                           validationError);
-        }
-        updated.setUsername(usernameIt->second);
-      }
-      auto roleIt = payload.find("role");
-      if (roleIt != payload.end() && !roleIt->second.empty()) {
-        static const std::unordered_set<std::string> kValidRoles{
-            "ADMIN", "OPERATOR", "VIEWER", "CUSTOM"};
-        if (kValidRoles.find(roleIt->second) == kValidRoles.end()) {
-          return makeError(
-              400, "validation_error", "Invalid role",
-              "Role must be one of: ADMIN, OPERATOR, VIEWER, CUSTOM");
-        }
-        updated.setRole(core::User::stringToRole(roleIt->second));
-      }
-      auto fullNameIt = payload.find("full_name");
-      if (fullNameIt != payload.end()) {
-        // Validate full_name length if provided and not empty
-        if (!fullNameIt->second.empty()) {
-          std::string validationError;
-          if (!validateStringLength(fullNameIt->second, 1, 255,
-                                    validationError)) {
-            return makeError(400, "validation_error", "Invalid full_name",
-                             validationError);
-          }
-        }
-        updated.setFullName(fullNameIt->second);
-      }
-      auto emailIt = payload.find("email");
-      if (emailIt != payload.end()) {
-        // Validate email format if provided and not empty
-        if (!emailIt->second.empty()) {
-          std::string validationError;
-          if (!validateEmail(emailIt->second, validationError)) {
-            return makeError(400, "validation_error", "Invalid email",
-                             validationError);
-          }
-        }
-        updated.setEmail(emailIt->second);
-      }
-      auto activeIt = payload.find("active");
-      if (activeIt != payload.end()) {
-        updated.setActive(activeIt->second == "true" ||
-                          activeIt->second == "1");
-      }
-      auto passwordIt = payload.find("password");
-      const bool passwordChanged =
-          passwordIt != payload.end() && !passwordIt->second.empty();
-      if (passwordChanged) {
-        // Validate password strength
-        std::string validationError;
-        if (!validatePassword(passwordIt->second, validationError)) {
-          return makeError(400, "validation_error", "Invalid password",
-                           validationError);
-        }
-        updated.setPassword(passwordIt->second);
-        updated.setMustChangePassword(false);
-      }
-
-      if (!database_->updateUser(updated, actor)) {
-        return makeDbErrorResponse(database_->getLastError());
-      }
-
-      // Re-fetch from DB so the response reflects the committed state
-      // (e.g. auto-cleared must_change_password) rather than the in-memory
-      // copy.
-      auto refreshed = database_->getUser(updated.getId());
-      const core::User &rspUser = refreshed ? *refreshed : updated;
-      return ApiResponse{200, "{\"data\":" + userToJson(rspUser) + "}",
-                         "application/json"};
+      return handleUpdateUser(ctx);
     }
   }
 
   // PUT /api/v1/users/me/password - Change own password
   if (path == "/api/v1/users/me/password" && isPut) {
-    if (!jwtPayload.has_value()) {
-      return makeError(401, "unauthorized", "JWT required",
-                       "Use JWT authentication to change password.");
-    }
-
-    const std::string body = trimLeadingNewlines(request.body);
-    if (body.empty()) {
-      return makeError(400, "validation_error", "Missing request body",
-                       "Provide JSON payload in request body.");
-    }
-
-    std::unordered_map<std::string, std::string> payload;
-    std::string parseError;
-    if (!parseJsonBodyToMap(body, payload, parseError)) {
-      return makeError(400, "validation_error", "Invalid JSON payload",
-                       parseError);
-    }
-
-    auto currentPwdIt = payload.find("current_password");
-    auto newPwdIt = payload.find("new_password");
-
-    if (currentPwdIt == payload.end() || currentPwdIt->second.empty()) {
-      return makeError(400, "validation_error", "Missing current_password",
-                       "Provide current_password in request body.");
-    }
-    if (newPwdIt == payload.end() || newPwdIt->second.empty()) {
-      return makeError(400, "validation_error", "Missing new_password",
-                       "Provide new_password in request body.");
-    }
-
-    if (newPwdIt->second == currentPwdIt->second) {
-      return makeError(400, "validation_error", "Password unchanged",
-                       "New password must differ from the current password.");
-    }
-
-    // Validate new password strength
-    std::string validationError;
-    if (!validatePassword(newPwdIt->second, validationError)) {
-      return makeError(400, "validation_error", "Invalid new_password",
-                       validationError);
-    }
-
-    auto user = database_->getUser(jwtPayload->userId);
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-    if (!user) {
-      return makeError(404, "not_found", "User not found",
-                       "User profile not found.");
-    }
-
-    // Verify current password
-    if (!user->verifyPassword(currentPwdIt->second)) {
-      return makeError(401, "unauthorized", "Invalid current password",
-                       "Current password is incorrect.");
-    }
-
-    // Update password and clear forced-change flag
-    user->setPassword(newPwdIt->second);
-    user->setMustChangePassword(false);
-    if (!database_->updateUser(*user, actor)) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-
-    return ApiResponse{200, "{\"success\":true}", "application/json"};
+    return handleChangeOwnPassword(ctx);
   }
 
   // DELETE /api/v1/users/:id - Delete user (admin only)
   if (isDelete && path.rfind("/api/v1/users/", 0) == 0) {
-    const std::string userIdStr =
-        path.substr(std::string("/api/v1/users/").size());
-    if (userIdStr.empty()) {
-      return makeError(400, "validation_error", "Missing user_id",
-                       "Provide user_id in URL path.");
-    }
-
-    // RBAC check before ID parsing — non-admins always get 403
-    if (effectiveRole != "ADMIN") {
-      return makeError(403, "forbidden", "Admin access required",
-                       "Only administrators can delete users.");
-    }
-
-    int userId = 0;
-    if (!parseIntValue(userIdStr, userId) || userId <= 0) {
-      return makeError(400, "validation_error", "Invalid user_id",
-                       "Provide numeric user_id.");
-    }
-
-    // Account deletion must be session-bound (JWT) so the self-delete guard
-    // is always enforceable. API-key auth cannot identify the caller's userId.
-    if (!jwtPayload.has_value()) {
-      return makeError(401, "unauthorized", "JWT required",
-                       "User deletion requires JWT session authentication.");
-    }
-    if (jwtPayload->userId == userId) {
-      return makeError(400, "validation_error", "Cannot delete own account",
-                       "Administrators cannot delete their own account.");
-    }
-
-    auto existing = database_->getUser(userId);
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-    if (!existing) {
-      return makeError(404, "not_found", "User not found",
-                       "Verify the user_id.");
-    }
-
-    if (!database_->deleteUser(userId, actor)) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-
-    return ApiResponse{204, "", "application/json"};
+    return handleDeleteUser(ctx);
   }
 
   // GET /api/v1/audit - Get audit log (admin only)

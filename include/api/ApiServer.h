@@ -87,6 +87,14 @@ private:
   ApiResponse handleMfaEnroll(const RouteContext &ctx);
   ApiResponse handleMfaVerifyEnrollment(const RouteContext &ctx);
   ApiResponse handleMfaDisable(const RouteContext &ctx) const;
+  ApiResponse handleListUsers(const RouteContext &ctx) const;
+  ApiResponse handleGetOwnProfile(const RouteContext &ctx) const;
+  ApiResponse handleCreateUser(const RouteContext &ctx) const;
+  // handleUpdateUser is only dispatched for a concrete numeric/{me/...} id; the
+  // "me"/"me/password"/empty fall-through stays in handleRequest's guard.
+  ApiResponse handleUpdateUser(const RouteContext &ctx) const;
+  ApiResponse handleChangeOwnPassword(const RouteContext &ctx) const;
+  ApiResponse handleDeleteUser(const RouteContext &ctx) const;
 
   // JWT validation helper
   std::optional<auth::JwtAuth::TokenPayload>
