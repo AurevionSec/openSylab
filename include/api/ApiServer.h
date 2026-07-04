@@ -57,6 +57,29 @@ private:
   ApiResponse handleHealth() const;
   ApiResponse handleOpenApiSpec() const;
 
+  // Shared per-request context threaded to authenticated route handlers.
+  // Holds references to locals computed once in handleRequest (auth, role,
+  // parsed query, audit actor) plus the resolved HTTP method flags. Instances
+  // live only for the duration of a single handleRequest() call.
+  struct RouteContext {
+    const ApiRequest &request;
+    const std::string &method;
+    const std::string &path;
+    const std::unordered_map<std::string, std::string> &query;
+    const std::optional<auth::JwtAuth::TokenPayload> &jwtPayload;
+    const std::string &effectiveRole;
+    const std::string &actor;
+    bool isGet;
+    bool isPost;
+    bool isPut;
+    bool isDelete;
+  };
+
+  ApiResponse handleGetAudit(const RouteContext &ctx) const;
+  ApiResponse handleGetStats(const RouteContext &ctx) const;
+  ApiResponse handleAuditVerify(const RouteContext &ctx) const;
+  ApiResponse handleAuditExport(const RouteContext &ctx) const;
+
   // JWT validation helper
   std::optional<auth::JwtAuth::TokenPayload>
   extractAndValidateJwt(const std::unordered_map<std::string, std::string> &headers);

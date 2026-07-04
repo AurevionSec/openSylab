@@ -668,6 +668,234 @@ ApiResponse ApiRouter::handleOpenApiSpec() const {
                      "application/json"};
 }
 
+ApiResponse ApiRouter::handleGetAudit(const RouteContext &ctx) const {
+  if (ctx.effectiveRole != "ADMIN") {
+    return makeError(403, "forbidden", "Admin access required",
+                     "Only administrators can view audit logs.");
+  }
+
+  db::IDatabase::AuditLogFilter filter;
+
+  auto limitIt = ctx.query.find("limit");
+  if (limitIt != ctx.query.end()) {
+    int limitValue = 0;
+    if (!parseIntValue(limitIt->second, limitValue) || limitValue <= 0) {
+      return makeError(400, "validation_error", "Invalid limit",
+                       "Provide a positive integer for limit.");
+    }
+    std::string validationError;
+    if (!validateAndCapLimit(limitValue, validationError)) {
+      return makeError(400, "validation_error", "Invalid limit",
+                       validationError);
+    }
+    filter.limit = limitValue;
+  } else {
+    filter.limit = MAX_PAGINATION_LIMIT;
+  }
+
+  auto userFilterIt = ctx.query.find("user");
+  if (userFilterIt != ctx.query.end() && !userFilterIt->second.empty()) {
+    if (userFilterIt->second.size() > 255) {
+      return makeError(400, "validation_error", "user filter too long",
+                       "user filter must not exceed 255 characters.");
+    }
+    filter.user = userFilterIt->second;
+  }
+
+  auto actionIt = ctx.query.find("action");
+  if (actionIt != ctx.query.end() && !actionIt->second.empty()) {
+    try {
+      filter.action = core::AuditEntry::stringToAction(actionIt->second);
+    } catch (...) {
+      // Ignore invalid action
+    }
+  }
+
+  auto entityIt = ctx.query.find("entity");
+  if (entityIt != ctx.query.end() && !entityIt->second.empty()) {
+    try {
+      filter.entity = core::AuditEntry::stringToEntity(entityIt->second);
+    } catch (...) {
+      // Ignore invalid entity
+    }
+  }
+
+  auto fromIt = ctx.query.find("from");
+  if (fromIt != ctx.query.end()) {
+    std::time_t ts{};
+    if (parseTimeValue(fromIt->second, ts)) {
+      filter.fromTime = ts;
+    }
+  }
+
+  auto toIt = ctx.query.find("to");
+  if (toIt != ctx.query.end()) {
+    std::time_t ts{};
+    if (parseTimeValue(toIt->second, ts)) {
+      filter.toTime = ts;
+    }
+  }
+
+  auto entries = database_->getAuditLogFiltered(filter);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+
+  json auditArr = json::array();
+  for (const auto &e : entries) {
+    auditArr.push_back(json::parse(auditEntryToJson(*e)));
+  }
+  return ApiResponse{200, json{{"data", auditArr}}.dump(),
+                     "application/json"};
+}
+
+ApiResponse ApiRouter::handleGetStats(const RouteContext &ctx) const {
+  if (ctx.effectiveRole == "CUSTOM") {
+    return makeError(403, "forbidden", "Insufficient permissions",
+                     "CUSTOM role cannot access aggregate statistics.");
+  }
+  db::IDatabase::StatsFilter filter;
+
+  auto fromIt = ctx.query.find("from");
+  if (fromIt != ctx.query.end()) {
+    std::time_t ts{};
+    if (parseTimeValue(fromIt->second, ts)) {
+      filter.fromDate = ts;
+    }
+  }
+
+  auto toIt = ctx.query.find("to");
+  if (toIt != ctx.query.end()) {
+    std::time_t ts{};
+    if (parseTimeValue(toIt->second, ts)) {
+      filter.toDate = ts;
+    }
+  }
+
+  auto sampleStats = database_->getSampleStats(filter);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  auto orderStats = database_->getOrderStats(filter);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  auto resultStats = database_->getResultStats(filter);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+
+  auto orderPriorityStats = database_->getOrderPriorityStats();
+  const int criticalCount = database_->getCriticalResultCount();
+
+  json orderPriorityArr = json::array();
+  for (const auto &p : orderPriorityStats) {
+    orderPriorityArr.push_back({{"status", p.status}, {"count", p.count}});
+  }
+  const json statsOut = {
+      {"samples", json::parse(statsToJson(sampleStats, "samples"))},
+      {"orders", json::parse(statsToJson(orderStats, "orders"))},
+      {"results", json::parse(statsToJson(resultStats, "results"))},
+      {"order_priority", orderPriorityArr},
+      {"critical_count", criticalCount}};
+
+  return ApiResponse{200, statsOut.dump(), "application/json"};
+}
+
+ApiResponse ApiRouter::handleAuditVerify(const RouteContext &ctx) const {
+  if (ctx.effectiveRole != "ADMIN") {
+    return makeError(403, "forbidden", "Admin access required",
+                     "Only administrators can verify the audit chain.");
+  }
+  std::string brokenAt;
+  const bool valid = database_->verifyAuditChain(brokenAt);
+  if (valid) {
+    return ApiResponse{
+        200,
+        json{{"valid", true}, {"message", "Audit chain integrity verified"}}
+            .dump(),
+        "application/json"};
+  }
+  return ApiResponse{200,
+                     json{{"valid", false},
+                          {"broken_at", brokenAt},
+                          {"message", "Chain integrity violation"}}
+                         .dump(),
+                     "application/json"};
+}
+
+ApiResponse ApiRouter::handleAuditExport(const RouteContext &ctx) const {
+  if (ctx.effectiveRole != "ADMIN") {
+    return makeError(403, "forbidden", "Admin access required",
+                     "Only administrators can export the audit log.");
+  }
+
+  db::IDatabase::AuditLogFilter filter;
+  auto fromIt = ctx.query.find("from");
+  if (fromIt != ctx.query.end()) {
+    std::time_t ts{};
+    if (parseTimeValue(fromIt->second, ts))
+      filter.fromTime = ts;
+  }
+  auto toIt = ctx.query.find("to");
+  if (toIt != ctx.query.end()) {
+    std::time_t ts{};
+    if (parseTimeValue(toIt->second, ts))
+      filter.toTime = ts;
+  }
+  auto limitIt = ctx.query.find("limit");
+  if (limitIt != ctx.query.end()) {
+    int lim = 0;
+    if (!parseIntValue(limitIt->second, lim) || lim <= 0) {
+      return makeError(400, "validation_error", "Invalid limit",
+                       "Provide a positive integer limit.");
+    }
+    std::string capError;
+    if (!validateAndCapLimit(lim, capError)) {
+      return makeError(400, "validation_error", "Invalid limit", capError);
+    }
+    filter.limit = lim;
+  } else {
+    filter.limit = MAX_PAGINATION_LIMIT;
+  }
+
+  // Use mkstemp for unpredictable name — prevents TOCTOU/symlink attacks.
+  // The file is created with 0600 permissions by mkstemp itself.
+  char tmpTemplate[] = "/tmp/opensylab_audit_XXXXXX";
+  const int tmpFd = ::mkstemp(tmpTemplate);
+  if (tmpFd == -1) {
+    return makeError(500, "internal_error", "Export failed",
+                     "Could not create temporary file.");
+  }
+  ::close(tmpFd);
+  const std::string tmpPath = tmpTemplate;
+
+  // RAII guard: always delete the temp file when this scope exits.
+  struct TmpGuard {
+    const std::string &path;
+    ~TmpGuard() { std::remove(path.c_str()); }
+  } guard{tmpPath};
+
+  int exportedCount = 0;
+  if (!database_->exportAuditLogToCsv(tmpPath, filter, ctx.actor,
+                                      exportedCount)) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+
+  std::ifstream f(tmpPath, std::ios::binary);
+  if (!f.is_open()) {
+    return makeError(500, "internal_error", "Export failed",
+                     "Could not read export file.");
+  }
+  std::ostringstream buf;
+  buf << f.rdbuf();
+
+  ApiResponse csvResp{200, buf.str(), "text/csv; charset=utf-8"};
+  csvResp.extraHeaders["Content-Disposition"] =
+      "attachment; filename=\"audit_export.csv\"";
+  return csvResp;
+}
+
 ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
   if (!database_) {
     return makeError(500, "internal_error", "Database unavailable",
@@ -853,6 +1081,11 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
 
   const std::unordered_map<std::string, std::string> query =
       parseQuery(queryString);
+
+  // Shared context threaded to extracted route handlers (Phase A decomposition).
+  const RouteContext ctx{request,       method,  path,   query,
+                         jwtPayload,     effectiveRole,   actor,
+                         isGet,          isPost,  isPut,  isDelete};
 
   // RBAC: VIEWER role cannot write lab data (applies to POST, PUT, DELETE)
   // Exceptions: own password change, MFA enrollment, MFA disable
@@ -3044,234 +3277,22 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
 
   // GET /api/v1/audit - Get audit log (admin only)
   if (path == "/api/v1/audit" && isGet) {
-    if (effectiveRole != "ADMIN") {
-      return makeError(403, "forbidden", "Admin access required",
-                       "Only administrators can view audit logs.");
-    }
-
-    db::IDatabase::AuditLogFilter filter;
-
-    auto limitIt = query.find("limit");
-    if (limitIt != query.end()) {
-      int limitValue = 0;
-      if (!parseIntValue(limitIt->second, limitValue) || limitValue <= 0) {
-        return makeError(400, "validation_error", "Invalid limit",
-                         "Provide a positive integer for limit.");
-      }
-      std::string validationError;
-      if (!validateAndCapLimit(limitValue, validationError)) {
-        return makeError(400, "validation_error", "Invalid limit",
-                         validationError);
-      }
-      filter.limit = limitValue;
-    } else {
-      filter.limit = MAX_PAGINATION_LIMIT;
-    }
-
-    auto userFilterIt = query.find("user");
-    if (userFilterIt != query.end() && !userFilterIt->second.empty()) {
-      if (userFilterIt->second.size() > 255) {
-        return makeError(400, "validation_error", "user filter too long",
-                         "user filter must not exceed 255 characters.");
-      }
-      filter.user = userFilterIt->second;
-    }
-
-    auto actionIt = query.find("action");
-    if (actionIt != query.end() && !actionIt->second.empty()) {
-      try {
-        filter.action = core::AuditEntry::stringToAction(actionIt->second);
-      } catch (...) {
-        // Ignore invalid action
-      }
-    }
-
-    auto entityIt = query.find("entity");
-    if (entityIt != query.end() && !entityIt->second.empty()) {
-      try {
-        filter.entity = core::AuditEntry::stringToEntity(entityIt->second);
-      } catch (...) {
-        // Ignore invalid entity
-      }
-    }
-
-    auto fromIt = query.find("from");
-    if (fromIt != query.end()) {
-      std::time_t ts{};
-      if (parseTimeValue(fromIt->second, ts)) {
-        filter.fromTime = ts;
-      }
-    }
-
-    auto toIt = query.find("to");
-    if (toIt != query.end()) {
-      std::time_t ts{};
-      if (parseTimeValue(toIt->second, ts)) {
-        filter.toTime = ts;
-      }
-    }
-
-    auto entries = database_->getAuditLogFiltered(filter);
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-
-    json auditArr = json::array();
-    for (const auto &e : entries) {
-      auditArr.push_back(json::parse(auditEntryToJson(*e)));
-    }
-    return ApiResponse{200, json{{"data", auditArr}}.dump(),
-                       "application/json"};
+    return handleGetAudit(ctx);
   }
 
   // GET /api/v1/stats - Get dashboard statistics
   if (path == "/api/v1/stats" && isGet) {
-    if (effectiveRole == "CUSTOM") {
-      return makeError(403, "forbidden", "Insufficient permissions",
-                       "CUSTOM role cannot access aggregate statistics.");
-    }
-    db::IDatabase::StatsFilter filter;
-
-    auto fromIt = query.find("from");
-    if (fromIt != query.end()) {
-      std::time_t ts{};
-      if (parseTimeValue(fromIt->second, ts)) {
-        filter.fromDate = ts;
-      }
-    }
-
-    auto toIt = query.find("to");
-    if (toIt != query.end()) {
-      std::time_t ts{};
-      if (parseTimeValue(toIt->second, ts)) {
-        filter.toDate = ts;
-      }
-    }
-
-    auto sampleStats = database_->getSampleStats(filter);
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-    auto orderStats = database_->getOrderStats(filter);
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-    auto resultStats = database_->getResultStats(filter);
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-
-    auto orderPriorityStats = database_->getOrderPriorityStats();
-    const int criticalCount = database_->getCriticalResultCount();
-
-    json orderPriorityArr = json::array();
-    for (const auto &p : orderPriorityStats) {
-      orderPriorityArr.push_back({{"status", p.status}, {"count", p.count}});
-    }
-    const json statsOut = {
-        {"samples", json::parse(statsToJson(sampleStats, "samples"))},
-        {"orders", json::parse(statsToJson(orderStats, "orders"))},
-        {"results", json::parse(statsToJson(resultStats, "results"))},
-        {"order_priority", orderPriorityArr},
-        {"critical_count", criticalCount}};
-
-    return ApiResponse{200, statsOut.dump(), "application/json"};
+    return handleGetStats(ctx);
   }
 
   // GET /api/v1/audit/verify — Verify audit chain integrity (ADMIN only)
   if (isGet && path == "/api/v1/audit/verify") {
-    if (effectiveRole != "ADMIN") {
-      return makeError(403, "forbidden", "Admin access required",
-                       "Only administrators can verify the audit chain.");
-    }
-    std::string brokenAt;
-    const bool valid = database_->verifyAuditChain(brokenAt);
-    if (valid) {
-      return ApiResponse{
-          200,
-          json{{"valid", true}, {"message", "Audit chain integrity verified"}}
-              .dump(),
-          "application/json"};
-    }
-    return ApiResponse{200,
-                       json{{"valid", false},
-                            {"broken_at", brokenAt},
-                            {"message", "Chain integrity violation"}}
-                           .dump(),
-                       "application/json"};
+    return handleAuditVerify(ctx);
   }
 
   // GET /api/v1/audit/export — Audit-Log als CSV herunterladen (ADMIN only)
   if (isGet && path == "/api/v1/audit/export") {
-    if (effectiveRole != "ADMIN") {
-      return makeError(403, "forbidden", "Admin access required",
-                       "Only administrators can export the audit log.");
-    }
-
-    db::IDatabase::AuditLogFilter filter;
-    auto fromIt = query.find("from");
-    if (fromIt != query.end()) {
-      std::time_t ts{};
-      if (parseTimeValue(fromIt->second, ts))
-        filter.fromTime = ts;
-    }
-    auto toIt = query.find("to");
-    if (toIt != query.end()) {
-      std::time_t ts{};
-      if (parseTimeValue(toIt->second, ts))
-        filter.toTime = ts;
-    }
-    auto limitIt = query.find("limit");
-    if (limitIt != query.end()) {
-      int lim = 0;
-      if (!parseIntValue(limitIt->second, lim) || lim <= 0) {
-        return makeError(400, "validation_error", "Invalid limit",
-                         "Provide a positive integer limit.");
-      }
-      std::string capError;
-      if (!validateAndCapLimit(lim, capError)) {
-        return makeError(400, "validation_error", "Invalid limit", capError);
-      }
-      filter.limit = lim;
-    } else {
-      filter.limit = MAX_PAGINATION_LIMIT;
-    }
-
-    // Use mkstemp for unpredictable name — prevents TOCTOU/symlink attacks.
-    // The file is created with 0600 permissions by mkstemp itself.
-    char tmpTemplate[] = "/tmp/opensylab_audit_XXXXXX";
-    const int tmpFd = ::mkstemp(tmpTemplate);
-    if (tmpFd == -1) {
-      return makeError(500, "internal_error", "Export failed",
-                       "Could not create temporary file.");
-    }
-    ::close(tmpFd);
-    const std::string tmpPath = tmpTemplate;
-
-    // RAII guard: always delete the temp file when this scope exits.
-    struct TmpGuard {
-      const std::string &path;
-      ~TmpGuard() { std::remove(path.c_str()); }
-    } guard{tmpPath};
-
-    int exportedCount = 0;
-    if (!database_->exportAuditLogToCsv(tmpPath, filter, actor,
-                                        exportedCount)) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-
-    std::ifstream f(tmpPath, std::ios::binary);
-    if (!f.is_open()) {
-      return makeError(500, "internal_error", "Export failed",
-                       "Could not read export file.");
-    }
-    std::ostringstream buf;
-    buf << f.rdbuf();
-
-    ApiResponse csvResp{200, buf.str(), "text/csv; charset=utf-8"};
-    csvResp.extraHeaders["Content-Disposition"] =
-        "attachment; filename=\"audit_export.csv\"";
-    return csvResp;
+    return handleAuditExport(ctx);
   }
 
   // POST /api/v1/hl7/import - HL7 v2.5.1 Import
