@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Layout } from '../components/Layout/Layout';
 import { getDashboardStats } from '../services/stats';
 import { getSamples } from '../services/samples';
@@ -241,8 +242,11 @@ export const Dashboard = () => {
             )}
           </div>
 
-          {/* Critical Results Alert Kachel */}
-          <div className={`p-6 border transition-colors duration-150 ${
+          {/* Critical Results Alert Kachel — jumps to the filtered critical list */}
+          <Link
+            to="/results?flag=CRITICAL"
+            title="View critical results"
+            className={`block p-6 border transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0055FF] ${
             criticalCount > 0
               ? 'bg-red-50 border-red-300 hover:border-red-500'
               : 'bg-white border-[#E2E8F0] hover:border-[#0055FF]'
@@ -260,7 +264,7 @@ export const Dashboard = () => {
                 {criticalCount > 0 ? '⚠ CRITICAL results require immediate review' : 'No critical results'}
               </p>
             </div>
-          </div>
+          </Link>
         </div>
 
         {/* Charts Section */}

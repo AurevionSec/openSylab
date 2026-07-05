@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, Link } from 'react-router-dom';
 import { Layout } from '../components/Layout/Layout';
 import { Card } from '../components/common/Card';
 import { Button } from '../components/common/Button';
@@ -49,6 +49,8 @@ export const Results = () => {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     setSearchQuery(params.get('q') || '');
+    setSelectedFlag(params.get('flag') || '');
+    setSelectedStatus(params.get('status') || '');
     setCurrentPage(1);
   }, [location.search]);
 
@@ -202,7 +204,15 @@ export const Results = () => {
                         <td className="px-6 py-2.5 whitespace-nowrap text-sm font-mono font-bold text-[#1A1C20] border-b border-[#E2E8F0]">
                           {result.result_id}
                         </td>
-                        <td className="px-6 py-2.5 whitespace-nowrap text-sm font-mono text-[#5E6C84] border-b border-[#E2E8F0]">{result.order_id}</td>
+                        <td className="px-6 py-2.5 whitespace-nowrap text-sm font-mono border-b border-[#E2E8F0]">
+                          <Link
+                            to={`/orders?q=${encodeURIComponent(result.order_id)}`}
+                            className="text-[#0055FF] hover:underline"
+                            title={`View order ${result.order_id}`}
+                          >
+                            {result.order_id}
+                          </Link>
+                        </td>
                         <td className="px-6 py-2.5 whitespace-nowrap text-sm font-medium text-[#1A1C20] border-b border-[#E2E8F0]">{result.parameter}</td>
                         <td className="px-6 py-2.5 whitespace-nowrap text-sm font-mono text-[#1A1C20] border-b border-[#E2E8F0]">
                           {result.value} {result.unit}

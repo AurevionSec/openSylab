@@ -43,6 +43,7 @@ export const Header = () => {
       '/audit-log': 'Audit Log',
       '/users': 'Users',
       '/profile': 'Profile',
+      '/import': 'Import',
     };
 
     return routeNames[path] || 'Dashboard';
