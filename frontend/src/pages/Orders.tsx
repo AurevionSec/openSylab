@@ -13,10 +13,12 @@ import { ORDER_STATUSES, ORDER_PRIORITIES } from '../utils/constants';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useAuth } from '../context/AuthContext';
 import { useEntityList } from '../hooks/useEntityList';
+import { useToast } from '../hooks/useToast';
 
 export const Orders = () => {
   useDocumentTitle({ module: 'Orders' });
   const { user } = useAuth();
+  const toast = useToast();
   const canWrite = user?.role === 'ADMIN' || user?.role === 'OPERATOR';
   const location = useLocation();
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -57,7 +59,8 @@ export const Orders = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleCreateSuccess = (_newOrder: Order) => {
+  const handleCreateSuccess = (newOrder: Order) => {
+    toast.success(`Order ${newOrder.order_id} created`);
     refetch();
   };
 
@@ -66,7 +69,8 @@ export const Orders = () => {
     setIsEditModalOpen(true);
   };
 
-  const handleEditSuccess = (_updatedOrder: Order) => {
+  const handleEditSuccess = (updatedOrder: Order) => {
+    toast.success(`Order ${updatedOrder.order_id} updated`);
     refetch();
   };
 
@@ -80,6 +84,7 @@ export const Orders = () => {
     setDeleteError(null);
     try {
       await deleteOrder(orderToDelete.order_id);
+      toast.success(`Order ${orderToDelete.order_id} cancelled`);
       setIsDeleteDialogOpen(false);
       setOrderToDelete(null);
       refetch();

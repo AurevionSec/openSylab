@@ -13,10 +13,12 @@ import { SAMPLE_STATUSES } from '../utils/constants';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useAuth } from '../context/AuthContext';
 import { useEntityList } from '../hooks/useEntityList';
+import { useToast } from '../hooks/useToast';
 
 export const Samples = () => {
   useDocumentTitle({ module: 'Samples' });
   const { user } = useAuth();
+  const toast = useToast();
   const canWrite = user?.role === 'ADMIN' || user?.role === 'OPERATOR';
   const location = useLocation();
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -61,7 +63,8 @@ export const Samples = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleCreateSuccess = (_newSample: Sample) => {
+  const handleCreateSuccess = (newSample: Sample) => {
+    toast.success(`Sample ${newSample.sample_id} created`);
     refetch();
   };
 
@@ -70,7 +73,8 @@ export const Samples = () => {
     setIsEditModalOpen(true);
   };
 
-  const handleEditSuccess = (_updatedSample: Sample) => {
+  const handleEditSuccess = (updatedSample: Sample) => {
+    toast.success(`Sample ${updatedSample.sample_id} updated`);
     refetch();
   };
 
@@ -84,6 +88,7 @@ export const Samples = () => {
     setDeleteError(null);
     try {
       await deleteSample(sampleToDelete.sample_id);
+      toast.success(`Sample ${sampleToDelete.sample_id} archived`);
       setIsDeleteDialogOpen(false);
       setSampleToDelete(null);
       refetch();

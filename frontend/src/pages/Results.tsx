@@ -13,10 +13,12 @@ import { RESULT_STATUSES, RESULT_FLAGS } from '../utils/constants';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useAuth } from '../context/AuthContext';
 import { useEntityList } from '../hooks/useEntityList';
+import { useToast } from '../hooks/useToast';
 
 export const Results = () => {
   useDocumentTitle({ module: 'Test Results' });
   const { user } = useAuth();
+  const toast = useToast();
   const canWrite = user?.role === 'ADMIN' || user?.role === 'OPERATOR';
   const location = useLocation();
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -69,7 +71,8 @@ export const Results = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleCreateSuccess = (_newResult: TestResult) => {
+  const handleCreateSuccess = (newResult: TestResult) => {
+    toast.success(`Result ${newResult.result_id} created`);
     refetch();
   };
 
@@ -78,7 +81,8 @@ export const Results = () => {
     setIsEditModalOpen(true);
   };
 
-  const handleEditSuccess = (_updatedResult: TestResult) => {
+  const handleEditSuccess = (updatedResult: TestResult) => {
+    toast.success(`Result ${updatedResult.result_id} updated`);
     refetch();
   };
 
@@ -92,6 +96,7 @@ export const Results = () => {
     setDeleteError(null);
     try {
       await deleteResult(resultToDelete.result_id);
+      toast.success(`Result ${resultToDelete.result_id} rejected`);
       setIsDeleteDialogOpen(false);
       setResultToDelete(null);
       refetch();
