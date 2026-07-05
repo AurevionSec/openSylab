@@ -114,6 +114,17 @@ private:
   ApiResponse handleCreateResult(
       const RouteContext &ctx,
       std::unordered_map<std::string, std::string> &payload) const;
+  // Update handlers read the parsed body only via find() (no operator[]),
+  // so payload is taken by const ref.
+  ApiResponse handleUpdateSample(
+      const RouteContext &ctx,
+      const std::unordered_map<std::string, std::string> &payload) const;
+  ApiResponse handleUpdateOrder(
+      const RouteContext &ctx,
+      const std::unordered_map<std::string, std::string> &payload) const;
+  ApiResponse handleUpdateResult(
+      const RouteContext &ctx,
+      const std::unordered_map<std::string, std::string> &payload) const;
 
   // JWT validation helper
   std::optional<auth::JwtAuth::TokenPayload>
