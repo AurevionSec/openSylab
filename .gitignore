@@ -113,3 +113,6 @@ test_validation.sh
 test_and_build.sh
 VALIDATION_*.md
 CLAUDE.md
+test_csv_*.csv
+__pycache__/
+*.pyc
