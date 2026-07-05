@@ -2440,6 +2440,530 @@ ApiResponse ApiRouter::handleCreateResult(
   }
 }
 
+ApiResponse ApiRouter::handleUpdateSample(
+    const RouteContext &ctx,
+    const std::unordered_map<std::string, std::string> &payload) const {
+  const std::string sampleId =
+      ctx.path.substr(std::string("/api/v1/samples/").size());
+  if (sampleId.empty()) {
+    return makeError(400, "validation_error", "Missing sample_id",
+                     "Provide sample_id in URL path.");
+  }
+  if (sampleId.size() > 64) {
+    return makeError(400, "validation_error", "Invalid sample_id",
+                     "sample_id must not exceed 64 characters.");
+  }
+  auto existing = database_->getSampleByBarcode(sampleId);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  if (!existing) {
+    return makeError(404, "not_found", "Sample not found",
+                     "Verify the sample_id.");
+  }
+
+  // Immutability guard: VALIDATED and ARCHIVED samples cannot be edited
+  {
+    const auto s = existing->getStatus();
+    if (s == core::Sample::Status::VALIDATED ||
+        s == core::Sample::Status::ARCHIVED) {
+      return makeError(
+          409, "conflict", "Sample is immutable",
+          "VALIDATED and ARCHIVED samples cannot be edited (ISO 15189).");
+    }
+  }
+
+  auto idIt = payload.find("sample_id");
+  if (idIt != payload.end() && idIt->second != sampleId) {
+    return makeError(409, "conflict", "sample_id mismatch",
+                     "sample_id in body must match URL.");
+  }
+  auto patientIt = payload.find("patient_id");
+  if (patientIt == payload.end() || patientIt->second.empty()) {
+    return makeError(400, "validation_error", "Missing patient_id",
+                     "Provide patient_id in request body.");
+  }
+
+  // Validate patient_id length
+  std::string validationError;
+  if (!validateStringLength(patientIt->second, 1, 64, validationError)) {
+    return makeError(400, "validation_error", "Invalid patient_id",
+                     validationError);
+  }
+
+  core::Sample updated = *existing;
+  updated.setSampleId(sampleId);
+  updated.setPatientId(patientIt->second);
+  auto nameIt = payload.find("patient_name");
+  if (nameIt != payload.end()) {
+    // Validate patient_name length if provided
+    if (!nameIt->second.empty() &&
+        !validateStringLength(nameIt->second, 1, 255, validationError)) {
+      return makeError(400, "validation_error", "Invalid patient_name",
+                       validationError);
+    }
+    updated.setPatientName(nameIt->second);
+  }
+  auto descIt = payload.find("description");
+  if (descIt != payload.end()) {
+    // Validate description length if provided
+    if (!descIt->second.empty() &&
+        !validateStringLength(descIt->second, 1, 5000, validationError)) {
+      return makeError(400, "validation_error", "Invalid description",
+                       validationError);
+    }
+    updated.setDescription(descIt->second);
+  }
+  auto statusIt = payload.find("status");
+  if (statusIt != payload.end() && !statusIt->second.empty()) {
+    try {
+      const auto newStatus = core::Sample::stringToStatus(statusIt->second);
+      static const std::unordered_map<std::string, std::vector<std::string>>
+          kSampleTrans = {
+              {"REGISTERED", {"IN_ANALYSIS", "ARCHIVED"}},
+              {"IN_ANALYSIS", {"ANALYZED", "ARCHIVED"}},
+              {"ANALYZED", {"VALIDATED", "ARCHIVED"}},
+              {"VALIDATED", {"ARCHIVED"}},
+              {"ARCHIVED", {}},
+          };
+      const std::string cs = existing->getStatusString();
+      const std::string ns = core::Sample::statusToString(newStatus);
+      const auto ti = kSampleTrans.find(cs);
+      if (ti == kSampleTrans.end()) {
+        return makeError(409, "conflict", "Unknown current status",
+                         "Status '" + cs +
+                             "' is not recognized; transition rejected.");
+      }
+      const auto &allowed = ti->second;
+      if (std::find(allowed.begin(), allowed.end(), ns) == allowed.end() &&
+          cs != ns) {
+        return makeError(409, "conflict", "Invalid status transition",
+                         "Transition from " + cs + " to " + ns +
+                             " is not allowed.");
+      }
+      updated.setStatus(newStatus);
+    } catch (const std::exception &e) {
+      return makeError(400, "validation_error", "Invalid status", e.what());
+    }
+  }
+  auto regIt = payload.find("registration_date");
+  if (regIt != payload.end() && !regIt->second.empty()) {
+    std::time_t ts{};
+    if (!parseTimeValue(regIt->second, ts)) {
+      return makeError(400, "validation_error", "Invalid registration_date",
+                       "Provide Unix timestamp for registration_date.");
+    }
+    if (ts <= 0 || ts > std::time(nullptr) + kMaxFutureDateTolerance) {
+      return makeError(400, "validation_error", "Invalid registration_date",
+                       "registration_date must not be in the future.");
+    }
+    updated.setRegistrationDate(ts);
+  }
+
+  if (!database_->updateSample(updated, ctx.actor)) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  auto refreshedSample = database_->getSampleByBarcode(updated.getSampleId());
+  const core::Sample &rspSample =
+      refreshedSample ? *refreshedSample : updated;
+  return ApiResponse{200, "{\"data\":" + sampleToJson(rspSample) + "}",
+                     "application/json"};
+}
+
+ApiResponse ApiRouter::handleUpdateOrder(
+    const RouteContext &ctx,
+    const std::unordered_map<std::string, std::string> &payload) const {
+  const std::string orderId =
+      ctx.path.substr(std::string("/api/v1/orders/").size());
+  if (orderId.empty()) {
+    return makeError(400, "validation_error", "Missing order_id",
+                     "Provide order_id in URL path.");
+  }
+  if (orderId.size() > 64) {
+    return makeError(400, "validation_error", "Invalid order_id",
+                     "order_id must not exceed 64 characters.");
+  }
+  auto existing = database_->getOrderByOrderId(orderId);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  if (!existing) {
+    return makeError(404, "not_found", "Order not found",
+                     "Verify the order_id.");
+  }
+
+  // Immutability guard: VALIDATED and CANCELLED orders cannot be edited
+  {
+    const auto s = existing->getStatus();
+    if (s == core::Order::Status::VALIDATED ||
+        s == core::Order::Status::CANCELLED) {
+      return makeError(409, "conflict", "Order is immutable",
+                       "VALIDATED and CANCELLED orders cannot be edited.");
+    }
+  }
+
+  auto idIt = payload.find("order_id");
+  if (idIt != payload.end() && idIt->second != orderId) {
+    return makeError(409, "conflict", "order_id mismatch",
+                     "order_id in body must match URL.");
+  }
+  auto sampleIt = payload.find("sample_id");
+  if (sampleIt == payload.end() || sampleIt->second.empty()) {
+    return makeError(400, "validation_error", "Missing sample_id",
+                     "Provide sample_id in request body.");
+  }
+  auto testIt = payload.find("test_type");
+  if (testIt == payload.end() || testIt->second.empty()) {
+    return makeError(400, "validation_error", "Missing test_type",
+                     "Provide test_type in request body.");
+  }
+
+  // Validate required field lengths
+  std::string validationError;
+  if (!validateStringLength(sampleIt->second, 1, 64, validationError)) {
+    return makeError(400, "validation_error", "Invalid sample_id",
+                     validationError);
+  }
+  if (!validateStringLength(testIt->second, 1, 255, validationError)) {
+    return makeError(400, "validation_error", "Invalid test_type",
+                     validationError);
+  }
+  if (!database_->getSampleByBarcode(sampleIt->second)) {
+    return makeError(422, "validation_error", "Unknown sample_id",
+                     "The provided sample_id does not exist.");
+  }
+
+  core::Order updated = *existing;
+  updated.setOrderId(orderId);
+  updated.setSampleId(sampleIt->second);
+  updated.setTestType(testIt->second);
+  auto statusIt = payload.find("status");
+  if (statusIt != payload.end() && !statusIt->second.empty()) {
+    // Order Status-Transition-Validierung (ISO 15189)
+    {
+      static const std::unordered_map<std::string, std::vector<std::string>>
+          kTrans = {
+              {"REQUESTED", {"IN_PROGRESS", "CANCELLED"}},
+              {"IN_PROGRESS", {"COMPLETED", "CANCELLED"}},
+              {"COMPLETED", {"VALIDATED"}},
+              {"VALIDATED", {}},
+              {"CANCELLED", {}},
+          };
+      const std::string &ns = statusIt->second;
+      const std::string &cs = existing->getStatusString();
+      auto ti = kTrans.find(cs);
+      if (ti == kTrans.end()) {
+        return makeError(409, "conflict", "Unknown current status",
+                         "Status '" + cs +
+                             "' is not recognized; transition rejected.");
+      }
+      const auto &allowed = ti->second;
+      if (std::find(allowed.begin(), allowed.end(), ns) == allowed.end() &&
+          ns != cs) {
+        return makeError(409, "conflict", "Invalid status transition",
+                         "Transition " + cs + " -> " + ns +
+                             " is not allowed.");
+      }
+      if (ns == "VALIDATED" && ctx.effectiveRole != "ADMIN") {
+        return makeError(403, "forbidden", "Admin access required",
+                         "Only administrators can set order status to VALIDATED.");
+      }
+    }
+    try {
+      updated.setStatus(core::Order::stringToStatus(statusIt->second));
+    } catch (const std::exception &e) {
+      return makeError(400, "validation_error", "Invalid status", e.what());
+    }
+  }
+  auto priorityIt = payload.find("priority");
+  if (priorityIt != payload.end() && !priorityIt->second.empty()) {
+    try {
+      updated.setPriority(core::Order::stringToPriority(priorityIt->second));
+    } catch (const std::exception &e) {
+      return makeError(400, "validation_error", "Invalid priority", e.what());
+    }
+  }
+  auto requestedIt = payload.find("requested_date");
+  if (requestedIt != payload.end() && !requestedIt->second.empty()) {
+    std::time_t ts{};
+    if (!parseTimeValue(requestedIt->second, ts)) {
+      return makeError(400, "validation_error", "Invalid requested_date",
+                       "Provide Unix timestamp for requested_date.");
+    }
+    updated.setRequestedDate(ts);
+  }
+  auto completedIt = payload.find("completed_date");
+  if (completedIt != payload.end() && !completedIt->second.empty()) {
+    std::time_t ts{};
+    if (!parseTimeValue(completedIt->second, ts)) {
+      return makeError(400, "validation_error", "Invalid completed_date",
+                       "Provide Unix timestamp for completed_date.");
+    }
+    updated.setCompletedDate(ts);
+  }
+  auto requesterIt = payload.find("requested_by");
+  if (requesterIt != payload.end()) {
+    // Validate requested_by length if provided
+    if (!requesterIt->second.empty() &&
+        !validateStringLength(requesterIt->second, 1, 255, validationError)) {
+      return makeError(400, "validation_error", "Invalid requested_by",
+                       validationError);
+    }
+    updated.setRequestedBy(requesterIt->second);
+  }
+  auto notesIt = payload.find("notes");
+  if (notesIt != payload.end()) {
+    // Validate notes length if provided
+    if (!notesIt->second.empty() &&
+        !validateStringLength(notesIt->second, 1, 5000, validationError)) {
+      return makeError(400, "validation_error", "Invalid notes",
+                       validationError);
+    }
+    updated.setNotes(notesIt->second);
+  }
+
+  if (!database_->updateOrder(updated, ctx.actor)) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  auto refreshedOrder = database_->getOrderByOrderId(updated.getOrderId());
+  const core::Order &rspOrder = refreshedOrder ? *refreshedOrder : updated;
+  return ApiResponse{200, "{\"data\":" + orderToJson(rspOrder) + "}",
+                     "application/json"};
+}
+
+ApiResponse ApiRouter::handleUpdateResult(
+    const RouteContext &ctx,
+    const std::unordered_map<std::string, std::string> &payload) const {
+  const std::string resultId =
+      ctx.path.substr(std::string("/api/v1/results/").size());
+  if (resultId.empty()) {
+    return makeError(400, "validation_error", "Missing result_id",
+                     "Provide result_id in URL path.");
+  }
+  if (resultId.size() > 64) {
+    return makeError(400, "validation_error", "Invalid result_id",
+                     "result_id must not exceed 64 characters.");
+  }
+  auto existing = database_->getTestResultByResultId(resultId);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  if (!existing) {
+    return makeError(404, "not_found", "Result not found",
+                     "Verify the result_id.");
+  }
+
+  // Immutability guard: VALIDATED and REJECTED results cannot be edited
+  {
+    const auto s = existing->getStatus();
+    if (s == core::TestResult::Status::VALIDATED ||
+        s == core::TestResult::Status::REJECTED) {
+      return makeError(
+          409, "conflict", "Result is immutable",
+          "VALIDATED and REJECTED results cannot be edited (ISO 15189).");
+    }
+  }
+
+  auto idIt = payload.find("result_id");
+  if (idIt != payload.end() && idIt->second != resultId) {
+    return makeError(409, "conflict", "result_id mismatch",
+                     "result_id in body must match URL.");
+  }
+  auto paramIt = payload.find("test_parameter");
+  if (paramIt == payload.end() || paramIt->second.empty()) {
+    return makeError(400, "validation_error", "Missing test_parameter",
+                     "Provide test_parameter in request body.");
+  }
+  auto valueIt = payload.find("value");
+  if (valueIt == payload.end() || valueIt->second.empty()) {
+    return makeError(400, "validation_error", "Missing value",
+                     "Provide value in request body.");
+  }
+  auto unitIt = payload.find("unit");
+  if (unitIt == payload.end() || unitIt->second.empty()) {
+    return makeError(400, "validation_error", "Missing unit",
+                     "Provide unit in request body.");
+  }
+
+  // Validate required field lengths
+  std::string validationError;
+  if (!validateStringLength(paramIt->second, 1, 255, validationError)) {
+    return makeError(400, "validation_error", "Invalid test_parameter",
+                     validationError);
+  }
+  if (!validateStringLength(valueIt->second, 1, 255, validationError)) {
+    return makeError(400, "validation_error", "Invalid value",
+                     validationError);
+  }
+  if (!validateStringLength(unitIt->second, 1, 255, validationError)) {
+    return makeError(400, "validation_error", "Invalid unit",
+                     validationError);
+  }
+
+  core::TestResult updated = *existing;
+  updated.setResultId(resultId);
+  updated.setTestParameter(paramIt->second);
+  updated.setValue(valueIt->second);
+  updated.setUnit(unitIt->second);
+  auto orderIt = payload.find("order_id");
+  if (orderIt != payload.end() && !orderIt->second.empty()) {
+    int orderId = 0;
+    if (!parseIntValue(orderIt->second, orderId) || orderId <= 0) {
+      return makeError(400, "validation_error", "Invalid order_id",
+                       "Provide numeric order_id.");
+    }
+    if (!database_->getOrder(orderId)) {
+      return makeError(422, "validation_error", "Unknown order_id",
+                       "The provided order_id does not exist.");
+    }
+    updated.setOrderId(orderId);
+  }
+  auto refRangeIt = payload.find("reference_range");
+  if (refRangeIt != payload.end()) {
+    // Validate reference_range length if provided
+    if (!refRangeIt->second.empty() &&
+        !validateStringLength(refRangeIt->second, 1, 255, validationError)) {
+      return makeError(400, "validation_error", "Invalid reference_range",
+                       validationError);
+    }
+    updated.setReferenceRange(refRangeIt->second);
+  }
+  auto refLowIt = payload.find("reference_low");
+  auto refHighIt = payload.find("reference_high");
+  bool updatedRefLow = false;
+  bool updatedRefHigh = false;
+
+  if (refLowIt != payload.end() && !refLowIt->second.empty()) {
+    double refLow = 0.0;
+    if (!parseDoubleValue(refLowIt->second, refLow)) {
+      return makeError(400, "validation_error", "Invalid reference_low",
+                       "Provide numeric reference_low.");
+    }
+    updated.setReferenceLow(refLow);
+    updatedRefLow = true;
+  }
+  if (refHighIt != payload.end() && !refHighIt->second.empty()) {
+    double refHigh = 0.0;
+    if (!parseDoubleValue(refHighIt->second, refHigh)) {
+      return makeError(400, "validation_error", "Invalid reference_high",
+                       "Provide numeric reference_high.");
+    }
+    updated.setReferenceHigh(refHigh);
+    updatedRefHigh = true;
+  }
+  // Validate that reference_high > reference_low (check final state if
+  // either was updated)
+  if (updatedRefLow || updatedRefHigh) {
+    double finalRefLow = updated.getReferenceLow();
+    double finalRefHigh = updated.getReferenceHigh();
+    // Only validate if both have non-zero values
+    if (finalRefLow != 0.0 && finalRefHigh != 0.0 &&
+        finalRefHigh <= finalRefLow) {
+      return makeError(400, "validation_error", "Invalid reference range",
+                       "reference_high must be greater than reference_low.");
+    }
+  }
+  auto statusIt = payload.find("status");
+  if (statusIt != payload.end() && !statusIt->second.empty()) {
+    try {
+      const auto newStatus =
+          core::TestResult::stringToStatus(statusIt->second);
+      // Enforce terminal-state rule: REJECTED results cannot be
+      // re-validated
+      static const std::unordered_map<std::string, std::vector<std::string>>
+          kResultTrans = {
+              {"PENDING", {"ENTERED", "REJECTED"}},
+              {"ENTERED", {"VALIDATED", "REJECTED", "REPEATED"}},
+              {"VALIDATED", {}},
+              {"REPEATED", {"ENTERED", "VALIDATED", "REJECTED"}},
+              {"REJECTED", {}}, // terminal — no transitions allowed
+          };
+      const std::string cs = existing->getStatusString();
+      const std::string ns = core::TestResult::statusToString(newStatus);
+      const auto ti = kResultTrans.find(cs);
+      if (ti == kResultTrans.end()) {
+        return makeError(409, "conflict", "Unknown current status",
+                         "Status '" + cs +
+                             "' is not recognized; transition rejected.");
+      }
+      const auto &allowed = ti->second;
+      if (std::find(allowed.begin(), allowed.end(), ns) == allowed.end() &&
+          cs != ns) {
+        return makeError(409, "conflict", "Invalid status transition",
+                         "Transition from " + cs + " to " + ns +
+                             " is not allowed.");
+      }
+      // ISO 15189 §5.8: only ADMIN may release (VALIDATE) results —
+      // prevents a technician from self-validating their own measurements.
+      if (ns == "VALIDATED" && ctx.effectiveRole != "ADMIN") {
+        return makeError(
+            403, "forbidden", "Insufficient permissions",
+            "Only ADMIN role may validate (release) test results.");
+      }
+      updated.setStatus(newStatus);
+    } catch (const std::exception &e) {
+      return makeError(400, "validation_error", "Invalid status", e.what());
+    }
+  }
+  auto measuredIt = payload.find("measured_date");
+  if (measuredIt != payload.end() && !measuredIt->second.empty()) {
+    std::time_t ts{};
+    if (!parseTimeValue(measuredIt->second, ts)) {
+      return makeError(400, "validation_error", "Invalid measured_date",
+                       "Provide Unix timestamp for measured_date.");
+    }
+    updated.setMeasuredDate(ts);
+  }
+  auto measuredByIt = payload.find("measured_by");
+  if (measuredByIt != payload.end()) {
+    // Validate measured_by length if provided
+    if (!measuredByIt->second.empty() &&
+        !validateStringLength(measuredByIt->second, 1, 255, validationError)) {
+      return makeError(400, "validation_error", "Invalid measured_by",
+                       validationError);
+    }
+    updated.setMeasuredBy(measuredByIt->second);
+  }
+  auto commentIt = payload.find("comment");
+  if (commentIt != payload.end()) {
+    // Validate comment length if provided
+    if (!commentIt->second.empty() &&
+        !validateStringLength(commentIt->second, 1, 5000, validationError)) {
+      return makeError(400, "validation_error", "Invalid comment",
+                       validationError);
+    }
+    updated.setComment(commentIt->second);
+  }
+  auto flagIt = payload.find("flag");
+  if (flagIt != payload.end() && !flagIt->second.empty()) {
+    try {
+      updated.setFlag(core::TestResult::stringToFlag(flagIt->second));
+    } catch (const std::exception &e) {
+      return makeError(400, "validation_error", "Invalid flag", e.what());
+    }
+  } else {
+    updated.setFlag(updated.evaluateFlag());
+  }
+
+  if (!database_->updateTestResult(updated, ctx.actor)) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  auto refreshedResult =
+      database_->getTestResultByResultId(updated.getResultId());
+  const core::TestResult &rspResult =
+      refreshedResult ? *refreshedResult : updated;
+  {
+    std::string oidStr;
+    auto parentOrder = database_->getOrder(rspResult.getOrderId());
+    if (parentOrder) {
+      oidStr = parentOrder->getOrderId();
+    }
+    return ApiResponse{200,
+                       "{\"data\":" + resultToJson(rspResult, oidStr) + "}",
+                       "application/json"};
+  }
+}
+
 ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
   if (!database_) {
     return makeError(500, "internal_error", "Database unavailable",
@@ -2737,529 +3261,15 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
     }
 
     if (isPut && path.rfind("/api/v1/samples/", 0) == 0) {
-      const std::string sampleId =
-          path.substr(std::string("/api/v1/samples/").size());
-      if (sampleId.empty()) {
-        return makeError(400, "validation_error", "Missing sample_id",
-                         "Provide sample_id in URL path.");
-      }
-      if (sampleId.size() > 64) {
-        return makeError(400, "validation_error", "Invalid sample_id",
-                         "sample_id must not exceed 64 characters.");
-      }
-      auto existing = database_->getSampleByBarcode(sampleId);
-      if (database_->hasError()) {
-        return makeDbErrorResponse(database_->getLastError());
-      }
-      if (!existing) {
-        return makeError(404, "not_found", "Sample not found",
-                         "Verify the sample_id.");
-      }
-
-      // Immutability guard: VALIDATED and ARCHIVED samples cannot be edited
-      {
-        const auto s = existing->getStatus();
-        if (s == core::Sample::Status::VALIDATED ||
-            s == core::Sample::Status::ARCHIVED) {
-          return makeError(
-              409, "conflict", "Sample is immutable",
-              "VALIDATED and ARCHIVED samples cannot be edited (ISO 15189).");
-        }
-      }
-
-      auto idIt = payload.find("sample_id");
-      if (idIt != payload.end() && idIt->second != sampleId) {
-        return makeError(409, "conflict", "sample_id mismatch",
-                         "sample_id in body must match URL.");
-      }
-      auto patientIt = payload.find("patient_id");
-      if (patientIt == payload.end() || patientIt->second.empty()) {
-        return makeError(400, "validation_error", "Missing patient_id",
-                         "Provide patient_id in request body.");
-      }
-
-      // Validate patient_id length
-      std::string validationError;
-      if (!validateStringLength(patientIt->second, 1, 64, validationError)) {
-        return makeError(400, "validation_error", "Invalid patient_id",
-                         validationError);
-      }
-
-      core::Sample updated = *existing;
-      updated.setSampleId(sampleId);
-      updated.setPatientId(patientIt->second);
-      auto nameIt = payload.find("patient_name");
-      if (nameIt != payload.end()) {
-        // Validate patient_name length if provided
-        if (!nameIt->second.empty() &&
-            !validateStringLength(nameIt->second, 1, 255, validationError)) {
-          return makeError(400, "validation_error", "Invalid patient_name",
-                           validationError);
-        }
-        updated.setPatientName(nameIt->second);
-      }
-      auto descIt = payload.find("description");
-      if (descIt != payload.end()) {
-        // Validate description length if provided
-        if (!descIt->second.empty() &&
-            !validateStringLength(descIt->second, 1, 5000, validationError)) {
-          return makeError(400, "validation_error", "Invalid description",
-                           validationError);
-        }
-        updated.setDescription(descIt->second);
-      }
-      auto statusIt = payload.find("status");
-      if (statusIt != payload.end() && !statusIt->second.empty()) {
-        try {
-          const auto newStatus = core::Sample::stringToStatus(statusIt->second);
-          static const std::unordered_map<std::string, std::vector<std::string>>
-              kSampleTrans = {
-                  {"REGISTERED", {"IN_ANALYSIS", "ARCHIVED"}},
-                  {"IN_ANALYSIS", {"ANALYZED", "ARCHIVED"}},
-                  {"ANALYZED", {"VALIDATED", "ARCHIVED"}},
-                  {"VALIDATED", {"ARCHIVED"}},
-                  {"ARCHIVED", {}},
-              };
-          const std::string cs = existing->getStatusString();
-          const std::string ns = core::Sample::statusToString(newStatus);
-          const auto ti = kSampleTrans.find(cs);
-          if (ti == kSampleTrans.end()) {
-            return makeError(409, "conflict", "Unknown current status",
-                             "Status '" + cs +
-                                 "' is not recognized; transition rejected.");
-          }
-          const auto &allowed = ti->second;
-          if (std::find(allowed.begin(), allowed.end(), ns) == allowed.end() &&
-              cs != ns) {
-            return makeError(409, "conflict", "Invalid status transition",
-                             "Transition from " + cs + " to " + ns +
-                                 " is not allowed.");
-          }
-          updated.setStatus(newStatus);
-        } catch (const std::exception &e) {
-          return makeError(400, "validation_error", "Invalid status", e.what());
-        }
-      }
-      auto regIt = payload.find("registration_date");
-      if (regIt != payload.end() && !regIt->second.empty()) {
-        std::time_t ts{};
-        if (!parseTimeValue(regIt->second, ts)) {
-          return makeError(400, "validation_error", "Invalid registration_date",
-                           "Provide Unix timestamp for registration_date.");
-        }
-        if (ts <= 0 || ts > std::time(nullptr) + kMaxFutureDateTolerance) {
-          return makeError(400, "validation_error", "Invalid registration_date",
-                           "registration_date must not be in the future.");
-        }
-        updated.setRegistrationDate(ts);
-      }
-
-      if (!database_->updateSample(updated, actor)) {
-        return makeDbErrorResponse(database_->getLastError());
-      }
-      auto refreshedSample =
-          database_->getSampleByBarcode(updated.getSampleId());
-      const core::Sample &rspSample =
-          refreshedSample ? *refreshedSample : updated;
-      return ApiResponse{200, "{\"data\":" + sampleToJson(rspSample) + "}",
-                         "application/json"};
+      return handleUpdateSample(ctx, payload);
     }
 
     if (isPut && path.rfind("/api/v1/orders/", 0) == 0) {
-      const std::string orderId =
-          path.substr(std::string("/api/v1/orders/").size());
-      if (orderId.empty()) {
-        return makeError(400, "validation_error", "Missing order_id",
-                         "Provide order_id in URL path.");
-      }
-      if (orderId.size() > 64) {
-        return makeError(400, "validation_error", "Invalid order_id",
-                         "order_id must not exceed 64 characters.");
-      }
-      auto existing = database_->getOrderByOrderId(orderId);
-      if (database_->hasError()) {
-        return makeDbErrorResponse(database_->getLastError());
-      }
-      if (!existing) {
-        return makeError(404, "not_found", "Order not found",
-                         "Verify the order_id.");
-      }
-
-      // Immutability guard: VALIDATED and CANCELLED orders cannot be edited
-      {
-        const auto s = existing->getStatus();
-        if (s == core::Order::Status::VALIDATED ||
-            s == core::Order::Status::CANCELLED) {
-          return makeError(409, "conflict", "Order is immutable",
-                           "VALIDATED and CANCELLED orders cannot be edited.");
-        }
-      }
-
-      auto idIt = payload.find("order_id");
-      if (idIt != payload.end() && idIt->second != orderId) {
-        return makeError(409, "conflict", "order_id mismatch",
-                         "order_id in body must match URL.");
-      }
-      auto sampleIt = payload.find("sample_id");
-      if (sampleIt == payload.end() || sampleIt->second.empty()) {
-        return makeError(400, "validation_error", "Missing sample_id",
-                         "Provide sample_id in request body.");
-      }
-      auto testIt = payload.find("test_type");
-      if (testIt == payload.end() || testIt->second.empty()) {
-        return makeError(400, "validation_error", "Missing test_type",
-                         "Provide test_type in request body.");
-      }
-
-      // Validate required field lengths
-      std::string validationError;
-      if (!validateStringLength(sampleIt->second, 1, 64, validationError)) {
-        return makeError(400, "validation_error", "Invalid sample_id",
-                         validationError);
-      }
-      if (!validateStringLength(testIt->second, 1, 255, validationError)) {
-        return makeError(400, "validation_error", "Invalid test_type",
-                         validationError);
-      }
-      if (!database_->getSampleByBarcode(sampleIt->second)) {
-        return makeError(422, "validation_error", "Unknown sample_id",
-                         "The provided sample_id does not exist.");
-      }
-
-      core::Order updated = *existing;
-      updated.setOrderId(orderId);
-      updated.setSampleId(sampleIt->second);
-      updated.setTestType(testIt->second);
-      auto statusIt = payload.find("status");
-      if (statusIt != payload.end() && !statusIt->second.empty()) {
-        // Order Status-Transition-Validierung (ISO 15189)
-        {
-          static const std::unordered_map<std::string, std::vector<std::string>>
-              kTrans = {
-                  {"REQUESTED", {"IN_PROGRESS", "CANCELLED"}},
-                  {"IN_PROGRESS", {"COMPLETED", "CANCELLED"}},
-                  {"COMPLETED", {"VALIDATED"}},
-                  {"VALIDATED", {}},
-                  {"CANCELLED", {}},
-              };
-          const std::string &ns = statusIt->second;
-          const std::string &cs = existing->getStatusString();
-          auto ti = kTrans.find(cs);
-          if (ti == kTrans.end()) {
-            return makeError(409, "conflict", "Unknown current status",
-                             "Status '" + cs +
-                                 "' is not recognized; transition rejected.");
-          }
-          const auto &allowed = ti->second;
-          if (std::find(allowed.begin(), allowed.end(), ns) == allowed.end() &&
-              ns != cs) {
-            return makeError(409, "conflict", "Invalid status transition",
-                             "Transition " + cs + " -> " + ns +
-                                 " is not allowed.");
-          }
-          if (ns == "VALIDATED" && effectiveRole != "ADMIN") {
-            return makeError(403, "forbidden", "Admin access required",
-                             "Only administrators can set order status to VALIDATED.");
-          }
-        }
-        try {
-          updated.setStatus(core::Order::stringToStatus(statusIt->second));
-        } catch (const std::exception &e) {
-          return makeError(400, "validation_error", "Invalid status", e.what());
-        }
-      }
-      auto priorityIt = payload.find("priority");
-      if (priorityIt != payload.end() && !priorityIt->second.empty()) {
-        try {
-          updated.setPriority(
-              core::Order::stringToPriority(priorityIt->second));
-        } catch (const std::exception &e) {
-          return makeError(400, "validation_error", "Invalid priority",
-                           e.what());
-        }
-      }
-      auto requestedIt = payload.find("requested_date");
-      if (requestedIt != payload.end() && !requestedIt->second.empty()) {
-        std::time_t ts{};
-        if (!parseTimeValue(requestedIt->second, ts)) {
-          return makeError(400, "validation_error", "Invalid requested_date",
-                           "Provide Unix timestamp for requested_date.");
-        }
-        updated.setRequestedDate(ts);
-      }
-      auto completedIt = payload.find("completed_date");
-      if (completedIt != payload.end() && !completedIt->second.empty()) {
-        std::time_t ts{};
-        if (!parseTimeValue(completedIt->second, ts)) {
-          return makeError(400, "validation_error", "Invalid completed_date",
-                           "Provide Unix timestamp for completed_date.");
-        }
-        updated.setCompletedDate(ts);
-      }
-      auto requesterIt = payload.find("requested_by");
-      if (requesterIt != payload.end()) {
-        // Validate requested_by length if provided
-        if (!requesterIt->second.empty() &&
-            !validateStringLength(requesterIt->second, 1, 255,
-                                  validationError)) {
-          return makeError(400, "validation_error", "Invalid requested_by",
-                           validationError);
-        }
-        updated.setRequestedBy(requesterIt->second);
-      }
-      auto notesIt = payload.find("notes");
-      if (notesIt != payload.end()) {
-        // Validate notes length if provided
-        if (!notesIt->second.empty() &&
-            !validateStringLength(notesIt->second, 1, 5000, validationError)) {
-          return makeError(400, "validation_error", "Invalid notes",
-                           validationError);
-        }
-        updated.setNotes(notesIt->second);
-      }
-
-      if (!database_->updateOrder(updated, actor)) {
-        return makeDbErrorResponse(database_->getLastError());
-      }
-      auto refreshedOrder = database_->getOrderByOrderId(updated.getOrderId());
-      const core::Order &rspOrder = refreshedOrder ? *refreshedOrder : updated;
-      return ApiResponse{200, "{\"data\":" + orderToJson(rspOrder) + "}",
-                         "application/json"};
+      return handleUpdateOrder(ctx, payload);
     }
 
     if (isPut && path.rfind("/api/v1/results/", 0) == 0) {
-      const std::string resultId =
-          path.substr(std::string("/api/v1/results/").size());
-      if (resultId.empty()) {
-        return makeError(400, "validation_error", "Missing result_id",
-                         "Provide result_id in URL path.");
-      }
-      if (resultId.size() > 64) {
-        return makeError(400, "validation_error", "Invalid result_id",
-                         "result_id must not exceed 64 characters.");
-      }
-      auto existing = database_->getTestResultByResultId(resultId);
-      if (database_->hasError()) {
-        return makeDbErrorResponse(database_->getLastError());
-      }
-      if (!existing) {
-        return makeError(404, "not_found", "Result not found",
-                         "Verify the result_id.");
-      }
-
-      // Immutability guard: VALIDATED and REJECTED results cannot be edited
-      {
-        const auto s = existing->getStatus();
-        if (s == core::TestResult::Status::VALIDATED ||
-            s == core::TestResult::Status::REJECTED) {
-          return makeError(
-              409, "conflict", "Result is immutable",
-              "VALIDATED and REJECTED results cannot be edited (ISO 15189).");
-        }
-      }
-
-      auto idIt = payload.find("result_id");
-      if (idIt != payload.end() && idIt->second != resultId) {
-        return makeError(409, "conflict", "result_id mismatch",
-                         "result_id in body must match URL.");
-      }
-      auto paramIt = payload.find("test_parameter");
-      if (paramIt == payload.end() || paramIt->second.empty()) {
-        return makeError(400, "validation_error", "Missing test_parameter",
-                         "Provide test_parameter in request body.");
-      }
-      auto valueIt = payload.find("value");
-      if (valueIt == payload.end() || valueIt->second.empty()) {
-        return makeError(400, "validation_error", "Missing value",
-                         "Provide value in request body.");
-      }
-      auto unitIt = payload.find("unit");
-      if (unitIt == payload.end() || unitIt->second.empty()) {
-        return makeError(400, "validation_error", "Missing unit",
-                         "Provide unit in request body.");
-      }
-
-      // Validate required field lengths
-      std::string validationError;
-      if (!validateStringLength(paramIt->second, 1, 255, validationError)) {
-        return makeError(400, "validation_error", "Invalid test_parameter",
-                         validationError);
-      }
-      if (!validateStringLength(valueIt->second, 1, 255, validationError)) {
-        return makeError(400, "validation_error", "Invalid value",
-                         validationError);
-      }
-      if (!validateStringLength(unitIt->second, 1, 255, validationError)) {
-        return makeError(400, "validation_error", "Invalid unit",
-                         validationError);
-      }
-
-      core::TestResult updated = *existing;
-      updated.setResultId(resultId);
-      updated.setTestParameter(paramIt->second);
-      updated.setValue(valueIt->second);
-      updated.setUnit(unitIt->second);
-      auto orderIt = payload.find("order_id");
-      if (orderIt != payload.end() && !orderIt->second.empty()) {
-        int orderId = 0;
-        if (!parseIntValue(orderIt->second, orderId) || orderId <= 0) {
-          return makeError(400, "validation_error", "Invalid order_id",
-                           "Provide numeric order_id.");
-        }
-        if (!database_->getOrder(orderId)) {
-          return makeError(422, "validation_error", "Unknown order_id",
-                           "The provided order_id does not exist.");
-        }
-        updated.setOrderId(orderId);
-      }
-      auto refRangeIt = payload.find("reference_range");
-      if (refRangeIt != payload.end()) {
-        // Validate reference_range length if provided
-        if (!refRangeIt->second.empty() &&
-            !validateStringLength(refRangeIt->second, 1, 255,
-                                  validationError)) {
-          return makeError(400, "validation_error", "Invalid reference_range",
-                           validationError);
-        }
-        updated.setReferenceRange(refRangeIt->second);
-      }
-      auto refLowIt = payload.find("reference_low");
-      auto refHighIt = payload.find("reference_high");
-      bool updatedRefLow = false;
-      bool updatedRefHigh = false;
-
-      if (refLowIt != payload.end() && !refLowIt->second.empty()) {
-        double refLow = 0.0;
-        if (!parseDoubleValue(refLowIt->second, refLow)) {
-          return makeError(400, "validation_error", "Invalid reference_low",
-                           "Provide numeric reference_low.");
-        }
-        updated.setReferenceLow(refLow);
-        updatedRefLow = true;
-      }
-      if (refHighIt != payload.end() && !refHighIt->second.empty()) {
-        double refHigh = 0.0;
-        if (!parseDoubleValue(refHighIt->second, refHigh)) {
-          return makeError(400, "validation_error", "Invalid reference_high",
-                           "Provide numeric reference_high.");
-        }
-        updated.setReferenceHigh(refHigh);
-        updatedRefHigh = true;
-      }
-      // Validate that reference_high > reference_low (check final state if
-      // either was updated)
-      if (updatedRefLow || updatedRefHigh) {
-        double finalRefLow = updated.getReferenceLow();
-        double finalRefHigh = updated.getReferenceHigh();
-        // Only validate if both have non-zero values
-        if (finalRefLow != 0.0 && finalRefHigh != 0.0 &&
-            finalRefHigh <= finalRefLow) {
-          return makeError(
-              400, "validation_error", "Invalid reference range",
-              "reference_high must be greater than reference_low.");
-        }
-      }
-      auto statusIt = payload.find("status");
-      if (statusIt != payload.end() && !statusIt->second.empty()) {
-        try {
-          const auto newStatus =
-              core::TestResult::stringToStatus(statusIt->second);
-          // Enforce terminal-state rule: REJECTED results cannot be
-          // re-validated
-          static const std::unordered_map<std::string, std::vector<std::string>>
-              kResultTrans = {
-                  {"PENDING", {"ENTERED", "REJECTED"}},
-                  {"ENTERED", {"VALIDATED", "REJECTED", "REPEATED"}},
-                  {"VALIDATED", {}},
-                  {"REPEATED", {"ENTERED", "VALIDATED", "REJECTED"}},
-                  {"REJECTED", {}}, // terminal — no transitions allowed
-              };
-          const std::string cs = existing->getStatusString();
-          const std::string ns = core::TestResult::statusToString(newStatus);
-          const auto ti = kResultTrans.find(cs);
-          if (ti == kResultTrans.end()) {
-            return makeError(409, "conflict", "Unknown current status",
-                             "Status '" + cs +
-                                 "' is not recognized; transition rejected.");
-          }
-          const auto &allowed = ti->second;
-          if (std::find(allowed.begin(), allowed.end(), ns) == allowed.end() &&
-              cs != ns) {
-            return makeError(409, "conflict", "Invalid status transition",
-                             "Transition from " + cs + " to " + ns +
-                                 " is not allowed.");
-          }
-          // ISO 15189 §5.8: only ADMIN may release (VALIDATE) results —
-          // prevents a technician from self-validating their own measurements.
-          if (ns == "VALIDATED" && effectiveRole != "ADMIN") {
-            return makeError(
-                403, "forbidden", "Insufficient permissions",
-                "Only ADMIN role may validate (release) test results.");
-          }
-          updated.setStatus(newStatus);
-        } catch (const std::exception &e) {
-          return makeError(400, "validation_error", "Invalid status", e.what());
-        }
-      }
-      auto measuredIt = payload.find("measured_date");
-      if (measuredIt != payload.end() && !measuredIt->second.empty()) {
-        std::time_t ts{};
-        if (!parseTimeValue(measuredIt->second, ts)) {
-          return makeError(400, "validation_error", "Invalid measured_date",
-                           "Provide Unix timestamp for measured_date.");
-        }
-        updated.setMeasuredDate(ts);
-      }
-      auto measuredByIt = payload.find("measured_by");
-      if (measuredByIt != payload.end()) {
-        // Validate measured_by length if provided
-        if (!measuredByIt->second.empty() &&
-            !validateStringLength(measuredByIt->second, 1, 255,
-                                  validationError)) {
-          return makeError(400, "validation_error", "Invalid measured_by",
-                           validationError);
-        }
-        updated.setMeasuredBy(measuredByIt->second);
-      }
-      auto commentIt = payload.find("comment");
-      if (commentIt != payload.end()) {
-        // Validate comment length if provided
-        if (!commentIt->second.empty() &&
-            !validateStringLength(commentIt->second, 1, 5000,
-                                  validationError)) {
-          return makeError(400, "validation_error", "Invalid comment",
-                           validationError);
-        }
-        updated.setComment(commentIt->second);
-      }
-      auto flagIt = payload.find("flag");
-      if (flagIt != payload.end() && !flagIt->second.empty()) {
-        try {
-          updated.setFlag(core::TestResult::stringToFlag(flagIt->second));
-        } catch (const std::exception &e) {
-          return makeError(400, "validation_error", "Invalid flag", e.what());
-        }
-      } else {
-        updated.setFlag(updated.evaluateFlag());
-      }
-
-      if (!database_->updateTestResult(updated, actor)) {
-        return makeDbErrorResponse(database_->getLastError());
-      }
-      auto refreshedResult =
-          database_->getTestResultByResultId(updated.getResultId());
-      const core::TestResult &rspResult =
-          refreshedResult ? *refreshedResult : updated;
-      {
-        std::string oidStr;
-        auto parentOrder = database_->getOrder(rspResult.getOrderId());
-        if (parentOrder) {
-          oidStr = parentOrder->getOrderId();
-        }
-        return ApiResponse{200,
-                           "{\"data\":" + resultToJson(rspResult, oidStr) + "}",
-                           "application/json"};
-      }
+      return handleUpdateResult(ctx, payload);
     }
   }
 
