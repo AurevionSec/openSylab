@@ -37,7 +37,6 @@ export const Orders = () => {
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [orderToDelete, setOrderToDelete] = useState<Order | null>(null);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
   const itemsPerPage = 20;
 
   const { data: orders, total: totalOrders, loading, error, refetch } = useEntityList(
@@ -79,18 +78,12 @@ export const Orders = () => {
     setIsDeleteDialogOpen(true);
   };
 
+  // Errors propagate to DeleteConfirmDialog (shown inline; dialog stays open).
   const handleDeleteConfirm = async () => {
     if (!orderToDelete) return;
-    setDeleteError(null);
-    try {
-      await deleteOrder(orderToDelete.order_id);
-      toast.success(`Order ${orderToDelete.order_id} cancelled`);
-      setIsDeleteDialogOpen(false);
-      setOrderToDelete(null);
-      refetch();
-    } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : 'Delete failed');
-    }
+    await deleteOrder(orderToDelete.order_id);
+    toast.success(`Order ${orderToDelete.order_id} cancelled`);
+    refetch();
   };
 
   return (
@@ -164,7 +157,7 @@ export const Orders = () => {
               </div>
             </div>
 
-            <ErrorBanner message={deleteError || error || null} />
+            <ErrorBanner message={error || null} onRetry={error ? refetch : undefined} />
 
             {loading ? (
               <div className="flex items-center justify-center py-12">
@@ -413,12 +406,14 @@ export const Orders = () => {
         onClose={() => {
           setIsDeleteDialogOpen(false);
           setOrderToDelete(null);
-          setDeleteError(null);
         }}
         onConfirm={handleDeleteConfirm}
-        title="Delete Order"
-        message="Are you sure you want to delete this order? This will permanently remove all associated data."
+        title="Cancel Order"
+        message="Cancel this order?"
         itemName={orderToDelete?.order_id}
+        confirmText="Cancel Order"
+        cancelText="Keep"
+        outcomeNote="The order is marked CANCELLED (soft-delete). Its audit history is retained."
       />
     </Layout>
   );

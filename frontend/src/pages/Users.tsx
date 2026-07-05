@@ -8,11 +8,15 @@ import type { User, CreateUserPayload, UpdateUserPayload, UserRole } from '../ty
 import { USER_ROLES, ROLE_COLORS } from '../types/user';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { ErrorBanner } from '../components/common/ErrorBanner';
+import { DeleteConfirmDialog } from '../components/common/DeleteConfirmDialog';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../hooks/useToast';
 
 export const Users = () => {
   useDocumentTitle({ module: 'User Management' });
   const { user: currentUser } = useAuth();
+  const toast = useToast();
+  const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const isAdmin = currentUser?.role === 'ADMIN';
   const [users, setUsers] = useState<User[]>([]);
   const [deletingUserId, setDeletingUserId] = useState<number | null>(null);
@@ -72,15 +76,14 @@ export const Users = () => {
     }
   };
 
-  const handleDeleteUser = async (userId: number) => {
-    if (!confirm('Are you sure you want to delete this user?')) return;
-    if (deletingUserId !== null) return;
-    setDeletingUserId(userId);
+  const confirmDeleteUser = async () => {
+    if (!userToDelete) return;
+    setDeletingUserId(userToDelete.id);
     try {
-      await deleteUser(userId);
+      await deleteUser(userToDelete.id);
+      toast.success(`User ${userToDelete.username} deleted`);
+      setUserToDelete(null);
       await fetchUsers();
-    } catch (err: unknown) {
-      setError((err && typeof err === 'object' && 'response' in err ? (err as {response?: {data?: {error?: {message?: string}}}}).response?.data?.error?.message : undefined) || 'Failed to delete user');
     } finally {
       setDeletingUserId(null);
     }
@@ -179,7 +182,7 @@ export const Users = () => {
                             Edit
                           </button>
                           <button
-                            onClick={() => handleDeleteUser(user.id)}
+                            onClick={() => setUserToDelete(user)}
                             disabled={deletingUserId === user.id}
                             className="text-red-600 hover:text-red-900 disabled:opacity-50 disabled:cursor-not-allowed"
                           >
@@ -210,6 +213,17 @@ export const Users = () => {
           onSubmit={(payload) => handleUpdateUser(editingUser.id, payload)}
         />
       )}
+
+      <DeleteConfirmDialog
+        isOpen={userToDelete !== null}
+        onClose={() => setUserToDelete(null)}
+        onConfirm={confirmDeleteUser}
+        title="Delete User"
+        message="Delete this user account? They will no longer be able to sign in."
+        itemName={userToDelete?.username}
+        confirmText="Delete User"
+        outcomeNote="This is recorded in the audit trail."
+      />
     </Layout>
   );
 };

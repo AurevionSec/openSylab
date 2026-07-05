@@ -1,4 +1,4 @@
-import { createContext, useCallback, useEffect, useRef, useState } from 'react';
+import { createContext, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
 export type ToastKind = 'success' | 'error' | 'info';
@@ -45,15 +45,16 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
     [dismiss]
   );
 
-  const apiRef = useRef<ToastApi>({
-    success: (m) => push('success', m),
-    error: (m) => push('error', m),
-    info: (m) => push('info', m),
-  });
-  // Keep the closures current without changing the stable object identity.
-  apiRef.current.success = (m) => push('success', m);
-  apiRef.current.error = (m) => push('error', m);
-  apiRef.current.info = (m) => push('info', m);
+  // push is stable (useCallback over the stable dismiss), so the api object is
+  // built once and never needs re-mutation during render.
+  const api = useMemo<ToastApi>(
+    () => ({
+      success: (m) => push('success', m),
+      error: (m) => push('error', m),
+      info: (m) => push('info', m),
+    }),
+    [push]
+  );
 
   useEffect(() => {
     const pending = timers.current;
@@ -69,7 +70,7 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <ToastContext.Provider value={apiRef.current}>
+    <ToastContext.Provider value={api}>
       {children}
       <div
         role="status"

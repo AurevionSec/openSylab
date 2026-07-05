@@ -37,7 +37,6 @@ export const Samples = () => {
   const [selectedSampleId, setSelectedSampleId] = useState<string | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [sampleToDelete, setSampleToDelete] = useState<Sample | null>(null);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
   const itemsPerPage = 20;
 
   const { data: samples, total: totalSamples, loading, error, refetch } = useEntityList(
@@ -83,18 +82,13 @@ export const Samples = () => {
     setIsDeleteDialogOpen(true);
   };
 
+  // Errors propagate to DeleteConfirmDialog, which shows them inline and keeps
+  // itself open; on success the dialog calls onClose (which clears the state).
   const handleDeleteConfirm = async () => {
     if (!sampleToDelete) return;
-    setDeleteError(null);
-    try {
-      await deleteSample(sampleToDelete.sample_id);
-      toast.success(`Sample ${sampleToDelete.sample_id} archived`);
-      setIsDeleteDialogOpen(false);
-      setSampleToDelete(null);
-      refetch();
-    } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : 'Delete failed');
-    }
+    await deleteSample(sampleToDelete.sample_id);
+    toast.success(`Sample ${sampleToDelete.sample_id} archived`);
+    refetch();
   };
 
   return (
@@ -161,7 +155,7 @@ export const Samples = () => {
             </div>
           </div>
 
-          <ErrorBanner message={deleteError || error || null} />
+          <ErrorBanner message={error || null} onRetry={error ? refetch : undefined} />
 
           {loading ? (
             <div className="flex items-center justify-center py-12">
@@ -376,9 +370,11 @@ export const Samples = () => {
           setSampleToDelete(null);
         }}
         onConfirm={handleDeleteConfirm}
-        title="Delete Sample"
-        message="Are you sure you want to delete this sample? This will permanently remove all associated data."
+        title="Archive Sample"
+        message="Archive this sample? It will be hidden from active lists."
         itemName={sampleToDelete?.sample_id}
+        confirmText="Archive"
+        outcomeNote="The sample is marked ARCHIVED (soft-delete). Its audit history is retained."
       />
     </Layout>
   );

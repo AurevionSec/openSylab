@@ -30,7 +30,6 @@ export const Results = () => {
   const [selectedResult, setSelectedResult] = useState<TestResult | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [resultToDelete, setResultToDelete] = useState<TestResult | null>(null);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
   const itemsPerPage = 20;
 
   const { data: results, total: totalResults, loading, error, refetch } = useEntityList(
@@ -91,18 +90,12 @@ export const Results = () => {
     setIsDeleteDialogOpen(true);
   };
 
+  // Errors propagate to DeleteConfirmDialog (shown inline; dialog stays open).
   const handleDeleteConfirm = async () => {
     if (!resultToDelete) return;
-    setDeleteError(null);
-    try {
-      await deleteResult(resultToDelete.result_id);
-      toast.success(`Result ${resultToDelete.result_id} rejected`);
-      setIsDeleteDialogOpen(false);
-      setResultToDelete(null);
-      refetch();
-    } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : 'Delete failed');
-    }
+    await deleteResult(resultToDelete.result_id);
+    toast.success(`Result ${resultToDelete.result_id} rejected`);
+    refetch();
   };
 
   return (
@@ -175,7 +168,7 @@ export const Results = () => {
               </div>
             </div>
 
-            <ErrorBanner message={deleteError || error || null} />
+            <ErrorBanner message={error || null} onRetry={error ? refetch : undefined} />
 
             {loading ? (
               <div className="flex items-center justify-center py-12">
@@ -370,9 +363,11 @@ export const Results = () => {
           setResultToDelete(null);
         }}
         onConfirm={handleDeleteConfirm}
-        title="Delete Test Result"
-        message="Are you sure you want to delete this test result? This will permanently remove all associated data."
+        title="Reject Test Result"
+        message="Reject this test result?"
         itemName={resultToDelete?.result_id}
+        confirmText="Reject"
+        outcomeNote="The result is marked REJECTED (soft-delete). Its audit history is retained."
       />
     </Layout>
   );
