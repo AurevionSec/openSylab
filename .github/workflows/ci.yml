@@ -58,6 +58,12 @@ jobs:
       - name: Security audit
         run: npm audit --audit-level=high
 
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
       - name: Build
         run: npm run build
         env:

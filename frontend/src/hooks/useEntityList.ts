@@ -49,7 +49,7 @@ export function useEntityList<T>(
         }
       })
       .finally(() => { if (mountedRef.current) setLoading(false); });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, []);
 
   useEffect(() => {
