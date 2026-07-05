@@ -27,7 +27,11 @@ export function useEntityList<T>(
   const [error, setError] = useState('');
 
   const loadFnRef = useRef(fetchFn);
-  loadFnRef.current = fetchFn;
+  // Keep the ref pointing at the latest fetchFn without writing it during
+  // render (refs must only be mutated in effects/handlers).
+  useEffect(() => {
+    loadFnRef.current = fetchFn;
+  });
 
   const mountedRef = useRef(true);
   useEffect(() => {
