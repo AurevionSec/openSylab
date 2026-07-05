@@ -77,7 +77,7 @@ docker compose logs -f
 ### 3. Access the Application
 
 - **Frontend (Web UI)**: http://localhost
-- **Backend (API)**: http://localhost:8080/api/v1
+- **Backend (API)**: http://localhost:9080/api/v1
 
 ### 4. Default Credentials
 
@@ -552,7 +552,7 @@ docker compose ps
 
 ```bash
 # Backend
-curl http://localhost:8080/api/v1/health
+curl http://localhost:9080/api/v1/health
 
 # Frontend
 curl http://localhost/

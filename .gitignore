@@ -116,3 +116,7 @@ CLAUDE.md
 test_csv_*.csv
 __pycache__/
 *.pyc
+
+# Local secrets (see .env.example)
+.env
+!.env.example

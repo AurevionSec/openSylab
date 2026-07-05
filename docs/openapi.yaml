@@ -13,7 +13,7 @@ info:
 
     **Audit Trail:** All write operations on samples, orders, results, and users
     produce an immutable HMAC-SHA256 audit entry (ISO 15189).
-  version: "0.9.0"
+  version: "1.0.0"
   contact:
     name: OpenSylab Project
   license:

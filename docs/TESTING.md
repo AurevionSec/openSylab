@@ -179,7 +179,7 @@ Aktuell getestet:
 - ✅ Frontend Components (46 Tests via Vitest + React Testing Library)
 
 Noch nicht getestet:
-- ⏳ End-to-End Workflows (Playwright/Cypress — geplant für v1.0.x)
+- ⏳ End-to-End Workflows (Playwright, e2e-Suite + CI-Job vorhanden)
 - ⏳ Performance unter Last
 - ⏳ CLI-Interface (schwierig automatisch zu testen)
 

@@ -346,7 +346,7 @@ export VITE_API_URL=http://localhost:8080/api/v1
 Ab v0.8.0 wird eine Konfigurationsdatei unterstützt:
 
 ```ini
-# opensylab.conf (geplant für v0.8.0)
+# opensylab.conf (verfügbar seit v0.8.0)
 [database]
 path = /var/lib/opensylab/opensylab.db
 
