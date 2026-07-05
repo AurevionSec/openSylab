@@ -15,16 +15,18 @@ feature build. For a medical LIMS, "1.0" means production-ready + ISO 15189 stor
 
 ### 🔴 P0 — 1.0 blockers
 
-- [~] **Split `ApiServer.cpp` God-file** — `src/api/ApiServer.cpp`.
-      **Phase A largely done (PR #48):** `handleRequest` decomposed from 2781 →
-      1100 lines by extracting inline route branches into per-route handler
-      methods on `ApiRouter`, threading a shared `RouteContext`. 7 clusters
-      extracted (health/openapi · audit/stats · HL7/FHIR · MFA · users ·
-      sample/order/result GET · sample/order/result POST), each behaviour-
-      preserving, build+228-tests green.
-      **Remaining:** the 3 PUT/update routes (sample/order/result) → then
-      `handleRequest` is pure dispatch (~300 lines).
-      **Phase B (optional):** group the extracted methods into separate
+- [x] **Split `ApiServer.cpp` God-file — Phase A COMPLETE** (PRs #48, #62, #63).
+      `handleRequest` decomposed from **2781 → 440 lines (−84%)** by extracting
+      every inline route branch into a per-route handler method on `ApiRouter`,
+      threading a shared `RouteContext` (write handlers also receive the parsed
+      body map). All ~30 routes extracted (health/openapi · audit/stats ·
+      HL7/FHIR · MFA · users · sample/order/result × GET/POST/PUT/DELETE); each
+      step behaviour-preserving, build+tests green, gatekeeper-reviewed.
+      `handleRequest` is now a dispatcher + shared auth/parse preamble.
+      Added HTTP-level regression tests for the compliance-critical branches
+      (immutability 409, status-transition rejections, ADMIN-only VALIDATE 403,
+      delete guards) — 235 tests green.
+      **Phase B (optional, v1.x):** group the extracted methods into separate
       `SampleHandler`/`OrderHandler`/… classes.
 - [~] **Release engineering**
       - [ ] Version bump 0.9.0 → 1.0.0 in `CMakeLists.txt` (C++ SSOT) **and**
@@ -330,4 +332,4 @@ With a recognized certificate "Certified OpenSylab Administrator".
 
 ---
 
-*Last updated: 2026-07-05 — synced after PRs #46/#47/#48 merged (security, governance, ApiServer Phase-A refactor)*
+*Last updated: 2026-07-05 — ApiServer Phase A complete (#48/#62/#63) + compliance test coverage; docs synced*

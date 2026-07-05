@@ -802,6 +802,261 @@ bool test_api_WriteResultCreateAndUpdate() {
   return true;
 }
 
+// --- Compliance-critical branches (ISO 15189): immutability guards, status
+// --- transitions, ADMIN-only validation, and delete guards. These paths were
+// --- relocated into per-route handler methods during the handleRequest
+// --- decomposition and previously had no HTTP-level regression coverage.
+
+namespace {
+constexpr const char *kOpKey = "testkey-000000000000000000000000000";
+
+// Persist an entity's status directly at the DB layer, bypassing the API's
+// transition rules, to set up a precondition state for a test.
+bool forceSampleStatus(Database &db, const std::string &sampleId,
+                       Sample::Status status) {
+  auto s = db.getSampleByBarcode(sampleId);
+  if (!s) return false;
+  s->setStatus(status);
+  return db.updateSample(*s, "setup");
+}
+bool forceOrderStatus(Database &db, const std::string &orderId,
+                      Order::Status status) {
+  auto o = db.getOrderByOrderId(orderId);
+  if (!o) return false;
+  o->setStatus(status);
+  return db.updateOrder(*o, "setup");
+}
+bool forceResultStatus(Database &db, const std::string &resultId,
+                       TestResult::Status status) {
+  auto r = db.getTestResultByResultId(resultId);
+  if (!r) return false;
+  r->setStatus(status);
+  return db.updateTestResult(*r, "setup");
+}
+} // namespace
+
+// PUT on a VALIDATED sample must be rejected as immutable (409).
+bool test_api_UpdateSampleImmutableWhenValidated() {
+  std::string dbPath = uniqueDbPath();
+  auto db = std::make_shared<Database>(dbPath);
+  ASSERT_TRUE(db->open());
+  ASSERT_TRUE(db->initializeSchema());
+  ASSERT_TRUE(db->upsertApiKey(kOpKey, true));
+
+  Sample sample("S_IMMUT", "P1");
+  ASSERT_TRUE(db->createSample(sample));
+  ASSERT_TRUE(forceSampleStatus(*db, "S_IMMUT", Sample::Status::VALIDATED));
+
+  ApiRouter router(db);
+  ApiRequest req;
+  req.method = "PUT";
+  req.path = "/api/v1/samples/S_IMMUT";
+  req.headers["x-api-key"] = kOpKey;
+  req.headers["content-type"] = "application/json";
+  req.body = "{\"patient_id\":\"P2\"}";
+
+  ApiResponse res = router.handleRequest(req);
+  ASSERT_EQ(res.status, 409);
+  ASSERT_NE(res.body.find("immutable"), std::string::npos);
+
+  db->close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+// An illegal sample status transition (REGISTERED -> ANALYZED) must yield 409.
+bool test_api_UpdateSampleInvalidStatusTransition() {
+  std::string dbPath = uniqueDbPath();
+  auto db = std::make_shared<Database>(dbPath);
+  ASSERT_TRUE(db->open());
+  ASSERT_TRUE(db->initializeSchema());
+  ASSERT_TRUE(db->upsertApiKey(kOpKey, true));
+
+  Sample sample("S_TRANS", "P1"); // defaults to REGISTERED
+  ASSERT_TRUE(db->createSample(sample));
+
+  ApiRouter router(db);
+  ApiRequest req;
+  req.method = "PUT";
+  req.path = "/api/v1/samples/S_TRANS";
+  req.headers["x-api-key"] = kOpKey;
+  req.headers["content-type"] = "application/json";
+  req.body = "{\"patient_id\":\"P1\",\"status\":\"ANALYZED\"}";
+
+  ApiResponse res = router.handleRequest(req);
+  ASSERT_EQ(res.status, 409);
+  ASSERT_NE(res.body.find("Invalid status transition"), std::string::npos);
+
+  db->close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+// Non-ADMIN (OPERATOR key) may not set an order to VALIDATED (403).
+bool test_api_UpdateOrderValidateRequiresAdmin() {
+  std::string dbPath = uniqueDbPath();
+  auto db = std::make_shared<Database>(dbPath);
+  ASSERT_TRUE(db->open());
+  ASSERT_TRUE(db->initializeSchema());
+  ASSERT_TRUE(db->upsertApiKey(kOpKey, true));
+
+  Sample sample("S_OVAL", "P1");
+  ASSERT_TRUE(db->createSample(sample));
+  Order order("O_OVAL", "S_OVAL", "PCR");
+  ASSERT_TRUE(db->createOrder(order));
+  // COMPLETED -> VALIDATED is a legal transition, so only the ADMIN gate blocks.
+  ASSERT_TRUE(forceOrderStatus(*db, "O_OVAL", Order::Status::COMPLETED));
+
+  ApiRouter router(db);
+  ApiRequest req;
+  req.method = "PUT";
+  req.path = "/api/v1/orders/O_OVAL";
+  req.headers["x-api-key"] = kOpKey;
+  req.headers["content-type"] = "application/json";
+  req.body =
+      "{\"sample_id\":\"S_OVAL\",\"test_type\":\"PCR\",\"status\":\"VALIDATED\"}";
+
+  ApiResponse res = router.handleRequest(req);
+  ASSERT_EQ(res.status, 403);
+
+  db->close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+// Non-ADMIN (OPERATOR key) may not validate (release) a result (403).
+bool test_api_UpdateResultValidateRequiresAdmin() {
+  std::string dbPath = uniqueDbPath();
+  auto db = std::make_shared<Database>(dbPath);
+  ASSERT_TRUE(db->open());
+  ASSERT_TRUE(db->initializeSchema());
+  ASSERT_TRUE(db->upsertApiKey(kOpKey, true));
+
+  Sample sample("S_RVAL", "P1");
+  ASSERT_TRUE(db->createSample(sample));
+  Order order("O_RVAL", "S_RVAL", "PCR");
+  ASSERT_TRUE(db->createOrder(order));
+  auto createdOrder = db->getOrderByOrderId("O_RVAL");
+  ASSERT_TRUE(createdOrder != nullptr);
+  TestResult result("R_RVAL", createdOrder->getId(), "GLU");
+  result.setValue("1.0");
+  result.setUnit("mg/L");
+  result.setStatus(TestResult::Status::ENTERED); // ENTERED -> VALIDATED legal
+  ASSERT_TRUE(db->createTestResult(result));
+
+  ApiRouter router(db);
+  ApiRequest req;
+  req.method = "PUT";
+  req.path = "/api/v1/results/R_RVAL";
+  req.headers["x-api-key"] = kOpKey;
+  req.headers["content-type"] = "application/json";
+  req.body = "{\"test_parameter\":\"GLU\",\"value\":\"1.0\",\"unit\":\"mg/L\","
+             "\"status\":\"VALIDATED\"}";
+
+  ApiResponse res = router.handleRequest(req);
+  ASSERT_EQ(res.status, 403);
+
+  db->close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+// Deleting a sample that still has a non-cancelled order must yield 409.
+bool test_api_DeleteSampleBlockedByActiveOrders() {
+  std::string dbPath = uniqueDbPath();
+  auto db = std::make_shared<Database>(dbPath);
+  ASSERT_TRUE(db->open());
+  ASSERT_TRUE(db->initializeSchema());
+  ASSERT_TRUE(db->upsertApiKey(kOpKey, true));
+
+  Sample sample("S_DELBLK", "P1"); // REGISTERED (deletable status)
+  ASSERT_TRUE(db->createSample(sample));
+  Order order("O_DELBLK", "S_DELBLK", "PCR"); // REQUESTED = active
+  ASSERT_TRUE(db->createOrder(order));
+
+  ApiRouter router(db);
+  ApiRequest req;
+  req.method = "DELETE";
+  req.path = "/api/v1/samples/S_DELBLK";
+  req.headers["x-api-key"] = kOpKey;
+
+  ApiResponse res = router.handleRequest(req);
+  ASSERT_EQ(res.status, 409);
+  ASSERT_NE(res.body.find("active orders"), std::string::npos);
+
+  db->close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+// Deleting an already-REJECTED result is idempotent (204).
+bool test_api_DeleteResultRejectedIsIdempotent() {
+  std::string dbPath = uniqueDbPath();
+  auto db = std::make_shared<Database>(dbPath);
+  ASSERT_TRUE(db->open());
+  ASSERT_TRUE(db->initializeSchema());
+  ASSERT_TRUE(db->upsertApiKey(kOpKey, true));
+
+  Sample sample("S_RREJ", "P1");
+  ASSERT_TRUE(db->createSample(sample));
+  Order order("O_RREJ", "S_RREJ", "PCR");
+  ASSERT_TRUE(db->createOrder(order));
+  auto createdOrder = db->getOrderByOrderId("O_RREJ");
+  ASSERT_TRUE(createdOrder != nullptr);
+  TestResult result("R_RREJ", createdOrder->getId(), "GLU");
+  result.setValue("1.0");
+  result.setUnit("mg/L");
+  ASSERT_TRUE(db->createTestResult(result));
+  ASSERT_TRUE(forceResultStatus(*db, "R_RREJ", TestResult::Status::REJECTED));
+
+  ApiRouter router(db);
+  ApiRequest req;
+  req.method = "DELETE";
+  req.path = "/api/v1/results/R_RREJ";
+  req.headers["x-api-key"] = kOpKey;
+
+  ApiResponse res = router.handleRequest(req);
+  ASSERT_EQ(res.status, 204);
+
+  db->close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
+// Deleting a VALIDATED result must be rejected as immutable (409).
+bool test_api_DeleteResultValidatedBlocked() {
+  std::string dbPath = uniqueDbPath();
+  auto db = std::make_shared<Database>(dbPath);
+  ASSERT_TRUE(db->open());
+  ASSERT_TRUE(db->initializeSchema());
+  ASSERT_TRUE(db->upsertApiKey(kOpKey, true));
+
+  Sample sample("S_RVALDEL", "P1");
+  ASSERT_TRUE(db->createSample(sample));
+  Order order("O_RVALDEL", "S_RVALDEL", "PCR");
+  ASSERT_TRUE(db->createOrder(order));
+  auto createdOrder = db->getOrderByOrderId("O_RVALDEL");
+  ASSERT_TRUE(createdOrder != nullptr);
+  TestResult result("R_RVALDEL", createdOrder->getId(), "GLU");
+  result.setValue("1.0");
+  result.setUnit("mg/L");
+  ASSERT_TRUE(db->createTestResult(result));
+  ASSERT_TRUE(forceResultStatus(*db, "R_RVALDEL", TestResult::Status::VALIDATED));
+
+  ApiRouter router(db);
+  ApiRequest req;
+  req.method = "DELETE";
+  req.path = "/api/v1/results/R_RVALDEL";
+  req.headers["x-api-key"] = kOpKey;
+
+  ApiResponse res = router.handleRequest(req);
+  ASSERT_EQ(res.status, 409);
+
+  db->close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
 void registerApiTests() {
   registerTest("Api::SerializeSampleJson", test_api_SerializeSampleJson);
   registerTest("Api::SerializeOrderJson", test_api_SerializeOrderJson);
@@ -842,4 +1097,18 @@ void registerApiTests() {
                test_api_WriteOrderCreateAndUpdate);
   registerTest("Api::WriteResultCreateAndUpdate",
                test_api_WriteResultCreateAndUpdate);
+  registerTest("Api::UpdateSampleImmutableWhenValidated",
+               test_api_UpdateSampleImmutableWhenValidated);
+  registerTest("Api::UpdateSampleInvalidStatusTransition",
+               test_api_UpdateSampleInvalidStatusTransition);
+  registerTest("Api::UpdateOrderValidateRequiresAdmin",
+               test_api_UpdateOrderValidateRequiresAdmin);
+  registerTest("Api::UpdateResultValidateRequiresAdmin",
+               test_api_UpdateResultValidateRequiresAdmin);
+  registerTest("Api::DeleteSampleBlockedByActiveOrders",
+               test_api_DeleteSampleBlockedByActiveOrders);
+  registerTest("Api::DeleteResultRejectedIsIdempotent",
+               test_api_DeleteResultRejectedIsIdempotent);
+  registerTest("Api::DeleteResultValidatedBlocked",
+               test_api_DeleteResultValidatedBlocked);
 }
