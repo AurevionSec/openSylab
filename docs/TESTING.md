@@ -2,12 +2,12 @@
 
 ## Übersicht
 
-OpenSylab v0.7.0 enthält ein einfaches, selbst implementiertes Test-Framework ohne externe Abhängigkeiten. Dies ermöglicht schnelles Testen ohne komplexe Setup-Prozesse. Die Test-Suite umfasst 181 automatisierte Backend Unit-Tests.
+OpenSylab v1.0.0 enthält ein einfaches, selbst implementiertes Test-Framework ohne externe Abhängigkeiten. Dies ermöglicht schnelles Testen ohne komplexe Setup-Prozesse. Die Test-Suite umfasst 235 automatisierte Backend Unit-Tests (inkl. API-Layer-Compliance-Tests) sowie 46 Frontend-Tests via Vitest.
 
-**Version:** 0.7.0
-**Last Updated:** 2026-05-11
-**Backend Tests:** 181 Unit-Tests
-**Frontend Tests:** Geplant für v0.8.0
+**Version:** 1.0.0
+**Last Updated:** 2026-07-05
+**Backend Tests:** 235 Unit-Tests
+**Frontend Tests:** 46 Tests (Vitest + React Testing Library)
 
 ## Test-Framework
 
@@ -143,10 +143,10 @@ ctest --output-on-failure
 
 ```
 ╔═══════════════════════════════════════════════════════════╗
-║          OpenSylab v0.7.0 - Unit Test Suite               ║
+║          OpenSylab v1.0.0 - Unit Test Suite               ║
 ╚═══════════════════════════════════════════════════════════╝
 
-Running 62 tests...
+Running 235 tests...
 
 TEST: Sample::DefaultConstructor... ✓ PASSED
 TEST: Sample::ParameterizedConstructor... ✓ PASSED
@@ -155,9 +155,9 @@ TEST: CsvResultImport::ImportMixedValidAndInvalid... ✓ PASSED
 
 ═══════════════════════════════════════════════════════════
 Results:
-  ✓ Passed: 62
+  ✓ Passed: 235
   ✗ Failed: 0
-  Total:   62
+  Total:   235
 ═══════════════════════════════════════════════════════════
 ```
 
@@ -171,14 +171,16 @@ Aktuell getestet:
 - ✅ Audit-Trail Logging
 - ✅ Benutzer-Authentifizierung
 - ✅ Fehlerbehandlung
+- ✅ API-Endpoints (Read/Write via `ApiRouter::handleRequest`, inkl.
+  ISO-15189-Compliance-Zweige: Immutability-409, Status-Transitionen,
+  ADMIN-only-VALIDATE-403, Delete-Guards)
+- ✅ JWT-Authentifizierung & RBAC (Auth-Required- und abgelehnte-Rollen-Fälle)
+- ✅ HL7/FHIR-Parser, Statistik-Aggregation, Migrations, Audit-Hash-Chain
+- ✅ Frontend Components (46 Tests via Vitest + React Testing Library)
 
 Noch nicht getestet:
-- ⏳ API-Endpoints (geplant für v0.8.0 - Integration Tests)
-- ⏳ JWT-Authentifizierung (geplant für v0.8.0)
-- ⏳ Role-Based Access Control (geplant für v0.8.0)
-- ⏳ Frontend Components (geplant für v0.8.0 - Jest + React Testing Library)
-- ⏳ End-to-End Workflows (geplant für v0.9.0)
-- ⏳ Performance unter Last (geplant für v0.9.0)
+- ⏳ End-to-End Workflows (Playwright/Cypress — geplant für v1.0.x)
+- ⏳ Performance unter Last
 - ⏳ CLI-Interface (schwierig automatisch zu testen)
 
 ## Neue Tests hinzufügen
