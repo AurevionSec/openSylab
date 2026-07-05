@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.15)
 
 # Projektdefinition
 project(OpenSylab
-    VERSION 0.9.0
+    VERSION 1.0.0
     DESCRIPTION "Open Source Laboratory Information Management System (LIMS)"
     LANGUAGES CXX
 )

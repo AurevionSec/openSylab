@@ -2,11 +2,11 @@
 
 **Open-source LIMS for medical diagnostics — ISO 15189-compliant, self-hosted, MIT-licensed.**
 
-[![Version](https://img.shields.io/badge/version-0.9.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.0-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-green)](#license)
 [![Tests](https://img.shields.io/badge/tests-228%20passing-brightgreen)](#tests)
 [![C++](https://img.shields.io/badge/C%2B%2B-17-orange)](src/)
-[![React](https://img.shields.io/badge/React-18-61dafb)](frontend/)
+[![React](https://img.shields.io/badge/React-19-61dafb)](frontend/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue)](frontend/src/)
 [![Security](https://img.shields.io/badge/security-PBKDF2%20%7C%20JWT%20%7C%20TOTP%20%7C%20HMAC--chain-red)](#security)
 
@@ -110,7 +110,7 @@ OpenSylab is **not** suitable for: high-throughput laboratories with >100 concur
 
 ---
 
-## Features — v0.9.0
+## Features — v1.0.0
 
 ### Laboratory Data Management
 | Feature | Description |

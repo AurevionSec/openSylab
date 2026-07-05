@@ -2,10 +2,20 @@
 
 All notable changes to this project are documented in this file.
 
-## [Unreleased]
+## [1.0.0] - 2026-07-05
 
-Changes landed on `main` since the v0.9.0 release, tracked toward v1.0.0
-(see `TODO.md` → *v1.0.0 Release Roadmap*).
+First 1.0 release. Consolidates the post-0.9.0 hardening, governance,
+architecture, and test work.
+
+### Architecture
+
+- **`ApiServer.cpp` God-function decomposition (Phase A)** (#48, #62, #63) —
+  `ApiRouter::handleRequest` reduced from **2781 → 440 lines** by extracting
+  every inline route branch into a dedicated per-route handler method, threading
+  a shared `RouteContext` (write handlers also receive the parsed body map).
+  All ~30 routes extracted (health/openapi, audit, stats, HL7/FHIR, MFA, users,
+  and samples/orders/results across GET/POST/PUT/DELETE). Behaviour-preserving:
+  each step verified by an independent review plus the full unit-test suite.
 
 ### Security
 
@@ -42,6 +52,14 @@ Changes landed on `main` since the v0.9.0 release, tracked toward v1.0.0
 - Corrected the `/api/v1/health` response example to
   `{"status":"ok","service":"opensylab-lims"}` (the endpoint returns no
   `version` field).
+
+### Tests
+
+- **API-layer compliance coverage** (#64) — HTTP-level regression tests through
+  `ApiRouter::handleRequest` for the ISO 15189 branches relocated during the
+  refactor: immutability guards (409), invalid status-transition rejection (409),
+  ADMIN-only VALIDATE enforcement (403), and delete guards (active-orders 409,
+  idempotent REJECTED 204, VALIDATED 409). Suite now at 235 unit tests.
 
 ## [0.9.0] - 2026-05-25
 
