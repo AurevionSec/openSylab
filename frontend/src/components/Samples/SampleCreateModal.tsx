@@ -25,10 +25,13 @@ export const SampleCreateModal = ({ isOpen, onClose, onSuccess }: SampleCreateMo
   const [error, setError] = useState('');
 
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
+  const handleChange = useCallback((field: keyof typeof formData, value: string) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  }, []);
   const handleBarcodeDetected = useCallback((code: string) => {
     handleChange('sample_id', code);
     setShowBarcodeScanner(false);
-  }, []);
+  }, [handleChange]);
   const { isSupported: barcodeSupported, isScanning, error: barcodeError, videoRef, startScan, stopScan } = useBarcode({
     onDetected: handleBarcodeDetected,
   });
@@ -81,10 +84,6 @@ export const SampleCreateModal = ({ isOpen, onClose, onSuccess }: SampleCreateMo
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleChange = (field: keyof typeof formData, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   if (!isOpen) return null;

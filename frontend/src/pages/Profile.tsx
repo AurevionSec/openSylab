@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Layout } from '../components/Layout/Layout';
 import { Card } from '../components/common/Card';
@@ -28,14 +28,7 @@ export const Profile = () => {
     return () => { mountedRef.current = false; };
   }, []);
 
-  useEffect(() => {
-    if (isForceChange) {
-      setIsChangingPassword(true);
-    }
-    fetchProfile();
-  }, [isForceChange]);
-
-  const fetchProfile = async () => {
+  const fetchProfile = useCallback(async () => {
     try {
       setLoading(true);
       const data = await getCurrentUser();
@@ -47,7 +40,14 @@ export const Profile = () => {
     } finally {
       if (mountedRef.current) setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (isForceChange) {
+      setIsChangingPassword(true);
+    }
+    fetchProfile();
+  }, [isForceChange, fetchProfile]);
 
   if (loading) {
     return (
