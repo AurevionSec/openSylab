@@ -5,6 +5,7 @@ import { Button } from '../common/Button';
 import { updateResult } from '../../services/results';
 import type { TestResult } from '../../types/result';
 import { RESULT_STATUSES, RESULT_FLAGS, RESULT_TRANSITIONS } from '../../utils/constants';
+import { computeFlag } from '../../utils/resultFlag';
 
 interface ResultEditModalProps {
   isOpen: boolean;
@@ -29,6 +30,7 @@ export const ResultEditModal = ({ isOpen, onClose, result, onSuccess }: ResultEd
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [flagManuallySet, setFlagManuallySet] = useState(false);
 
   useEffect(() => {
     if (!isOpen || !result) return;
@@ -45,7 +47,22 @@ export const ResultEditModal = ({ isOpen, onClose, result, onSuccess }: ResultEd
       reviewed_by: result.reviewed_by || '',
       notes: result.notes || '',
     });
+    setFlagManuallySet(false);
   }, [isOpen, result]);
+
+  // Keep the flag consistent with the value/range on edit (unless the user has
+  // manually overridden it) — a corrected value must not keep a stale flag.
+  useEffect(() => {
+    if (!formData.value || flagManuallySet) return;
+    const autoFlag = computeFlag(
+      formData.value,
+      formData.reference_min,
+      formData.reference_max
+    );
+    setFormData((prev) =>
+      prev.flag === autoFlag ? prev : { ...prev, flag: autoFlag }
+    );
+  }, [formData.value, formData.reference_min, formData.reference_max, flagManuallySet]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -80,6 +97,7 @@ export const ResultEditModal = ({ isOpen, onClose, result, onSuccess }: ResultEd
   };
 
   const handleChange = (field: keyof typeof formData, value: string) => {
+    if (field === 'flag') setFlagManuallySet(true);
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -148,7 +166,7 @@ export const ResultEditModal = ({ isOpen, onClose, result, onSuccess }: ResultEd
               <h3 className="text-lg font-semibold text-gray-900 mb-3">Test Parameters</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Input type="text" label="Parameter *" value={formData.parameter} onChange={(e) => handleChange('parameter', e.target.value)} required />
-                <Input type="text" label="Value *" value={formData.value} onChange={(e) => handleChange('value', e.target.value)} required />
+                <Input type="text" label="Value *" inputMode="decimal" value={formData.value} onChange={(e) => handleChange('value', e.target.value)} required />
                 <Input type="text" label="Unit" value={formData.unit} onChange={(e) => handleChange('unit', e.target.value)} />
               </div>
             </div>
@@ -156,8 +174,8 @@ export const ResultEditModal = ({ isOpen, onClose, result, onSuccess }: ResultEd
             <div className="border-b border-gray-200 pb-4">
               <h3 className="text-lg font-semibold text-gray-900 mb-3">Reference Range</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input type="text" label="Min Value" value={formData.reference_min} onChange={(e) => handleChange('reference_min', e.target.value)} />
-                <Input type="text" label="Max Value" value={formData.reference_max} onChange={(e) => handleChange('reference_max', e.target.value)} />
+                <Input type="text" label="Min Value" inputMode="decimal" value={formData.reference_min} onChange={(e) => handleChange('reference_min', e.target.value)} />
+                <Input type="text" label="Max Value" inputMode="decimal" value={formData.reference_max} onChange={(e) => handleChange('reference_max', e.target.value)} />
               </div>
             </div>
 
