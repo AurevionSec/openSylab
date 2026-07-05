@@ -125,6 +125,9 @@ private:
   ApiResponse handleUpdateResult(
       const RouteContext &ctx,
       const std::unordered_map<std::string, std::string> &payload) const;
+  ApiResponse handleDeleteSample(const RouteContext &ctx) const;
+  ApiResponse handleDeleteOrder(const RouteContext &ctx) const;
+  ApiResponse handleDeleteResult(const RouteContext &ctx) const;
 
   // JWT validation helper
   std::optional<auth::JwtAuth::TokenPayload>

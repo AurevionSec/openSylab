@@ -2964,6 +2964,164 @@ ApiResponse ApiRouter::handleUpdateResult(
   }
 }
 
+ApiResponse ApiRouter::handleDeleteSample(const RouteContext &ctx) const {
+  const std::string sampleId =
+      ctx.path.substr(std::string("/api/v1/samples/").size());
+  if (sampleId.empty()) {
+    return makeError(400, "validation_error", "Missing sample_id",
+                     "Provide sample_id in URL path.");
+  }
+  if (sampleId.size() > 64) {
+    return makeError(400, "validation_error", "Invalid sample_id",
+                     "sample_id must not exceed 64 characters.");
+  }
+  auto existing = database_->getSampleByBarcode(sampleId);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  if (!existing) {
+    return makeError(404, "not_found", "Sample not found",
+                     "Verify the sample_id.");
+  }
+
+  {
+    const auto s = existing->getStatus();
+    if (s == core::Sample::Status::ARCHIVED) {
+      return makeError(409, "conflict", "Sample already archived",
+                       "Sample is in terminal state.");
+    }
+    if (s == core::Sample::Status::IN_ANALYSIS) {
+      return makeError(
+          409, "conflict", "Sample cannot be deleted",
+          "Sample is currently IN_ANALYSIS; complete or archive it first.");
+    }
+    if (s == core::Sample::Status::ANALYZED) {
+      return makeError(
+          409, "conflict", "Sample cannot be deleted",
+          "Sample has been ANALYZED; validate or archive it first.");
+    }
+    if (s == core::Sample::Status::VALIDATED) {
+      return makeError(409, "conflict", "Sample cannot be deleted",
+                       "VALIDATED samples are immutable (ISO 15189).");
+    }
+  }
+
+  // Pre-check: active orders block sample deletion (returns clean 409 vs
+  // DB-level error)
+  {
+    auto orders = database_->getOrdersBySampleId(existing->getSampleId());
+    for (const auto &ord : orders) {
+      if (ord->getStatus() != core::Order::Status::CANCELLED) {
+        return makeError(
+            409, "conflict", "Sample has active orders",
+            "Order " + ord->getOrderId() +
+                " must be cancelled before deleting the sample.");
+      }
+    }
+  }
+  if (!database_->deleteSample(existing->getId(), ctx.actor)) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+
+  return ApiResponse{204, "", "application/json"};
+}
+
+ApiResponse ApiRouter::handleDeleteOrder(const RouteContext &ctx) const {
+  const std::string orderId =
+      ctx.path.substr(std::string("/api/v1/orders/").size());
+  if (orderId.empty()) {
+    return makeError(400, "validation_error", "Missing order_id",
+                     "Provide order_id in URL path.");
+  }
+  if (orderId.size() > 64) {
+    return makeError(400, "validation_error", "Invalid order_id",
+                     "order_id must not exceed 64 characters.");
+  }
+  auto existing = database_->getOrderByOrderId(orderId);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  if (!existing) {
+    return makeError(404, "not_found", "Order not found",
+                     "Verify the order_id.");
+  }
+
+  {
+    const auto s = existing->getStatus();
+    if (s == core::Order::Status::CANCELLED) {
+      return makeError(409, "conflict", "Order already cancelled",
+                       "Order is in terminal state.");
+    }
+    if (s == core::Order::Status::VALIDATED ||
+        s == core::Order::Status::COMPLETED) {
+      return makeError(
+          409, "conflict", "Order cannot be cancelled",
+          "Only REQUESTED or IN_PROGRESS orders can be cancelled.");
+    }
+  }
+
+  // Pre-check: active results block cancellation (returns clean 409 vs
+  // DB-level error)
+  {
+    auto results = database_->getTestResultsByOrderId(existing->getId());
+    for (const auto &res : results) {
+      const auto rs = res->getStatus();
+      if (rs != core::TestResult::Status::VALIDATED &&
+          rs != core::TestResult::Status::REJECTED) {
+        return makeError(409, "conflict", "Order has active results",
+                         "Result " + res->getResultId() +
+                             " must be completed or rejected before "
+                             "cancelling the order.");
+      }
+    }
+  }
+  if (!database_->deleteOrder(existing->getId(), ctx.actor)) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+
+  return ApiResponse{204, "", "application/json"};
+}
+
+ApiResponse ApiRouter::handleDeleteResult(const RouteContext &ctx) const {
+  const std::string resultId =
+      ctx.path.substr(std::string("/api/v1/results/").size());
+  if (resultId.empty()) {
+    return makeError(400, "validation_error", "Missing result_id",
+                     "Provide result_id in URL path.");
+  }
+  if (resultId.size() > 64) {
+    return makeError(400, "validation_error", "Invalid result_id",
+                     "result_id must not exceed 64 characters.");
+  }
+  auto existing = database_->getTestResultByResultId(resultId);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  if (!existing) {
+    return makeError(404, "not_found", "Result not found",
+                     "Verify the result_id.");
+  }
+
+  {
+    const auto s = existing->getStatus();
+    if (s == core::TestResult::Status::REJECTED) {
+      // REJECTED = already soft-deleted; return 204 to make DELETE
+      // idempotent
+      return ApiResponse{204, "", "application/json"};
+    }
+    if (s == core::TestResult::Status::VALIDATED) {
+      return makeError(409, "conflict", "Result cannot be deleted",
+                       "VALIDATED results are immutable (ISO 15189).");
+    }
+  }
+
+  if (!database_->deleteTestResult(existing->getId(), ctx.actor)) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+
+  return ApiResponse{204, "", "application/json"};
+}
+
 ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
   if (!database_) {
     return makeError(500, "internal_error", "Database unavailable",
@@ -3276,161 +3434,15 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
   // DELETE endpoints
   if (isDelete) {
     if (path.rfind("/api/v1/samples/", 0) == 0) {
-      const std::string sampleId =
-          path.substr(std::string("/api/v1/samples/").size());
-      if (sampleId.empty()) {
-        return makeError(400, "validation_error", "Missing sample_id",
-                         "Provide sample_id in URL path.");
-      }
-      if (sampleId.size() > 64) {
-        return makeError(400, "validation_error", "Invalid sample_id",
-                         "sample_id must not exceed 64 characters.");
-      }
-      auto existing = database_->getSampleByBarcode(sampleId);
-      if (database_->hasError()) {
-        return makeDbErrorResponse(database_->getLastError());
-      }
-      if (!existing) {
-        return makeError(404, "not_found", "Sample not found",
-                         "Verify the sample_id.");
-      }
-
-      {
-        const auto s = existing->getStatus();
-        if (s == core::Sample::Status::ARCHIVED) {
-          return makeError(409, "conflict", "Sample already archived",
-                           "Sample is in terminal state.");
-        }
-        if (s == core::Sample::Status::IN_ANALYSIS) {
-          return makeError(
-              409, "conflict", "Sample cannot be deleted",
-              "Sample is currently IN_ANALYSIS; complete or archive it first.");
-        }
-        if (s == core::Sample::Status::ANALYZED) {
-          return makeError(
-              409, "conflict", "Sample cannot be deleted",
-              "Sample has been ANALYZED; validate or archive it first.");
-        }
-        if (s == core::Sample::Status::VALIDATED) {
-          return makeError(409, "conflict", "Sample cannot be deleted",
-                           "VALIDATED samples are immutable (ISO 15189).");
-        }
-      }
-
-      // Pre-check: active orders block sample deletion (returns clean 409 vs
-      // DB-level error)
-      {
-        auto orders = database_->getOrdersBySampleId(existing->getSampleId());
-        for (const auto &ord : orders) {
-          if (ord->getStatus() != core::Order::Status::CANCELLED) {
-            return makeError(
-                409, "conflict", "Sample has active orders",
-                "Order " + ord->getOrderId() +
-                    " must be cancelled before deleting the sample.");
-          }
-        }
-      }
-      if (!database_->deleteSample(existing->getId(), actor)) {
-        return makeDbErrorResponse(database_->getLastError());
-      }
-
-      return ApiResponse{204, "", "application/json"};
+      return handleDeleteSample(ctx);
     }
 
     if (path.rfind("/api/v1/orders/", 0) == 0) {
-      const std::string orderId =
-          path.substr(std::string("/api/v1/orders/").size());
-      if (orderId.empty()) {
-        return makeError(400, "validation_error", "Missing order_id",
-                         "Provide order_id in URL path.");
-      }
-      if (orderId.size() > 64) {
-        return makeError(400, "validation_error", "Invalid order_id",
-                         "order_id must not exceed 64 characters.");
-      }
-      auto existing = database_->getOrderByOrderId(orderId);
-      if (database_->hasError()) {
-        return makeDbErrorResponse(database_->getLastError());
-      }
-      if (!existing) {
-        return makeError(404, "not_found", "Order not found",
-                         "Verify the order_id.");
-      }
-
-      {
-        const auto s = existing->getStatus();
-        if (s == core::Order::Status::CANCELLED) {
-          return makeError(409, "conflict", "Order already cancelled",
-                           "Order is in terminal state.");
-        }
-        if (s == core::Order::Status::VALIDATED ||
-            s == core::Order::Status::COMPLETED) {
-          return makeError(
-              409, "conflict", "Order cannot be cancelled",
-              "Only REQUESTED or IN_PROGRESS orders can be cancelled.");
-        }
-      }
-
-      // Pre-check: active results block cancellation (returns clean 409 vs
-      // DB-level error)
-      {
-        auto results = database_->getTestResultsByOrderId(existing->getId());
-        for (const auto &res : results) {
-          const auto rs = res->getStatus();
-          if (rs != core::TestResult::Status::VALIDATED &&
-              rs != core::TestResult::Status::REJECTED) {
-            return makeError(409, "conflict", "Order has active results",
-                             "Result " + res->getResultId() +
-                                 " must be completed or rejected before "
-                                 "cancelling the order.");
-          }
-        }
-      }
-      if (!database_->deleteOrder(existing->getId(), actor)) {
-        return makeDbErrorResponse(database_->getLastError());
-      }
-
-      return ApiResponse{204, "", "application/json"};
+      return handleDeleteOrder(ctx);
     }
 
     if (path.rfind("/api/v1/results/", 0) == 0) {
-      const std::string resultId =
-          path.substr(std::string("/api/v1/results/").size());
-      if (resultId.empty()) {
-        return makeError(400, "validation_error", "Missing result_id",
-                         "Provide result_id in URL path.");
-      }
-      if (resultId.size() > 64) {
-        return makeError(400, "validation_error", "Invalid result_id",
-                         "result_id must not exceed 64 characters.");
-      }
-      auto existing = database_->getTestResultByResultId(resultId);
-      if (database_->hasError()) {
-        return makeDbErrorResponse(database_->getLastError());
-      }
-      if (!existing) {
-        return makeError(404, "not_found", "Result not found",
-                         "Verify the result_id.");
-      }
-
-      {
-        const auto s = existing->getStatus();
-        if (s == core::TestResult::Status::REJECTED) {
-          // REJECTED = already soft-deleted; return 204 to make DELETE
-          // idempotent
-          return ApiResponse{204, "", "application/json"};
-        }
-        if (s == core::TestResult::Status::VALIDATED) {
-          return makeError(409, "conflict", "Result cannot be deleted",
-                           "VALIDATED results are immutable (ISO 15189).");
-        }
-      }
-
-      if (!database_->deleteTestResult(existing->getId(), actor)) {
-        return makeDbErrorResponse(database_->getLastError());
-      }
-
-      return ApiResponse{204, "", "application/json"};
+      return handleDeleteResult(ctx);
     }
 
     // Don't return 404 here for /api/v1/users/ — that handler comes after this
