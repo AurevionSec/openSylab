@@ -72,7 +72,6 @@ export const Login = () => {
                   placeholder="Enter your password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  error={error}
                   required
                   autoComplete="current-password"
                   aria-label="Password"
@@ -90,7 +89,9 @@ export const Login = () => {
                   label="MFA Code"
                   placeholder="6-digit code"
                   value={mfaCode}
-                  onChange={(e) => setMfaCode(e.target.value)}
+                  onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ''))}
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   maxLength={6}
                   autoFocus
                   autoComplete="one-time-code"
@@ -100,7 +101,7 @@ export const Login = () => {
             )}
 
             {error && (
-              <p className="text-red-600 text-sm">{error}</p>
+              <p role="alert" className="text-red-600 text-sm">{error}</p>
             )}
 
             <Button

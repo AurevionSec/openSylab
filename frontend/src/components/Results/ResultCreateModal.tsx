@@ -7,26 +7,12 @@ import { getOrders } from '../../services/orders';
 import type { TestResult } from '../../types/result';
 import type { Order } from '../../types/order';
 import { RESULT_STATUSES, RESULT_FLAGS, RESULT_FLAG_COLORS } from '../../utils/constants';
+import { computeFlag } from '../../utils/resultFlag';
 
 interface ResultCreateModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: (result: TestResult) => void;
-}
-
-function computeFlag(value: string, refMin: string, refMax: string): TestResult['flag'] {
-  const v = parseFloat(value);
-  if (isNaN(v)) return 'UNDEFINED';
-  const min = parseFloat(refMin);
-  const max = parseFloat(refMax);
-  if (isNaN(min) || isNaN(max) || min >= max) return 'UNDEFINED';
-  const margin = (max - min) * 0.5;
-  const criticalLow = min - margin;
-  const criticalHigh = max + margin;
-  if (v < criticalLow || v > criticalHigh) return 'CRITICAL';
-  if (v < min) return 'LOW';
-  if (v > max) return 'HIGH';
-  return 'NORMAL';
 }
 
 export const ResultCreateModal = ({ isOpen, onClose, onSuccess }: ResultCreateModalProps) => {
@@ -126,7 +112,7 @@ export const ResultCreateModal = ({ isOpen, onClose, onSuccess }: ResultCreateMo
     ((!isNaN(refMinNum) && valueNum < refMinNum) || (!isNaN(refMaxNum) && valueNum > refMaxNum));
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 animate-backdrop">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 animate-backdrop">
       <div className="bg-white rounded shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           <div className="flex justify-between items-center mb-6">
@@ -210,7 +196,7 @@ export const ResultCreateModal = ({ isOpen, onClose, onSuccess }: ResultCreateMo
                   <input
                     type="text"
                     placeholder="e.g., 95"
-                    value={formData.value}
+                    value={formData.value} inputMode="decimal"
                     onChange={(e) => handleChange('value', e.target.value)}
                     required
                     className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-[#0055FF] focus:border-transparent ${
@@ -241,14 +227,14 @@ export const ResultCreateModal = ({ isOpen, onClose, onSuccess }: ResultCreateMo
                   type="text"
                   label="Min Value"
                   placeholder="e.g., 70"
-                  value={formData.reference_min}
+                  value={formData.reference_min} inputMode="decimal"
                   onChange={(e) => handleChange('reference_min', e.target.value)}
                 />
                 <Input
                   type="text"
                   label="Max Value"
                   placeholder="e.g., 110"
-                  value={formData.reference_max}
+                  value={formData.reference_max} inputMode="decimal"
                   onChange={(e) => handleChange('reference_max', e.target.value)}
                 />
               </div>

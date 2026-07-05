@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, Link } from 'react-router-dom';
 import { Layout } from '../components/Layout/Layout';
 import { Card } from '../components/common/Card';
 import { Button } from '../components/common/Button';
@@ -13,10 +13,12 @@ import { ORDER_STATUSES, ORDER_PRIORITIES } from '../utils/constants';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useAuth } from '../context/AuthContext';
 import { useEntityList } from '../hooks/useEntityList';
+import { useToast } from '../hooks/useToast';
 
 export const Orders = () => {
   useDocumentTitle({ module: 'Orders' });
   const { user } = useAuth();
+  const toast = useToast();
   const canWrite = user?.role === 'ADMIN' || user?.role === 'OPERATOR';
   const location = useLocation();
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -35,7 +37,6 @@ export const Orders = () => {
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [orderToDelete, setOrderToDelete] = useState<Order | null>(null);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
   const itemsPerPage = 20;
 
   const { data: orders, total: totalOrders, loading, error, refetch } = useEntityList(
@@ -57,7 +58,8 @@ export const Orders = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleCreateSuccess = (_newOrder: Order) => {
+  const handleCreateSuccess = (newOrder: Order) => {
+    toast.success(`Order ${newOrder.order_id} created`);
     refetch();
   };
 
@@ -66,7 +68,8 @@ export const Orders = () => {
     setIsEditModalOpen(true);
   };
 
-  const handleEditSuccess = (_updatedOrder: Order) => {
+  const handleEditSuccess = (updatedOrder: Order) => {
+    toast.success(`Order ${updatedOrder.order_id} updated`);
     refetch();
   };
 
@@ -75,17 +78,12 @@ export const Orders = () => {
     setIsDeleteDialogOpen(true);
   };
 
+  // Errors propagate to DeleteConfirmDialog (shown inline; dialog stays open).
   const handleDeleteConfirm = async () => {
     if (!orderToDelete) return;
-    setDeleteError(null);
-    try {
-      await deleteOrder(orderToDelete.order_id);
-      setIsDeleteDialogOpen(false);
-      setOrderToDelete(null);
-      refetch();
-    } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : 'Delete failed');
-    }
+    await deleteOrder(orderToDelete.order_id);
+    toast.success(`Order ${orderToDelete.order_id} cancelled`);
+    refetch();
   };
 
   return (
@@ -159,10 +157,10 @@ export const Orders = () => {
               </div>
             </div>
 
-            <ErrorBanner message={deleteError || error || null} />
+            <ErrorBanner message={error || null} onRetry={error ? refetch : undefined} />
 
             {loading ? (
-              <div className="flex items-center justify-center py-12">
+              <div role="status" aria-live="polite" className="flex items-center justify-center py-12">
                 <div className="text-center">
                   <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
                   <p className="mt-4 text-gray-600">Loading orders...</p>
@@ -210,8 +208,14 @@ export const Orders = () => {
                         <td className="px-3 md:px-6 py-2 md:py-2.5 whitespace-nowrap text-sm font-mono font-bold text-[#1A1C20] border-b border-[#E2E8F0]">
                           {order.order_id}
                         </td>
-                        <td className="px-3 md:px-6 py-2 md:py-2.5 whitespace-nowrap text-sm font-mono text-[#5E6C84] border-b border-[#E2E8F0]">
-                          {order.sample_id}
+                        <td className="px-3 md:px-6 py-2 md:py-2.5 whitespace-nowrap text-sm font-mono border-b border-[#E2E8F0]">
+                          <Link
+                            to={`/samples?q=${encodeURIComponent(order.sample_id)}`}
+                            className="text-[#0055FF] hover:underline"
+                            title={`View sample ${order.sample_id}`}
+                          >
+                            {order.sample_id}
+                          </Link>
                         </td>
                         <td className="px-3 md:px-6 py-2 md:py-2.5 whitespace-nowrap text-sm font-medium text-[#1A1C20] border-b border-[#E2E8F0]">
                           {order.test_type}
@@ -408,12 +412,14 @@ export const Orders = () => {
         onClose={() => {
           setIsDeleteDialogOpen(false);
           setOrderToDelete(null);
-          setDeleteError(null);
         }}
         onConfirm={handleDeleteConfirm}
-        title="Delete Order"
-        message="Are you sure you want to delete this order? This will permanently remove all associated data."
+        title="Cancel Order"
+        message="Cancel this order?"
         itemName={orderToDelete?.order_id}
+        confirmText="Cancel Order"
+        cancelText="Keep"
+        outcomeNote="The order is marked CANCELLED (soft-delete). Its audit history is retained."
       />
     </Layout>
   );

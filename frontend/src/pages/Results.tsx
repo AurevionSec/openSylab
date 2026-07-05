@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, Link } from 'react-router-dom';
 import { Layout } from '../components/Layout/Layout';
 import { Card } from '../components/common/Card';
 import { Button } from '../components/common/Button';
@@ -13,10 +13,12 @@ import { RESULT_STATUSES, RESULT_FLAGS } from '../utils/constants';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useAuth } from '../context/AuthContext';
 import { useEntityList } from '../hooks/useEntityList';
+import { useToast } from '../hooks/useToast';
 
 export const Results = () => {
   useDocumentTitle({ module: 'Test Results' });
   const { user } = useAuth();
+  const toast = useToast();
   const canWrite = user?.role === 'ADMIN' || user?.role === 'OPERATOR';
   const location = useLocation();
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -28,7 +30,6 @@ export const Results = () => {
   const [selectedResult, setSelectedResult] = useState<TestResult | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [resultToDelete, setResultToDelete] = useState<TestResult | null>(null);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
   const itemsPerPage = 20;
 
   const { data: results, total: totalResults, loading, error, refetch } = useEntityList(
@@ -48,6 +49,8 @@ export const Results = () => {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     setSearchQuery(params.get('q') || '');
+    setSelectedFlag(params.get('flag') || '');
+    setSelectedStatus(params.get('status') || '');
     setCurrentPage(1);
   }, [location.search]);
 
@@ -69,7 +72,8 @@ export const Results = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleCreateSuccess = (_newResult: TestResult) => {
+  const handleCreateSuccess = (newResult: TestResult) => {
+    toast.success(`Result ${newResult.result_id} created`);
     refetch();
   };
 
@@ -78,7 +82,8 @@ export const Results = () => {
     setIsEditModalOpen(true);
   };
 
-  const handleEditSuccess = (_updatedResult: TestResult) => {
+  const handleEditSuccess = (updatedResult: TestResult) => {
+    toast.success(`Result ${updatedResult.result_id} updated`);
     refetch();
   };
 
@@ -87,17 +92,12 @@ export const Results = () => {
     setIsDeleteDialogOpen(true);
   };
 
+  // Errors propagate to DeleteConfirmDialog (shown inline; dialog stays open).
   const handleDeleteConfirm = async () => {
     if (!resultToDelete) return;
-    setDeleteError(null);
-    try {
-      await deleteResult(resultToDelete.result_id);
-      setIsDeleteDialogOpen(false);
-      setResultToDelete(null);
-      refetch();
-    } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : 'Delete failed');
-    }
+    await deleteResult(resultToDelete.result_id);
+    toast.success(`Result ${resultToDelete.result_id} rejected`);
+    refetch();
   };
 
   return (
@@ -170,10 +170,10 @@ export const Results = () => {
               </div>
             </div>
 
-            <ErrorBanner message={deleteError || error || null} />
+            <ErrorBanner message={error || null} onRetry={error ? refetch : undefined} />
 
             {loading ? (
-              <div className="flex items-center justify-center py-12">
+              <div role="status" aria-live="polite" className="flex items-center justify-center py-12">
                 <div className="text-center">
                   <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
                   <p className="mt-4 text-gray-600">Loading results...</p>
@@ -204,7 +204,15 @@ export const Results = () => {
                         <td className="px-6 py-2.5 whitespace-nowrap text-sm font-mono font-bold text-[#1A1C20] border-b border-[#E2E8F0]">
                           {result.result_id}
                         </td>
-                        <td className="px-6 py-2.5 whitespace-nowrap text-sm font-mono text-[#5E6C84] border-b border-[#E2E8F0]">{result.order_id}</td>
+                        <td className="px-6 py-2.5 whitespace-nowrap text-sm font-mono border-b border-[#E2E8F0]">
+                          <Link
+                            to={`/orders?q=${encodeURIComponent(result.order_id)}`}
+                            className="text-[#0055FF] hover:underline"
+                            title={`View order ${result.order_id}`}
+                          >
+                            {result.order_id}
+                          </Link>
+                        </td>
                         <td className="px-6 py-2.5 whitespace-nowrap text-sm font-medium text-[#1A1C20] border-b border-[#E2E8F0]">{result.parameter}</td>
                         <td className="px-6 py-2.5 whitespace-nowrap text-sm font-mono text-[#1A1C20] border-b border-[#E2E8F0]">
                           {result.value} {result.unit}
@@ -365,9 +373,11 @@ export const Results = () => {
           setResultToDelete(null);
         }}
         onConfirm={handleDeleteConfirm}
-        title="Delete Test Result"
-        message="Are you sure you want to delete this test result? This will permanently remove all associated data."
+        title="Reject Test Result"
+        message="Reject this test result?"
         itemName={resultToDelete?.result_id}
+        confirmText="Reject"
+        outcomeNote="The result is marked REJECTED (soft-delete). Its audit history is retained."
       />
     </Layout>
   );

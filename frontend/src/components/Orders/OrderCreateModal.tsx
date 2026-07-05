@@ -93,7 +93,7 @@ export const OrderCreateModal = ({ isOpen, onClose, onSuccess }: OrderCreateModa
   const canSubmit = !loading && formData.order_id && formData.sample_id && formData.test_type && formData.requested_by;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 animate-backdrop">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 animate-backdrop">
       <div className="bg-white rounded shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-snap-in">
         <div className="p-6">
           <div className="flex justify-between items-center mb-6">
