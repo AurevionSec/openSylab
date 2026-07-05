@@ -6,7 +6,7 @@
 
 ---
 
-## 🎯 v1.0.0 — Release Roadmap (analysis 2026-07-04)
+## 🎯 v1.0.0 — Release Roadmap (analysis 2026-07-04, synced 2026-07-05)
 
 Verified against the actual codebase (not just checkbox state). The core code is
 mature and marker-clean (0 TODO/FIXME/HACK/stub in `src/`+`include/`); the road to
@@ -15,19 +15,25 @@ feature build. For a medical LIMS, "1.0" means production-ready + ISO 15189 stor
 
 ### 🔴 P0 — 1.0 blockers
 
-- [ ] **Split `ApiServer.cpp` God-file (4053 lines)** — `src/api/ApiServer.cpp`.
-      All ~30 route handlers, URL decoder, rate limiter, CORS in one file (grew
-      from ~3400). Biggest maintainability risk for a "stable API" 1.0.
-      Split into `SampleHandler`, `OrderHandler`, `ResultHandler`, `UserHandler`,
-      `AuditHandler`, `StatsHandler`, `Hl7Handler`, `FhirHandler`.
-      Effort: ~3–4 weeks.
-- [ ] **Release engineering**
-      - Version bump 0.9.0 → 1.0.0 in `CMakeLists.txt` (C++ SSOT) **and**
+- [~] **Split `ApiServer.cpp` God-file** — `src/api/ApiServer.cpp`.
+      **Phase A largely done (PR #48):** `handleRequest` decomposed from 2781 →
+      1100 lines by extracting inline route branches into per-route handler
+      methods on `ApiRouter`, threading a shared `RouteContext`. 7 clusters
+      extracted (health/openapi · audit/stats · HL7/FHIR · MFA · users ·
+      sample/order/result GET · sample/order/result POST), each behaviour-
+      preserving, build+228-tests green.
+      **Remaining:** the 3 PUT/update routes (sample/order/result) → then
+      `handleRequest` is pure dispatch (~300 lines).
+      **Phase B (optional):** group the extracted methods into separate
+      `SampleHandler`/`OrderHandler`/… classes.
+- [~] **Release engineering**
+      - [ ] Version bump 0.9.0 → 1.0.0 in `CMakeLists.txt` (C++ SSOT) **and**
         `frontend/package.json` (Frontend SSOT)
-      - `CHANGELOG.md`: add `[1.0.0]` section — the 4 currently unreleased commits
-        (security fix #46, CI bumps) are undocumented; no `[Unreleased]` section exists
-      - Git tag `v1.0.0` + GitHub release
-      - Baseline gate: fresh `cmake --build` + `ctest` green confirmed before tagging
+      - [x] `CHANGELOG.md`: `[Unreleased]` section added (PR #47) documenting the
+        post-0.9.0 changes (security #46, CI bumps, governance, refactor). At
+        release, rename `[Unreleased]` → `[1.0.0]` with the date.
+      - [ ] Git tag `v1.0.0` + GitHub release
+      - [ ] Baseline gate: fresh `cmake --build` + `ctest` green confirmed before tagging
 - [ ] **ISO 15189 IQ/OQ/PQ validation package (STR-1)** — does not exist yet.
       The real gatekeeper for accredited-lab production use. Documentation +
       reproducible OQ test scripts. Effort: ~6–10 weeks (can run in parallel).
@@ -35,18 +41,20 @@ feature build. For a medical LIMS, "1.0" means production-ready + ISO 15189 stor
 
 ### 🟡 P1 — Governance & Ops (expected of a serious public medical 1.0)
 
-- [ ] **`SECURITY.md`** — vulnerability reporting policy (repo currently has none)
-- [ ] **`CONTRIBUTING.md`** — contribution guide
-- [ ] **`CODE_OF_CONDUCT.md`** — code of conduct
-- [ ] **`.github/ISSUE_TEMPLATE/` + `PULL_REQUEST_TEMPLATE.md`** — issue/PR templates
+- [x] **`SECURITY.md`** — vulnerability reporting policy (PR #47)
+- [x] **`CONTRIBUTING.md`** — contribution guide (PR #47)
+- [x] **`CODE_OF_CONDUCT.md`** — Contributor Covenant 2.1 (PR #47)
+- [x] **`.github/ISSUE_TEMPLATE/` + `PULL_REQUEST_TEMPLATE.md`** — issue/PR templates (PR #47);
+      also fixed invalid `dependabot.yml` ecosystem → npm + github-actions
 - [x] **JWT secret rotation** (was P3) — documented in
       [`docs/SECRET_ROTATION.md`](docs/SECRET_ROTATION.md): rotation procedure,
       all-tokens-invalidated effect, restart requirement (no hot-reload), and the
       critical caveat that `OPENSYLAB_AUDIT_HMAC_KEY` must **not** be rotated on a
       populated DB (breaks the audit hash chain). A hot-reload mechanism remains a
       v1.x nice-to-have.
-- [ ] **Branch protection / merge process** — PR #46 required an admin override to
-      merge (ruleset requires review). Establish a clean review gate for 1.0.
+- [ ] **Branch protection / merge process** — PRs #46, #47, #48 each required an
+      admin override to merge (ruleset requires a review that no second maintainer
+      provides). Establish a clean, satisfiable review gate for 1.0.
 
 ### 🟢 P2 — Tech debt (1.0-compatible, tackle before 1.1)
 
@@ -322,4 +330,4 @@ With a recognized certificate "Certified OpenSylab Administrator".
 
 ---
 
-*Last updated: 2026-07-04 — v1.0.0 roadmap analysis (verified against codebase)*
+*Last updated: 2026-07-05 — synced after PRs #46/#47/#48 merged (security, governance, ApiServer Phase-A refactor)*
