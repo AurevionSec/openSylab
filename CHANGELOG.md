@@ -2,6 +2,31 @@
 
 All notable changes to this project are documented in this file.
 
+## [Unreleased]
+
+Post-1.0 hardening from a multi-agent bug/inconsistency audit (28 findings fixed).
+
+### Security & Correctness
+
+- **Concurrency (critical):** serialize the shared SQLite connection with a
+  recursive mutex + `busy_timeout` — concurrent request threads could otherwise
+  collide on transactions and corrupt the audit hash chain.
+- **RBAC:** sample→VALIDATED release now requires ADMIN (matched order/result);
+  JWT effective role derived from the live DB user so role changes apply at once.
+- **Audit trail:** HL7/FHIR exports now log PHI disclosure; `logAudit` fails
+  closed instead of writing a chain-breaking row on HMAC failure.
+- **Data integrity:** CSV result import no longer mis-splits quoted fields or
+  coerces malformed reference bounds to 0.0; NaN/inf values are no longer flagged
+  NORMAL.
+- **Frontend:** user roles normalized (fixes blank badges + edit-dropdown hazard);
+  LOGIN_FAILED shown in the audit log; global search routes orders/results
+  correctly; stale-token no longer blocks login; list refetch races guarded.
+
+### Hygiene & Docs
+
+- Externalize compose secrets to `.env`; untrack `.vite` build cache and debug
+  HTML; fix Dockerfile healthcheck; correct port/version/OpenAPI doc drift.
+
 ## [1.0.0] - 2026-07-05
 
 First 1.0 release. Consolidates the post-0.9.0 hardening, governance,

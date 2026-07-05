@@ -2,11 +2,11 @@
 
 ## Übersicht
 
-OpenSylab v1.0.0 enthält ein einfaches, selbst implementiertes Test-Framework ohne externe Abhängigkeiten. Dies ermöglicht schnelles Testen ohne komplexe Setup-Prozesse. Die Test-Suite umfasst 235 automatisierte Backend Unit-Tests (inkl. API-Layer-Compliance-Tests) sowie 46 Frontend-Tests via Vitest.
+OpenSylab v1.0.0 enthält ein einfaches, selbst implementiertes Test-Framework ohne externe Abhängigkeiten. Dies ermöglicht schnelles Testen ohne komplexe Setup-Prozesse. Die Test-Suite umfasst 236 automatisierte Backend Unit-Tests (inkl. API-Layer-Compliance-Tests) sowie 46 Frontend-Tests via Vitest.
 
 **Version:** 1.0.0
 **Last Updated:** 2026-07-05
-**Backend Tests:** 235 Unit-Tests
+**Backend Tests:** 236 Unit-Tests
 **Frontend Tests:** 46 Tests (Vitest + React Testing Library)
 
 ## Test-Framework
@@ -146,7 +146,7 @@ ctest --output-on-failure
 ║          OpenSylab v1.0.0 - Unit Test Suite               ║
 ╚═══════════════════════════════════════════════════════════╝
 
-Running 235 tests...
+Running 236 tests...
 
 TEST: Sample::DefaultConstructor... ✓ PASSED
 TEST: Sample::ParameterizedConstructor... ✓ PASSED
@@ -155,9 +155,9 @@ TEST: CsvResultImport::ImportMixedValidAndInvalid... ✓ PASSED
 
 ═══════════════════════════════════════════════════════════
 Results:
-  ✓ Passed: 235
+  ✓ Passed: 236
   ✗ Failed: 0
-  Total:   235
+  Total:   236
 ═══════════════════════════════════════════════════════════
 ```
 
