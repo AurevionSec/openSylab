@@ -140,7 +140,8 @@ int main(int argc, char* argv[]) {
         }
         if (arg == "--api-port" && i + 1 < argc) {
             try {
-                config.apiPort = std::stoi(argv[++i]);
+                const int p = std::stoi(argv[++i]);
+                config.apiPort = (p >= 1 && p <= 65535) ? p : 8080;
             } catch (...) {
                 config.apiPort = 8080;
             }

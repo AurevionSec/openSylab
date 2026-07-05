@@ -83,7 +83,10 @@ AppConfig Config::loadFromFile(const std::string& path) {
             cfg.dbPath = value;
         } else if (key == "api_port") {
             try {
-                cfg.apiPort = std::stoi(value);
+                const int p = std::stoi(value);
+                if (p >= 1 && p <= 65535) {  // valid TCP port range
+                    cfg.apiPort = p;
+                }
             } catch (const std::exception&) {
                 // Keep default on parse error
             }
@@ -103,13 +106,19 @@ AppConfig Config::loadFromFile(const std::string& path) {
             cfg.logFile = value;
         } else if (key == "login_rate_limit_per_minute") {
             try {
-                cfg.loginRateLimitPerMinute = std::stoi(value);
+                const int n = std::stoi(value);
+                if (n > 0) {
+                    cfg.loginRateLimitPerMinute = n;
+                }
             } catch (const std::exception&) {
                 // Keep default on parse error
             }
         } else if (key == "session_timeout_minutes") {
             try {
-                cfg.sessionTimeoutMinutes = std::stoi(value);
+                const int n = std::stoi(value);
+                if (n > 0) {
+                    cfg.sessionTimeoutMinutes = n;
+                }
             } catch (const std::exception&) {
                 // Keep default on parse error
             }
