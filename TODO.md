@@ -6,6 +6,72 @@
 
 ---
 
+## 🎯 v1.0.0 — Release Roadmap (analysis 2026-07-04)
+
+Verified against the actual codebase (not just checkbox state). The core code is
+mature and marker-clean (0 TODO/FIXME/HACK/stub in `src/`+`include/`); the road to
+1.0 is **hardening, compliance documentation and release engineering**, not a large
+feature build. For a medical LIMS, "1.0" means production-ready + ISO 15189 story.
+
+### 🔴 P0 — 1.0 blockers
+
+- [ ] **Split `ApiServer.cpp` God-file (4053 lines)** — `src/api/ApiServer.cpp`.
+      All ~30 route handlers, URL decoder, rate limiter, CORS in one file (grew
+      from ~3400). Biggest maintainability risk for a "stable API" 1.0.
+      Split into `SampleHandler`, `OrderHandler`, `ResultHandler`, `UserHandler`,
+      `AuditHandler`, `StatsHandler`, `Hl7Handler`, `FhirHandler`.
+      Effort: ~3–4 weeks.
+- [ ] **Release engineering**
+      - Version bump 0.9.0 → 1.0.0 in `CMakeLists.txt` (C++ SSOT) **and**
+        `frontend/package.json` (Frontend SSOT)
+      - `CHANGELOG.md`: add `[1.0.0]` section — the 4 currently unreleased commits
+        (security fix #46, CI bumps) are undocumented; no `[Unreleased]` section exists
+      - Git tag `v1.0.0` + GitHub release
+      - Baseline gate: fresh `cmake --build` + `ctest` green confirmed before tagging
+- [ ] **ISO 15189 IQ/OQ/PQ validation package (STR-1)** — does not exist yet.
+      The real gatekeeper for accredited-lab production use. Documentation +
+      reproducible OQ test scripts. Effort: ~6–10 weeks (can run in parallel).
+      *Optional for a lean 1.0 — see scope note below.*
+
+### 🟡 P1 — Governance & Ops (expected of a serious public medical 1.0)
+
+- [ ] **`SECURITY.md`** — vulnerability reporting policy (repo currently has none)
+- [ ] **`CONTRIBUTING.md`** — contribution guide
+- [ ] **`CODE_OF_CONDUCT.md`** — code of conduct
+- [ ] **`.github/ISSUE_TEMPLATE/` + `PULL_REQUEST_TEMPLATE.md`** — issue/PR templates
+- [x] **JWT secret rotation** (was P3) — documented in
+      [`docs/SECRET_ROTATION.md`](docs/SECRET_ROTATION.md): rotation procedure,
+      all-tokens-invalidated effect, restart requirement (no hot-reload), and the
+      critical caveat that `OPENSYLAB_AUDIT_HMAC_KEY` must **not** be rotated on a
+      populated DB (breaks the audit hash chain). A hot-reload mechanism remains a
+      v1.x nice-to-have.
+- [ ] **Branch protection / merge process** — PR #46 required an admin override to
+      merge (ruleset requires review). Establish a clean review gate for 1.0.
+
+### 🟢 P2 — Tech debt (1.0-compatible, tackle before 1.1)
+
+- [ ] **No E2E / integration tests** (Playwright/Cypress) — advisable for medical
+      software, not a hard 1.0 blocker
+- [ ] **Custom test-macro framework** instead of Catch2/GoogleTest — cosmetic
+- [ ] **PostgreSQL backend** — deliberately deferred to v1.1 (stub blocks startup).
+      **Not a 1.0 blocker.**
+
+### Scope recommendation
+
+- **Lean, honest 1.0 (~4–6 weeks):** release engineering + governance files +
+  JWT-rotation docs + `ApiServer.cpp` split. Defer IQ/OQ/PQ and E2E to 1.0.x/1.1.
+- **Full "lab-ready 1.0" (~10–14 weeks):** additionally IQ/OQ/PQ package (STR-1)
+  and E2E tests — then deployable in an accredited laboratory.
+
+### Corrected stale entries (already done — no effort needed)
+
+- `token_expiry`/`_expiry` mismatch → **not a bug**: `auth.ts` and `api.ts` both
+  use key `opensylab_token_expiry` (`_expiry` is only a local variable name)
+- "JSON parser limitations" → resolved via nlohmann/json in v0.9.0
+- TOTP Base32 enrollment flow → implemented in v0.9.0 (checkbox below was stale)
+
+---
+
 ## ✅ v0.7.0 — Completed (2026-05-11)
 
 Full change list: [CHANGELOG.md](CHANGELOG.md#070---2026-05-11)
@@ -85,8 +151,8 @@ Highlights: Rate Limiting · Forced password change · Enforce HTTPS · Health e
 - [x] **CORS duplication** — `getenv("OPENSYLAB_CORS_ORIGIN")` is read separately in
       `handleClientTls()` and `handleClientPlain()` (2 locations)
 - [x] **Multi-threaded server / concurrency** — done in v0.9.0 (thread-per-connection, max 32 concurrent, 503 on overflow)
-- [ ] **Secret key rotation** — no documented process for rotating
-      the JWT secret without a server restart
+- [x] **Secret key rotation** — documented in `docs/SECRET_ROTATION.md`
+      (rotation requires a restart; hot-reload deferred to v1.x)
 
 ---
 
@@ -107,13 +173,14 @@ P0 complete + health endpoint + HL7/FHIR endpoints + breadcrumb fix + TESTING.md
 
 ## Known technical debt (not a release blocker)
 
-- `token_expiry` key is written in `auth.ts` but read as `_expiry` in `api.ts`
-  — if the key is missing, silent logout on every request
+- ~~`token_expiry` key written in `auth.ts` but read as `_expiry` in `api.ts`~~
+  — **resolved / not a bug**: both use key `opensylab_token_expiry`; `_expiry` is
+  only a local variable name in `api.ts`
 - Test runner uses its own macro framework instead of Catch2/GoogleTest → no
   standard CI output without custom scripts
 - No E2E/integration tests (Playwright/Cypress)
-- **JSON parser limitations** — hand-written parser in `ApiServer.cpp`
-  does not support arrays or nested objects; complicates API expansion.
+- ~~**JSON parser limitations** — hand-written parser in `ApiServer.cpp`~~
+  — **resolved** in v0.9.0 (replaced by nlohmann/json v3.11.3)
 
 ---
 
@@ -141,13 +208,9 @@ P0 complete + health endpoint + HL7/FHIR endpoints + breadcrumb fix + TESTING.md
 - [x] **No JWT token blacklisting after logout** — Tokens remain valid until expiry
       (60 min). With compromised credentials the attacker is authorized for that
       window. Fix: in-memory blacklist in ApiRouter + `POST /api/v1/auth/logout`.
-- [ ] **TOTP Base32 enrollment flow** — Secrets stored as raw strings are incompatible
-      with standard authenticator apps (Google Authenticator, Authy) that expect
-      Base32-encoded secrets for QR code enrollment. `base32Decode()` utility added
-      to `Database.cpp`. Proper fix requires: (1) new MFA enrollment API endpoint
-      that generates a Base32 secret and returns a `otpauth://` URI for QR display,
-      (2) DB migration to re-encode existing raw secrets as Base32,
-      (3) update `computeMfaCode` to decode Base32 before HMAC.
+- [x] **TOTP Base32 enrollment flow** — done in v0.9.0 (see v0.9.0 section below:
+      `generateMfaSecret()`, `base32Encode()`, `getMfaEnrollmentUri()` returning an
+      `otpauth://` URI, and the `/auth/mfa/*` endpoints). This entry was stale.
 
 ### Architecture debt (medium to long term)
 
@@ -259,4 +322,4 @@ With a recognized certificate "Certified OpenSylab Administrator".
 
 ---
 
-*Last updated: 2026-05-16 — Strategic Analysis*
+*Last updated: 2026-07-04 — v1.0.0 roadmap analysis (verified against codebase)*
