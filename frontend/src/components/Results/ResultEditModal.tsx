@@ -91,7 +91,7 @@ export const ResultEditModal = ({ isOpen, onClose, result, onSuccess }: ResultEd
 
   if (result.status === 'VALIDATED' || result.status === 'REJECTED') {
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
         <div className="bg-white rounded shadow-xl max-w-md w-full p-6">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-bold text-gray-900">Edit Test Result</h2>
@@ -113,7 +113,7 @@ export const ResultEditModal = ({ isOpen, onClose, result, onSuccess }: ResultEd
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 animate-backdrop">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 animate-backdrop">
       <div className="bg-white rounded shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           <div className="flex justify-between items-center mb-6">

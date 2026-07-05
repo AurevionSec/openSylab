@@ -121,7 +121,7 @@ export const Sidebar = () => {
           OpenSylab
         </span>
         {/* Version */}
-        <span className="mt-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-[#2563EB]/20 text-[#3B82F6] border border-[#2563EB]/30 uppercase tracking-wide">
+        <span className="mt-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-[#0055FF]/20 text-[#3B82F6] border border-[#0055FF]/30 uppercase tracking-wide">
           v{import.meta.env.VITE_APP_VERSION}
         </span>
       </div>
@@ -134,14 +134,14 @@ export const Sidebar = () => {
             to={item.path}
             className={`group flex items-center px-5 py-3 text-sm font-medium transition-colors border-l-4 ${
               isActive(item.path)
-                ? 'text-white bg-gray-800 border-[#2563EB]'
+                ? 'text-white bg-gray-800 border-[#0055FF]'
                 : 'text-gray-400 hover:text-white hover:bg-gray-800 border-transparent'
             }`}
           >
             <span
               className={`mr-3 ${
                 isActive(item.path)
-                  ? 'text-[#2563EB]'
+                  ? 'text-[#0055FF]'
                   : 'text-gray-500 group-hover:text-white transition-colors'
               }`}
             >
@@ -167,14 +167,14 @@ export const Sidebar = () => {
             to={item.path}
             className={`group flex items-center px-5 py-3 text-sm font-medium transition-colors border-l-4 ${
               isActive(item.path)
-                ? 'text-white bg-gray-800 border-[#2563EB]'
+                ? 'text-white bg-gray-800 border-[#0055FF]'
                 : 'text-gray-400 hover:text-white hover:bg-gray-800 border-transparent'
             }`}
           >
             <span
               className={`mr-3 ${
                 isActive(item.path)
-                  ? 'text-[#2563EB]'
+                  ? 'text-[#0055FF]'
                   : 'text-gray-500 group-hover:text-white transition-colors'
               }`}
             >

@@ -5,6 +5,36 @@
 
 @import "tailwindcss";
 
+/* --- Design tokens (Tailwind v4 @theme) ---------------------------------
+ * Tailwind v4 ignores tailwind.config.js unless pulled in explicitly, so the
+ * DESIGN.md "Sterile & Slate" palette is registered here as the single source
+ * of truth. This is what makes utilities like bg-clinical-surface,
+ * text-clinical-secondary and font-mono (JetBrains Mono) actually generate CSS. */
+@theme {
+  --color-clinical-bg: #F4F5F7;
+  --color-clinical-surface: #FFFFFF;
+  --color-clinical-text: #1A1C20;
+  --color-clinical-secondary: #5E6C84;
+  --color-clinical-border: #E2E8F0;
+  --color-clinical-hover: #FAFBFC;
+  --color-clinical-blue: #0055FF;   /* System Blue — the one primary action colour */
+  --color-clinical-green: #10B981;
+  --color-clinical-biohazard: #CCFF00;
+  --color-clinical-critical: #FF3B30;
+
+  --color-dark-bg: #0D0E12;
+  --color-dark-surface: #16181D;
+  --color-dark-text: #E0E0E0;
+
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", "Roboto Mono", ui-monospace, monospace;
+}
+
+/* Data font aligns digits in columns (DESIGN.md §3 "Data is King"). */
+.font-mono {
+  font-variant-numeric: tabular-nums;
+}
+
 :root {
     /* Palette: Sterile & Slate */
     --bg-body: #F4F5F7;       /* Clinical Grey */
@@ -16,7 +46,7 @@
     --text-on-dark: #E5E7EB;
 
     --border-subtle: #E5E7EB;
-    --border-focus: #2563EB;  /* System Blue */
+    --border-focus: #0055FF;  /* System Blue */
 
     /* Semantic Colors */
     --status-blue-bg: #EFF6FF;
@@ -284,7 +314,7 @@ button.primary:hover {
 }
 
 /* 3. Primary Buttons: "Dangerous Competence" */
-.dark button[class*="bg-[#2563EB]"],
+.dark button[class*="bg-[#0055FF]"],
 .dark .btn-primary {
     background-color: var(--accent-acid) !important;
     color: #000000 !important;
@@ -297,7 +327,7 @@ button.primary:hover {
     transition: all 0.1s ease-in;
 }
 
-.dark button[class*="bg-[#2563EB]"]:hover,
+.dark button[class*="bg-[#0055FF]"]:hover,
 .dark .btn-primary:hover {
     background-color: #D4FF33 !important;
     box-shadow: 0 0 12px rgba(204, 255, 0, 0.4);
@@ -426,8 +456,9 @@ button.primary:hover {
 }
 
 /* 10. Modals */
-.dark [class*="bg-opacity-50"] {
-    background-color: rgba(3, 4, 7, 0.95) !important;
+.dark [class*="bg-black/50"],
+.dark [class*="bg-black/75"] {
+    background-color: rgba(3, 4, 7, 0.85) !important;
 }
 
 /* 11. Alert Boxes */
