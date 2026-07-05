@@ -52,6 +52,69 @@ private:
   // Authentication handlers
   ApiResponse handleLogin(const ApiRequest &request);
 
+  // Route handlers extracted from handleRequest (Phase A decomposition).
+  // Behaviour-preserving: each returns exactly what the former inline branch did.
+  ApiResponse handleHealth() const;
+  ApiResponse handleOpenApiSpec() const;
+
+  // Shared per-request context threaded to authenticated route handlers.
+  // Holds references to locals computed once in handleRequest (auth, role,
+  // parsed query, audit actor) plus the resolved HTTP method flags. Instances
+  // live only for the duration of a single handleRequest() call.
+  struct RouteContext {
+    const ApiRequest &request;
+    const std::string &method;
+    const std::string &path;
+    const std::unordered_map<std::string, std::string> &query;
+    const std::optional<auth::JwtAuth::TokenPayload> &jwtPayload;
+    const std::string &effectiveRole;
+    const std::string &actor;
+    bool isGet;
+    bool isPost;
+    bool isPut;
+    bool isDelete;
+  };
+
+  ApiResponse handleGetAudit(const RouteContext &ctx) const;
+  ApiResponse handleGetStats(const RouteContext &ctx) const;
+  ApiResponse handleAuditVerify(const RouteContext &ctx) const;
+  ApiResponse handleAuditExport(const RouteContext &ctx) const;
+  ApiResponse handleHl7Import(const RouteContext &ctx) const;
+  ApiResponse handleHl7Export(const RouteContext &ctx) const;
+  ApiResponse handleFhirImport(const RouteContext &ctx) const;
+  ApiResponse handleFhirExport(const RouteContext &ctx) const;
+  // MFA enrollment mutates pendingEnrollments_, so these are non-const.
+  ApiResponse handleMfaEnroll(const RouteContext &ctx);
+  ApiResponse handleMfaVerifyEnrollment(const RouteContext &ctx);
+  ApiResponse handleMfaDisable(const RouteContext &ctx) const;
+  ApiResponse handleListUsers(const RouteContext &ctx) const;
+  ApiResponse handleGetOwnProfile(const RouteContext &ctx) const;
+  ApiResponse handleCreateUser(const RouteContext &ctx) const;
+  // handleUpdateUser is only dispatched for a concrete numeric/{me/...} id; the
+  // "me"/"me/password"/empty fall-through stays in handleRequest's guard.
+  ApiResponse handleUpdateUser(const RouteContext &ctx) const;
+  ApiResponse handleChangeOwnPassword(const RouteContext &ctx) const;
+  ApiResponse handleDeleteUser(const RouteContext &ctx) const;
+  ApiResponse handleListSamples(const RouteContext &ctx) const;
+  ApiResponse handleGetSample(const RouteContext &ctx) const;
+  ApiResponse handleListOrders(const RouteContext &ctx) const;
+  ApiResponse handleGetOrder(const RouteContext &ctx) const;
+  ApiResponse handleListResults(const RouteContext &ctx) const;
+  ApiResponse handleGetResult(const RouteContext &ctx) const;
+  // Write handlers additionally receive the parsed JSON body as a string map,
+  // built once by handleRequest's shared write-block preamble. Taken by
+  // non-const ref because the original inline code uses operator[] on it; the
+  // map is a throwaway local in the caller, so mutation is unobservable.
+  ApiResponse handleCreateSample(
+      const RouteContext &ctx,
+      std::unordered_map<std::string, std::string> &payload) const;
+  ApiResponse handleCreateOrder(
+      const RouteContext &ctx,
+      std::unordered_map<std::string, std::string> &payload) const;
+  ApiResponse handleCreateResult(
+      const RouteContext &ctx,
+      std::unordered_map<std::string, std::string> &payload) const;
+
   // JWT validation helper
   std::optional<auth::JwtAuth::TokenPayload>
   extractAndValidateJwt(const std::unordered_map<std::string, std::string> &headers);

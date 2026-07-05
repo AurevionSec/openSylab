@@ -644,6 +644,1802 @@ std::optional<auth::JwtAuth::TokenPayload> ApiRouter::extractAndValidateJwt(
   return jwtAuth_->validateToken(token);
 }
 
+ApiResponse ApiRouter::handleHealth() const {
+  return ApiResponse{
+      200, json{{"status", "ok"}, {"service", "opensylab-lims"}}.dump(),
+      "application/json"};
+}
+
+ApiResponse ApiRouter::handleOpenApiSpec() const {
+  static constexpr const char *kSpecPaths[] = {
+      "docs/openapi.yaml",
+      "/usr/share/opensylab/openapi.yaml",
+  };
+  for (const char *specPath : kSpecPaths) {
+    std::ifstream specFile(specPath);
+    if (specFile.is_open()) {
+      std::ostringstream buf;
+      buf << specFile.rdbuf();
+      return ApiResponse{200, buf.str(), "application/yaml"};
+    }
+  }
+  return ApiResponse{404,
+                     R"({"error":"OpenAPI specification file not found"})",
+                     "application/json"};
+}
+
+ApiResponse ApiRouter::handleGetAudit(const RouteContext &ctx) const {
+  if (ctx.effectiveRole != "ADMIN") {
+    return makeError(403, "forbidden", "Admin access required",
+                     "Only administrators can view audit logs.");
+  }
+
+  db::IDatabase::AuditLogFilter filter;
+
+  auto limitIt = ctx.query.find("limit");
+  if (limitIt != ctx.query.end()) {
+    int limitValue = 0;
+    if (!parseIntValue(limitIt->second, limitValue) || limitValue <= 0) {
+      return makeError(400, "validation_error", "Invalid limit",
+                       "Provide a positive integer for limit.");
+    }
+    std::string validationError;
+    if (!validateAndCapLimit(limitValue, validationError)) {
+      return makeError(400, "validation_error", "Invalid limit",
+                       validationError);
+    }
+    filter.limit = limitValue;
+  } else {
+    filter.limit = MAX_PAGINATION_LIMIT;
+  }
+
+  auto userFilterIt = ctx.query.find("user");
+  if (userFilterIt != ctx.query.end() && !userFilterIt->second.empty()) {
+    if (userFilterIt->second.size() > 255) {
+      return makeError(400, "validation_error", "user filter too long",
+                       "user filter must not exceed 255 characters.");
+    }
+    filter.user = userFilterIt->second;
+  }
+
+  auto actionIt = ctx.query.find("action");
+  if (actionIt != ctx.query.end() && !actionIt->second.empty()) {
+    try {
+      filter.action = core::AuditEntry::stringToAction(actionIt->second);
+    } catch (...) {
+      // Ignore invalid action
+    }
+  }
+
+  auto entityIt = ctx.query.find("entity");
+  if (entityIt != ctx.query.end() && !entityIt->second.empty()) {
+    try {
+      filter.entity = core::AuditEntry::stringToEntity(entityIt->second);
+    } catch (...) {
+      // Ignore invalid entity
+    }
+  }
+
+  auto fromIt = ctx.query.find("from");
+  if (fromIt != ctx.query.end()) {
+    std::time_t ts{};
+    if (parseTimeValue(fromIt->second, ts)) {
+      filter.fromTime = ts;
+    }
+  }
+
+  auto toIt = ctx.query.find("to");
+  if (toIt != ctx.query.end()) {
+    std::time_t ts{};
+    if (parseTimeValue(toIt->second, ts)) {
+      filter.toTime = ts;
+    }
+  }
+
+  auto entries = database_->getAuditLogFiltered(filter);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+
+  json auditArr = json::array();
+  for (const auto &e : entries) {
+    auditArr.push_back(json::parse(auditEntryToJson(*e)));
+  }
+  return ApiResponse{200, json{{"data", auditArr}}.dump(),
+                     "application/json"};
+}
+
+ApiResponse ApiRouter::handleGetStats(const RouteContext &ctx) const {
+  if (ctx.effectiveRole == "CUSTOM") {
+    return makeError(403, "forbidden", "Insufficient permissions",
+                     "CUSTOM role cannot access aggregate statistics.");
+  }
+  db::IDatabase::StatsFilter filter;
+
+  auto fromIt = ctx.query.find("from");
+  if (fromIt != ctx.query.end()) {
+    std::time_t ts{};
+    if (parseTimeValue(fromIt->second, ts)) {
+      filter.fromDate = ts;
+    }
+  }
+
+  auto toIt = ctx.query.find("to");
+  if (toIt != ctx.query.end()) {
+    std::time_t ts{};
+    if (parseTimeValue(toIt->second, ts)) {
+      filter.toDate = ts;
+    }
+  }
+
+  auto sampleStats = database_->getSampleStats(filter);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  auto orderStats = database_->getOrderStats(filter);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  auto resultStats = database_->getResultStats(filter);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+
+  auto orderPriorityStats = database_->getOrderPriorityStats();
+  const int criticalCount = database_->getCriticalResultCount();
+
+  json orderPriorityArr = json::array();
+  for (const auto &p : orderPriorityStats) {
+    orderPriorityArr.push_back({{"status", p.status}, {"count", p.count}});
+  }
+  const json statsOut = {
+      {"samples", json::parse(statsToJson(sampleStats, "samples"))},
+      {"orders", json::parse(statsToJson(orderStats, "orders"))},
+      {"results", json::parse(statsToJson(resultStats, "results"))},
+      {"order_priority", orderPriorityArr},
+      {"critical_count", criticalCount}};
+
+  return ApiResponse{200, statsOut.dump(), "application/json"};
+}
+
+ApiResponse ApiRouter::handleAuditVerify(const RouteContext &ctx) const {
+  if (ctx.effectiveRole != "ADMIN") {
+    return makeError(403, "forbidden", "Admin access required",
+                     "Only administrators can verify the audit chain.");
+  }
+  std::string brokenAt;
+  const bool valid = database_->verifyAuditChain(brokenAt);
+  if (valid) {
+    return ApiResponse{
+        200,
+        json{{"valid", true}, {"message", "Audit chain integrity verified"}}
+            .dump(),
+        "application/json"};
+  }
+  return ApiResponse{200,
+                     json{{"valid", false},
+                          {"broken_at", brokenAt},
+                          {"message", "Chain integrity violation"}}
+                         .dump(),
+                     "application/json"};
+}
+
+ApiResponse ApiRouter::handleAuditExport(const RouteContext &ctx) const {
+  if (ctx.effectiveRole != "ADMIN") {
+    return makeError(403, "forbidden", "Admin access required",
+                     "Only administrators can export the audit log.");
+  }
+
+  db::IDatabase::AuditLogFilter filter;
+  auto fromIt = ctx.query.find("from");
+  if (fromIt != ctx.query.end()) {
+    std::time_t ts{};
+    if (parseTimeValue(fromIt->second, ts))
+      filter.fromTime = ts;
+  }
+  auto toIt = ctx.query.find("to");
+  if (toIt != ctx.query.end()) {
+    std::time_t ts{};
+    if (parseTimeValue(toIt->second, ts))
+      filter.toTime = ts;
+  }
+  auto limitIt = ctx.query.find("limit");
+  if (limitIt != ctx.query.end()) {
+    int lim = 0;
+    if (!parseIntValue(limitIt->second, lim) || lim <= 0) {
+      return makeError(400, "validation_error", "Invalid limit",
+                       "Provide a positive integer limit.");
+    }
+    std::string capError;
+    if (!validateAndCapLimit(lim, capError)) {
+      return makeError(400, "validation_error", "Invalid limit", capError);
+    }
+    filter.limit = lim;
+  } else {
+    filter.limit = MAX_PAGINATION_LIMIT;
+  }
+
+  // Use mkstemp for unpredictable name — prevents TOCTOU/symlink attacks.
+  // The file is created with 0600 permissions by mkstemp itself.
+  char tmpTemplate[] = "/tmp/opensylab_audit_XXXXXX";
+  const int tmpFd = ::mkstemp(tmpTemplate);
+  if (tmpFd == -1) {
+    return makeError(500, "internal_error", "Export failed",
+                     "Could not create temporary file.");
+  }
+  ::close(tmpFd);
+  const std::string tmpPath = tmpTemplate;
+
+  // RAII guard: always delete the temp file when this scope exits.
+  struct TmpGuard {
+    const std::string &path;
+    ~TmpGuard() { std::remove(path.c_str()); }
+  } guard{tmpPath};
+
+  int exportedCount = 0;
+  if (!database_->exportAuditLogToCsv(tmpPath, filter, ctx.actor,
+                                      exportedCount)) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+
+  std::ifstream f(tmpPath, std::ios::binary);
+  if (!f.is_open()) {
+    return makeError(500, "internal_error", "Export failed",
+                     "Could not read export file.");
+  }
+  std::ostringstream buf;
+  buf << f.rdbuf();
+
+  ApiResponse csvResp{200, buf.str(), "text/csv; charset=utf-8"};
+  csvResp.extraHeaders["Content-Disposition"] =
+      "attachment; filename=\"audit_export.csv\"";
+  return csvResp;
+}
+
+ApiResponse ApiRouter::handleHl7Import(const RouteContext &ctx) const {
+  if (ctx.effectiveRole == "VIEWER" || ctx.effectiveRole == "CUSTOM") {
+    return makeError(403, "forbidden", "Insufficient permissions",
+                     "OPERATOR or ADMIN role required.");
+  }
+  const std::string hl7Body = trimLeadingNewlines(ctx.request.body);
+  if (hl7Body.empty()) {
+    return makeError(400, "validation_error", "Missing request body",
+                     "Provide HL7 v2.5.1 message in request body.");
+  }
+  utils::Hl7Exchange exchange(database_);
+  utils::Hl7Exchange::ImportSummary summary;
+  if (!exchange.importOruR01Message(hl7Body, ctx.actor, summary)) {
+    LOG_ERROR("[HL7] Import failed: {}", summary.lastError);
+    return makeError(
+        422, "import_error", "HL7 import failed",
+        "Message could not be processed. Check server logs for details.");
+  }
+  return ApiResponse{200,
+                     json{{"imported",
+                           {{"samples", summary.samplesCreated},
+                            {"orders", summary.ordersCreated},
+                            {"results", summary.resultsCreated}}}}
+                         .dump(),
+                     "application/json"};
+}
+
+ApiResponse ApiRouter::handleHl7Export(const RouteContext &ctx) const {
+  if (ctx.effectiveRole == "VIEWER" || ctx.effectiveRole == "CUSTOM") {
+    return makeError(403, "forbidden", "Insufficient permissions",
+                     "OPERATOR or ADMIN role required.");
+  }
+  const std::string pathSegment = ctx.path.substr(ctx.path.rfind('/') + 1);
+  if (pathSegment.empty()) {
+    return makeError(400, "validation_error", "Missing sample id",
+                     "Provide sample id in URL path.");
+  }
+  int sampleId = 0;
+  if (!parseIntValue(pathSegment, sampleId) || sampleId <= 0) {
+    return makeError(400, "validation_error", "Invalid sample id",
+                     "Provide numeric sample id.");
+  }
+  auto sample = database_->getSample(sampleId);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  if (!sample) {
+    return makeError(404, "not_found", "Sample not found",
+                     "Verify the sample id.");
+  }
+  auto orders = database_->getOrdersBySampleId(sample->getSampleId());
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  if (orders.empty()) {
+    return makeError(404, "not_found", "No orders found",
+                     "Sample has no associated orders.");
+  }
+  const core::Order &order = *orders[0];
+  auto resultPtrs = database_->getTestResultsByOrderId(
+      order.getId(), std::nullopt, std::nullopt);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+
+  std::vector<core::TestResult> resultCopies;
+  resultCopies.reserve(resultPtrs.size());
+  for (const auto &r : resultPtrs) {
+    resultCopies.push_back(*r);
+  }
+
+  utils::Hl7Exchange exchange(database_);
+  std::string hl7Body =
+      exchange.exportOruR01Message(*sample, order, resultCopies);
+  return ApiResponse{200, hl7Body, "application/hl7-v2"};
+}
+
+ApiResponse ApiRouter::handleFhirImport(const RouteContext &ctx) const {
+  if (ctx.effectiveRole == "VIEWER" || ctx.effectiveRole == "CUSTOM") {
+    return makeError(403, "forbidden", "Insufficient permissions",
+                     "OPERATOR or ADMIN role required.");
+  }
+  const std::string fhirBody = trimLeadingNewlines(ctx.request.body);
+  if (fhirBody.empty()) {
+    return makeError(400, "validation_error", "Missing request body",
+                     "Provide FHIR R4 Bundle JSON in request body.");
+  }
+  utils::FhirExchange exchange(database_);
+  utils::FhirExchange::ImportSummary summary;
+  if (!exchange.importBundle(fhirBody, ctx.actor, summary)) {
+    LOG_ERROR("[FHIR] Import failed: {}", summary.lastError);
+    return makeError(
+        422, "import_error", "FHIR import failed",
+        "Bundle could not be processed. Check server logs for details.");
+  }
+  return ApiResponse{200,
+                     json{{"imported",
+                           {{"samples", summary.samplesCreated},
+                            {"orders", summary.ordersCreated},
+                            {"results", summary.resultsCreated}}}}
+                         .dump(),
+                     "application/json"};
+}
+
+ApiResponse ApiRouter::handleFhirExport(const RouteContext &ctx) const {
+  if (ctx.effectiveRole == "VIEWER" || ctx.effectiveRole == "CUSTOM") {
+    return makeError(403, "forbidden", "Insufficient permissions",
+                     "OPERATOR or ADMIN role required.");
+  }
+  const std::string pathSegment = ctx.path.substr(ctx.path.rfind('/') + 1);
+  if (pathSegment.empty()) {
+    return makeError(400, "validation_error", "Missing sample id",
+                     "Provide sample id in URL path.");
+  }
+  int sampleId = 0;
+  if (!parseIntValue(pathSegment, sampleId) || sampleId <= 0) {
+    return makeError(400, "validation_error", "Invalid sample id",
+                     "Provide numeric sample id.");
+  }
+  auto sample = database_->getSample(sampleId);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  if (!sample) {
+    return makeError(404, "not_found", "Sample not found",
+                     "Verify the sample id.");
+  }
+  auto orders = database_->getOrdersBySampleId(sample->getSampleId());
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  if (orders.empty()) {
+    return makeError(404, "not_found", "No orders found",
+                     "Sample has no associated orders.");
+  }
+  const core::Order &order = *orders[0];
+  auto resultPtrs = database_->getTestResultsByOrderId(
+      order.getId(), std::nullopt, std::nullopt);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+
+  std::vector<core::TestResult> resultCopies;
+  resultCopies.reserve(resultPtrs.size());
+  for (const auto &r : resultPtrs) {
+    resultCopies.push_back(*r);
+  }
+
+  utils::FhirExchange exchange(database_);
+  std::string fhirBody = exchange.exportBundle(*sample, order, resultCopies);
+  return ApiResponse{200, fhirBody, "application/fhir+json"};
+}
+
+ApiResponse ApiRouter::handleMfaEnroll(const RouteContext &ctx) {
+  if (!ctx.jwtPayload.has_value()) {
+    return makeError(401, "unauthorized", "JWT required",
+                     "Use JWT authentication to enroll MFA.");
+  }
+  const std::string secret = database_->generateMfaSecret();
+  if (secret.empty()) {
+    LOG_ERROR("[MFA] Secret generation failed: {}",
+              database_->getLastError());
+    return makeError(500, "internal_error", "Secret generation failed",
+                     "Please contact the system administrator.");
+  }
+  // Store server-side so verify-enrollment can retrieve it without trusting
+  // the client. Reject a new request if a non-expired session already exists
+  // — avoids confusing the user whose authenticator app was already
+  // configured with the first secret.
+  {
+    std::lock_guard<std::mutex> lock(enrollmentMutex_);
+    const auto now = std::chrono::steady_clock::now();
+    auto existing = pendingEnrollments_.find(ctx.jwtPayload->userId);
+    if (existing != pendingEnrollments_.end() &&
+        existing->second.expiry > now) {
+      return makeError(409, "conflict", "Enrollment already in progress",
+                       "An active enrollment session exists. Complete it or "
+                       "wait for it to expire before starting a new one.");
+    }
+    pendingEnrollments_[ctx.jwtPayload->userId] = {
+        secret, now + std::chrono::minutes(10)};
+  }
+  const std::string uri =
+      database_->getMfaEnrollmentUri(ctx.jwtPayload->username, secret);
+  const json resp = {
+      {"secret_base32", secret},
+      {"otpauth_uri", uri},
+      {"instructions",
+       "Scan this QR code with your authenticator app, "
+       "then confirm by calling POST /api/v1/auth/mfa/verify-enrollment."}};
+  return ApiResponse{200, resp.dump(), "application/json"};
+}
+
+ApiResponse ApiRouter::handleMfaVerifyEnrollment(const RouteContext &ctx) {
+  if (!ctx.jwtPayload.has_value()) {
+    return makeError(401, "unauthorized", "JWT required",
+                     "Use JWT authentication to verify MFA enrollment.");
+  }
+  const std::string enrollBody = trimLeadingNewlines(ctx.request.body);
+  if (enrollBody.empty()) {
+    return makeError(400, "validation_error", "Missing request body",
+                     "Provide JSON with secret_base32 and code.");
+  }
+  json enrollPayload;
+  try {
+    enrollPayload = json::parse(enrollBody);
+  } catch (const json::exception &) {
+    return makeError(400, "validation_error", "Invalid JSON payload",
+                     "Request body is not valid JSON.");
+  }
+  if (!enrollPayload.is_object()) {
+    return makeError(400, "validation_error", "Invalid JSON payload",
+                     "Expected a JSON object.");
+  }
+  const std::string enrollCode = enrollPayload.value("code", std::string{});
+  if (enrollCode.empty()) {
+    return makeError(400, "validation_error", "Missing code",
+                     "Provide the current 6-digit TOTP code.");
+  }
+  // Retrieve secret from server-side map — reject any client-supplied secret
+  std::string enrollSecret;
+  {
+    std::lock_guard<std::mutex> lock(enrollmentMutex_);
+    auto it = pendingEnrollments_.find(ctx.jwtPayload->userId);
+    if (it == pendingEnrollments_.end() ||
+        it->second.expiry <= std::chrono::steady_clock::now()) {
+      pendingEnrollments_.erase(ctx.jwtPayload->userId);
+      return makeError(
+          400, "enrollment_expired", "Enrollment session expired",
+          "Start enrollment again with POST /api/v1/auth/mfa/enroll.");
+    }
+    enrollSecret = it->second.secret;
+    pendingEnrollments_.erase(it);
+  }
+  int64_t enrollStep = -1;
+  if (!database_->verifyMfaCodeForEnrollment(enrollSecret, enrollCode,
+                                             enrollStep)) {
+    return makeError(400, "invalid_code", "Invalid TOTP code",
+                     "The supplied code does not match the secret. "
+                     "Ensure your device clock is correct and retry.");
+  }
+  if (!database_->setUserMfaSecret(ctx.jwtPayload->userId, enrollSecret,
+                                   enrollStep)) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  return ApiResponse{200, R"({"message":"MFA successfully enabled"})",
+                     "application/json"};
+}
+
+ApiResponse ApiRouter::handleMfaDisable(const RouteContext &ctx) const {
+  if (!ctx.jwtPayload.has_value()) {
+    return makeError(401, "unauthorized", "JWT required",
+                     "Use JWT authentication to disable MFA.");
+  }
+  const std::string mfaDisableBody = trimLeadingNewlines(ctx.request.body);
+  if (mfaDisableBody.empty()) {
+    return makeError(
+        400, "validation_error", "Missing request body",
+        "Provide JSON with current_password to confirm MFA disable.");
+  }
+  std::unordered_map<std::string, std::string> mfaDisablePayload;
+  std::string mfaDisableParseErr;
+  if (!parseJsonBodyToMap(mfaDisableBody, mfaDisablePayload,
+                          mfaDisableParseErr)) {
+    return makeError(400, "validation_error", "Invalid JSON payload",
+                     mfaDisableParseErr);
+  }
+  const auto mfaDisablePwdIt = mfaDisablePayload.find("current_password");
+  if (mfaDisablePwdIt == mfaDisablePayload.end() ||
+      mfaDisablePwdIt->second.empty()) {
+    return makeError(400, "validation_error", "Missing current_password",
+                     "Provide current_password to confirm MFA disable.");
+  }
+  auto mfaDisableUser = database_->getUser(ctx.jwtPayload->userId);
+  if (!mfaDisableUser) {
+    return makeError(404, "not_found", "User not found",
+                     "User account not found.");
+  }
+  if (!mfaDisableUser->verifyPassword(mfaDisablePwdIt->second)) {
+    return makeError(401, "unauthorized", "Invalid password",
+                     "Current password is incorrect.");
+  }
+  if (!database_->disableUserMfa(ctx.jwtPayload->userId,
+                                 ctx.jwtPayload->username)) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  return ApiResponse{200, R"({"message":"MFA disabled"})",
+                     "application/json"};
+}
+
+ApiResponse ApiRouter::handleListUsers(const RouteContext &ctx) const {
+  // Check if user is admin
+  if (ctx.effectiveRole != "ADMIN") {
+    return makeError(403, "forbidden", "Admin access required",
+                     "Only administrators can list users.");
+  }
+
+  auto users = database_->getAllUsers();
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+
+  json usersArr = json::array();
+  for (const auto &u : users) {
+    usersArr.push_back(json::parse(userToJson(*u)));
+  }
+  (void)database_->logAudit(core::AuditEntry(
+      core::AuditEntry::ActionType::ACCESS,
+      core::AuditEntry::EntityType::USER, "all",
+      ctx.jwtPayload.has_value() ? ctx.jwtPayload->username : "unknown",
+      "Admin listed all users"));
+  return ApiResponse{200, json{{"data", usersArr}}.dump(),
+                     "application/json"};
+}
+
+ApiResponse ApiRouter::handleGetOwnProfile(const RouteContext &ctx) const {
+  if (!ctx.jwtPayload.has_value()) {
+    return makeError(401, "unauthorized", "JWT required",
+                     "Use JWT authentication to access profile.");
+  }
+
+  auto user = database_->getUser(ctx.jwtPayload->userId);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  if (!user) {
+    return makeError(404, "not_found", "User not found",
+                     "User profile not found.");
+  }
+
+  (void)database_->logAudit(core::AuditEntry(
+      core::AuditEntry::ActionType::ACCESS, core::AuditEntry::EntityType::USER,
+      std::to_string(ctx.jwtPayload->userId), ctx.jwtPayload->username,
+      "User accessed own profile"));
+  return ApiResponse{200, "{\"data\":" + userToJson(*user) + "}",
+                     "application/json"};
+}
+
+ApiResponse ApiRouter::handleCreateUser(const RouteContext &ctx) const {
+  if (ctx.effectiveRole != "ADMIN") {
+    return makeError(403, "forbidden", "Admin access required",
+                     "Only administrators can create users.");
+  }
+
+  const std::string body = trimLeadingNewlines(ctx.request.body);
+  if (body.empty()) {
+    return makeError(400, "validation_error", "Missing request body",
+                     "Provide JSON payload in request body.");
+  }
+
+  std::unordered_map<std::string, std::string> payload;
+  std::string parseError;
+  if (!parseJsonBodyToMap(body, payload, parseError)) {
+    return makeError(400, "validation_error", "Invalid JSON payload",
+                     parseError);
+  }
+
+  auto usernameIt = payload.find("username");
+  auto passwordIt = payload.find("password");
+  auto roleIt = payload.find("role");
+
+  if (usernameIt == payload.end() || usernameIt->second.empty()) {
+    return makeError(400, "validation_error", "Missing username",
+                     "Provide username in request body.");
+  }
+  if (passwordIt == payload.end() || passwordIt->second.empty()) {
+    return makeError(400, "validation_error", "Missing password",
+                     "Provide password in request body.");
+  }
+
+  // Validate username format
+  std::string validationError;
+  if (!validateUsername(usernameIt->second, validationError)) {
+    return makeError(400, "validation_error", "Invalid username",
+                     validationError);
+  }
+
+  // Validate password strength
+  if (!validatePassword(passwordIt->second, validationError)) {
+    return makeError(400, "validation_error", "Invalid password",
+                     validationError);
+  }
+
+  core::User::Role role = core::User::Role::OPERATOR; // Default
+  if (roleIt != payload.end() && !roleIt->second.empty()) {
+    static const std::unordered_set<std::string> kValidRoles{
+        "ADMIN", "OPERATOR", "VIEWER", "CUSTOM"};
+    if (kValidRoles.find(roleIt->second) == kValidRoles.end()) {
+      return makeError(400, "validation_error", "Invalid role",
+                       "Role must be one of: ADMIN, OPERATOR, VIEWER, CUSTOM");
+    }
+    role = core::User::stringToRole(roleIt->second);
+  }
+
+  core::User newUser(usernameIt->second, "", role);
+  newUser.setPassword(passwordIt->second);
+  newUser.setMustChangePassword(true);
+
+  auto fullNameIt = payload.find("full_name");
+  if (fullNameIt != payload.end()) {
+    if (!fullNameIt->second.empty() &&
+        !validateStringLength(fullNameIt->second, 1, 255, validationError)) {
+      return makeError(400, "validation_error", "Invalid full_name",
+                       validationError);
+    }
+    newUser.setFullName(fullNameIt->second);
+  }
+  auto emailIt = payload.find("email");
+  if (emailIt != payload.end()) {
+    if (!emailIt->second.empty() &&
+        !validateEmail(emailIt->second, validationError)) {
+      return makeError(400, "validation_error", "Invalid email",
+                       validationError);
+    }
+    newUser.setEmail(emailIt->second);
+  }
+  auto activeIt = payload.find("active");
+  if (activeIt != payload.end()) {
+    newUser.setActive(activeIt->second == "true" || activeIt->second == "1");
+  }
+
+  if (!database_->createUser(newUser, ctx.actor)) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+
+  auto created = database_->getUserByUsername(newUser.getUsername());
+  database_->clearError(); // Read-back failure is non-fatal; fall back to
+                           // in-memory object
+  const core::User &responseUser = created ? *created : newUser;
+  return ApiResponse{201, "{\"data\":" + userToJson(responseUser) + "}",
+                     "application/json"};
+}
+
+ApiResponse ApiRouter::handleUpdateUser(const RouteContext &ctx) const {
+  const std::string userIdStr =
+      ctx.path.substr(std::string("/api/v1/users/").size());
+  if (userIdStr.rfind("me/", 0) == 0) {
+    return makeError(404, "not_found", "Unknown endpoint",
+                     "The requested endpoint does not exist.");
+  }
+
+  // RBAC check before ID parsing — non-admins always get 403
+  if (ctx.effectiveRole != "ADMIN") {
+    return makeError(403, "forbidden", "Admin access required",
+                     "Only administrators can update users.");
+  }
+
+  int userId = 0;
+  if (!parseIntValue(userIdStr, userId) || userId <= 0) {
+    return makeError(400, "validation_error", "Invalid user_id",
+                     "Provide numeric user_id.");
+  }
+
+  auto existing = database_->getUser(userId);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  if (!existing) {
+    return makeError(404, "not_found", "User not found",
+                     "Verify the user_id.");
+  }
+
+  const std::string body = trimLeadingNewlines(ctx.request.body);
+  if (body.empty()) {
+    return makeError(400, "validation_error", "Missing request body",
+                     "Provide JSON payload in request body.");
+  }
+
+  std::unordered_map<std::string, std::string> payload;
+  std::string parseError;
+  if (!parseJsonBodyToMap(body, payload, parseError)) {
+    return makeError(400, "validation_error", "Invalid JSON payload",
+                     parseError);
+  }
+
+  core::User updated = *existing;
+
+  auto usernameIt = payload.find("username");
+  if (usernameIt != payload.end()) {
+    // Validate username format
+    std::string validationError;
+    if (!validateUsername(usernameIt->second, validationError)) {
+      return makeError(400, "validation_error", "Invalid username",
+                       validationError);
+    }
+    updated.setUsername(usernameIt->second);
+  }
+  auto roleIt = payload.find("role");
+  if (roleIt != payload.end() && !roleIt->second.empty()) {
+    static const std::unordered_set<std::string> kValidRoles{
+        "ADMIN", "OPERATOR", "VIEWER", "CUSTOM"};
+    if (kValidRoles.find(roleIt->second) == kValidRoles.end()) {
+      return makeError(400, "validation_error", "Invalid role",
+                       "Role must be one of: ADMIN, OPERATOR, VIEWER, CUSTOM");
+    }
+    updated.setRole(core::User::stringToRole(roleIt->second));
+  }
+  auto fullNameIt = payload.find("full_name");
+  if (fullNameIt != payload.end()) {
+    // Validate full_name length if provided and not empty
+    if (!fullNameIt->second.empty()) {
+      std::string validationError;
+      if (!validateStringLength(fullNameIt->second, 1, 255, validationError)) {
+        return makeError(400, "validation_error", "Invalid full_name",
+                         validationError);
+      }
+    }
+    updated.setFullName(fullNameIt->second);
+  }
+  auto emailIt = payload.find("email");
+  if (emailIt != payload.end()) {
+    // Validate email format if provided and not empty
+    if (!emailIt->second.empty()) {
+      std::string validationError;
+      if (!validateEmail(emailIt->second, validationError)) {
+        return makeError(400, "validation_error", "Invalid email",
+                         validationError);
+      }
+    }
+    updated.setEmail(emailIt->second);
+  }
+  auto activeIt = payload.find("active");
+  if (activeIt != payload.end()) {
+    updated.setActive(activeIt->second == "true" || activeIt->second == "1");
+  }
+  auto passwordIt = payload.find("password");
+  const bool passwordChanged =
+      passwordIt != payload.end() && !passwordIt->second.empty();
+  if (passwordChanged) {
+    // Validate password strength
+    std::string validationError;
+    if (!validatePassword(passwordIt->second, validationError)) {
+      return makeError(400, "validation_error", "Invalid password",
+                       validationError);
+    }
+    updated.setPassword(passwordIt->second);
+    updated.setMustChangePassword(false);
+  }
+
+  if (!database_->updateUser(updated, ctx.actor)) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+
+  // Re-fetch from DB so the response reflects the committed state
+  // (e.g. auto-cleared must_change_password) rather than the in-memory
+  // copy.
+  auto refreshed = database_->getUser(updated.getId());
+  const core::User &rspUser = refreshed ? *refreshed : updated;
+  return ApiResponse{200, "{\"data\":" + userToJson(rspUser) + "}",
+                     "application/json"};
+}
+
+ApiResponse ApiRouter::handleChangeOwnPassword(const RouteContext &ctx) const {
+  if (!ctx.jwtPayload.has_value()) {
+    return makeError(401, "unauthorized", "JWT required",
+                     "Use JWT authentication to change password.");
+  }
+
+  const std::string body = trimLeadingNewlines(ctx.request.body);
+  if (body.empty()) {
+    return makeError(400, "validation_error", "Missing request body",
+                     "Provide JSON payload in request body.");
+  }
+
+  std::unordered_map<std::string, std::string> payload;
+  std::string parseError;
+  if (!parseJsonBodyToMap(body, payload, parseError)) {
+    return makeError(400, "validation_error", "Invalid JSON payload",
+                     parseError);
+  }
+
+  auto currentPwdIt = payload.find("current_password");
+  auto newPwdIt = payload.find("new_password");
+
+  if (currentPwdIt == payload.end() || currentPwdIt->second.empty()) {
+    return makeError(400, "validation_error", "Missing current_password",
+                     "Provide current_password in request body.");
+  }
+  if (newPwdIt == payload.end() || newPwdIt->second.empty()) {
+    return makeError(400, "validation_error", "Missing new_password",
+                     "Provide new_password in request body.");
+  }
+
+  if (newPwdIt->second == currentPwdIt->second) {
+    return makeError(400, "validation_error", "Password unchanged",
+                     "New password must differ from the current password.");
+  }
+
+  // Validate new password strength
+  std::string validationError;
+  if (!validatePassword(newPwdIt->second, validationError)) {
+    return makeError(400, "validation_error", "Invalid new_password",
+                     validationError);
+  }
+
+  auto user = database_->getUser(ctx.jwtPayload->userId);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  if (!user) {
+    return makeError(404, "not_found", "User not found",
+                     "User profile not found.");
+  }
+
+  // Verify current password
+  if (!user->verifyPassword(currentPwdIt->second)) {
+    return makeError(401, "unauthorized", "Invalid current password",
+                     "Current password is incorrect.");
+  }
+
+  // Update password and clear forced-change flag
+  user->setPassword(newPwdIt->second);
+  user->setMustChangePassword(false);
+  if (!database_->updateUser(*user, ctx.actor)) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+
+  return ApiResponse{200, "{\"success\":true}", "application/json"};
+}
+
+ApiResponse ApiRouter::handleDeleteUser(const RouteContext &ctx) const {
+  const std::string userIdStr =
+      ctx.path.substr(std::string("/api/v1/users/").size());
+  if (userIdStr.empty()) {
+    return makeError(400, "validation_error", "Missing user_id",
+                     "Provide user_id in URL path.");
+  }
+
+  // RBAC check before ID parsing — non-admins always get 403
+  if (ctx.effectiveRole != "ADMIN") {
+    return makeError(403, "forbidden", "Admin access required",
+                     "Only administrators can delete users.");
+  }
+
+  int userId = 0;
+  if (!parseIntValue(userIdStr, userId) || userId <= 0) {
+    return makeError(400, "validation_error", "Invalid user_id",
+                     "Provide numeric user_id.");
+  }
+
+  // Account deletion must be session-bound (JWT) so the self-delete guard
+  // is always enforceable. API-key auth cannot identify the caller's userId.
+  if (!ctx.jwtPayload.has_value()) {
+    return makeError(401, "unauthorized", "JWT required",
+                     "User deletion requires JWT session authentication.");
+  }
+  if (ctx.jwtPayload->userId == userId) {
+    return makeError(400, "validation_error", "Cannot delete own account",
+                     "Administrators cannot delete their own account.");
+  }
+
+  auto existing = database_->getUser(userId);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  if (!existing) {
+    return makeError(404, "not_found", "User not found",
+                     "Verify the user_id.");
+  }
+
+  if (!database_->deleteUser(userId, ctx.actor)) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+
+  return ApiResponse{204, "", "application/json"};
+}
+
+ApiResponse ApiRouter::handleListSamples(const RouteContext &ctx) const {
+  db::IDatabase::SampleFilter filter;
+  auto qIt = ctx.query.find("q");
+  if (qIt != ctx.query.end()) {
+    if (qIt->second.size() > 255) {
+      return makeError(400, "validation_error", "Query too long",
+                       "Search query must not exceed 255 characters.");
+    }
+    filter.query = qIt->second;
+  }
+  auto statusIt = ctx.query.find("status");
+  if (statusIt != ctx.query.end()) {
+    if (!core::Sample::isValidStatusString(statusIt->second)) {
+      return makeError(
+          400, "validation_error", "Invalid status",
+          "Use Erfasst, In Analyse, Analysiert, Validiert, Archiviert.");
+    }
+    filter.status = core::Sample::statusToString(
+        core::Sample::stringToStatus(statusIt->second));
+  }
+  auto limitIt = ctx.query.find("limit");
+  if (limitIt != ctx.query.end()) {
+    int limitValue = 0;
+    if (!parseIntValue(limitIt->second, limitValue)) {
+      return makeError(400, "validation_error", "Invalid limit",
+                       "Provide integer limit.");
+    }
+    // Validate and cap limit to prevent DoS
+    std::string validationError;
+    if (!validateAndCapLimit(limitValue, validationError)) {
+      return makeError(400, "validation_error", "Invalid limit",
+                       validationError);
+    }
+    filter.limit = limitValue;
+  }
+  auto offsetIt = ctx.query.find("offset");
+  if (offsetIt != ctx.query.end()) {
+    int offsetValue = 0;
+    if (!parseIntValue(offsetIt->second, offsetValue) || offsetValue < 0) {
+      return makeError(400, "validation_error", "Invalid offset",
+                       "Provide non-negative integer offset.");
+    }
+    if (offsetValue > MAX_PAGINATION_OFFSET) {
+      return makeError(400, "validation_error", "Offset too large",
+                       "offset must not exceed " +
+                           std::to_string(MAX_PAGINATION_OFFSET) + ".");
+    }
+    if (!filter.limit.has_value()) {
+      return makeError(400, "validation_error", "Offset requires limit",
+                       "Provide limit when using offset.");
+    }
+    filter.offset = offsetValue;
+  }
+  auto fromIt = ctx.query.find("from");
+  auto toIt = ctx.query.find("to");
+  bool hasFrom = false;
+  bool hasTo = false;
+
+  if (fromIt != ctx.query.end()) {
+    std::time_t ts{};
+    if (!parseTimeValue(fromIt->second, ts)) {
+      return makeError(400, "validation_error", "Invalid 'from' value",
+                       "Provide Unix timestamp for from.");
+    }
+    filter.fromDate = ts;
+    hasFrom = true;
+  }
+  if (toIt != ctx.query.end()) {
+    std::time_t ts{};
+    if (!parseTimeValue(toIt->second, ts)) {
+      return makeError(400, "validation_error", "Invalid 'to' value",
+                       "Provide Unix timestamp for to.");
+    }
+    filter.toDate = ts;
+    hasTo = true;
+  }
+  // Validate that from <= to when both are provided
+  if (hasFrom && hasTo && filter.fromDate > filter.toDate) {
+    return makeError(400, "validation_error", "Invalid date range",
+                     "'from' date must be less than or equal to 'to' date.");
+  }
+
+  auto samples = database_->getSamplesByFilter(filter);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+
+  int total = database_->getSamplesCount(filter);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  if (total < 0) {
+    total = static_cast<int>(samples.size());
+  }
+
+  json samplesArr = json::array();
+  for (const auto &s : samples) {
+    samplesArr.push_back(json::parse(sampleToJson(*s)));
+  }
+  const std::string out = json{{"data", samplesArr}, {"total", total}}.dump();
+
+  std::ostringstream details;
+  details
+      << "API READ /samples"
+      << "; count=" << samples.size()
+      << "; q=" << (filter.query.empty() ? "any" : filter.query)
+      << "; status=" << (filter.status.empty() ? "any" : filter.status)
+      << "; from="
+      << (filter.fromDate.has_value() ? std::to_string(*filter.fromDate)
+                                      : "any")
+      << "; to="
+      << (filter.toDate.has_value() ? std::to_string(*filter.toDate) : "any")
+      << "; limit="
+      << (filter.limit.has_value() ? std::to_string(*filter.limit) : "any")
+      << "; offset="
+      << (filter.offset.has_value() ? std::to_string(*filter.offset) : "any");
+  core::AuditEntry entry(core::AuditEntry::ActionType::ACCESS,
+                         core::AuditEntry::EntityType::SAMPLE, "*", ctx.actor,
+                         details.str());
+  if (!database_->logAudit(entry)) {
+    LOG_ERROR("[Audit] logAudit failed: {}", database_->getLastError());
+    return makeError(500, "internal_error", "Audit log failed",
+                     "Please contact the system administrator.");
+  }
+
+  return ApiResponse{200, out, "application/json"};
+}
+
+ApiResponse ApiRouter::handleGetSample(const RouteContext &ctx) const {
+  const std::string sampleId =
+      ctx.path.substr(std::string("/api/v1/samples/").size());
+  if (sampleId.empty()) {
+    return makeError(400, "validation_error", "Missing sample_id",
+                     "Provide sample_id in URL path.");
+  }
+  auto sample = database_->getSampleByBarcode(sampleId);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  if (!sample) {
+    return makeError(404, "not_found", "Sample not found",
+                     "Verify the sample_id.");
+  }
+
+  core::AuditEntry entry(core::AuditEntry::ActionType::ACCESS,
+                         core::AuditEntry::EntityType::SAMPLE, sampleId,
+                         ctx.actor, "API READ /samples/" + sampleId);
+  if (!database_->logAudit(entry)) {
+    LOG_ERROR("[Audit] logAudit failed: {}", database_->getLastError());
+    return makeError(500, "internal_error", "Audit log failed",
+                     "Please contact the system administrator.");
+  }
+
+  return ApiResponse{200, "{\"data\":" + sampleToJson(*sample) + "}",
+                     "application/json"};
+}
+
+ApiResponse ApiRouter::handleListOrders(const RouteContext &ctx) const {
+  db::IDatabase::OrderFilter filter;
+  auto statusIt = ctx.query.find("status");
+  if (statusIt != ctx.query.end()) {
+    if (!core::Order::isValidStatusString(statusIt->second)) {
+      return makeError(
+          400, "validation_error", "Invalid status",
+          "Use REQUESTED, IN_PROGRESS, COMPLETED, VALIDATED, CANCELLED.");
+    }
+    filter.status = core::Order::statusToString(
+        core::Order::stringToStatus(statusIt->second));
+  }
+  auto sampleIt = ctx.query.find("sample_id");
+  if (sampleIt != ctx.query.end()) {
+    if (sampleIt->second.size() > 64) {
+      return makeError(400, "validation_error", "sample_id too long",
+                       "sample_id filter must not exceed 64 characters.");
+    }
+    filter.sampleId = sampleIt->second;
+  }
+  auto priorityIt = ctx.query.find("priority");
+  if (priorityIt != ctx.query.end()) {
+    if (!core::Order::isValidPriorityString(priorityIt->second)) {
+      return makeError(400, "validation_error", "Invalid priority",
+                       "Use NORMAL, URGENT, EMERGENCY.");
+    }
+    filter.priority = core::Order::priorityToString(
+        core::Order::stringToPriority(priorityIt->second));
+  }
+  auto limitIt = ctx.query.find("limit");
+  if (limitIt != ctx.query.end()) {
+    int limitValue = 0;
+    if (!parseIntValue(limitIt->second, limitValue)) {
+      return makeError(400, "validation_error", "Invalid limit",
+                       "Provide integer limit.");
+    }
+    // Validate and cap limit to prevent DoS
+    std::string validationError;
+    if (!validateAndCapLimit(limitValue, validationError)) {
+      return makeError(400, "validation_error", "Invalid limit",
+                       validationError);
+    }
+    filter.limit = limitValue;
+  }
+  auto offsetIt = ctx.query.find("offset");
+  if (offsetIt != ctx.query.end()) {
+    int offsetValue = 0;
+    if (!parseIntValue(offsetIt->second, offsetValue) || offsetValue < 0) {
+      return makeError(400, "validation_error", "Invalid offset",
+                       "Provide non-negative integer offset.");
+    }
+    if (offsetValue > MAX_PAGINATION_OFFSET) {
+      return makeError(400, "validation_error", "Offset too large",
+                       "offset must not exceed " +
+                           std::to_string(MAX_PAGINATION_OFFSET) + ".");
+    }
+    if (!filter.limit.has_value()) {
+      return makeError(400, "validation_error", "Offset requires limit",
+                       "Provide limit when using offset.");
+    }
+    filter.offset = offsetValue;
+  }
+
+  auto orders = database_->getOrdersByFilter(filter);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+
+  int ordersTotal = database_->getOrdersCount(filter);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  if (ordersTotal < 0)
+    ordersTotal = static_cast<int>(orders.size());
+  json ordersArr = json::array();
+  for (const auto &o : orders) {
+    ordersArr.push_back(json::parse(orderToJson(*o)));
+  }
+  const std::string out =
+      json{{"data", ordersArr}, {"total", ordersTotal}}.dump();
+
+  std::ostringstream details;
+  details
+      << "API READ /orders"
+      << "; count=" << orders.size()
+      << "; status=" << (filter.status.empty() ? "any" : filter.status)
+      << "; sample_id=" << (filter.sampleId.empty() ? "any" : filter.sampleId)
+      << "; priority=" << (filter.priority.empty() ? "any" : filter.priority)
+      << "; limit="
+      << (filter.limit.has_value() ? std::to_string(*filter.limit) : "any")
+      << "; offset="
+      << (filter.offset.has_value() ? std::to_string(*filter.offset) : "any");
+  core::AuditEntry entry(core::AuditEntry::ActionType::ACCESS,
+                         core::AuditEntry::EntityType::ORDER, "*", ctx.actor,
+                         details.str());
+  if (!database_->logAudit(entry)) {
+    LOG_ERROR("[Audit] logAudit failed: {}", database_->getLastError());
+    return makeError(500, "internal_error", "Audit log failed",
+                     "Please contact the system administrator.");
+  }
+
+  return ApiResponse{200, out, "application/json"};
+}
+
+ApiResponse ApiRouter::handleGetOrder(const RouteContext &ctx) const {
+  const std::string orderId =
+      ctx.path.substr(std::string("/api/v1/orders/").size());
+  if (orderId.empty()) {
+    return makeError(400, "validation_error", "Missing order_id",
+                     "Provide order_id in URL path.");
+  }
+  auto order = database_->getOrderByOrderId(orderId);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  if (!order) {
+    return makeError(404, "not_found", "Order not found",
+                     "Verify the order_id.");
+  }
+
+  core::AuditEntry entry(core::AuditEntry::ActionType::ACCESS,
+                         core::AuditEntry::EntityType::ORDER, orderId, ctx.actor,
+                         "API READ /orders/" + orderId);
+  if (!database_->logAudit(entry)) {
+    LOG_ERROR("[Audit] logAudit failed: {}", database_->getLastError());
+    return makeError(500, "internal_error", "Audit log failed",
+                     "Please contact the system administrator.");
+  }
+
+  return ApiResponse{200, "{\"data\":" + orderToJson(*order) + "}",
+                     "application/json"};
+}
+
+ApiResponse ApiRouter::handleListResults(const RouteContext &ctx) const {
+  std::vector<std::unique_ptr<core::TestResult>> results;
+  std::optional<int> limit;
+  std::optional<int> offset;
+  auto limitIt = ctx.query.find("limit");
+  if (limitIt != ctx.query.end()) {
+    int limitValue = 0;
+    if (!parseIntValue(limitIt->second, limitValue)) {
+      return makeError(400, "validation_error", "Invalid limit",
+                       "Provide integer limit.");
+    }
+    // Validate and cap limit to prevent DoS
+    std::string validationError;
+    if (!validateAndCapLimit(limitValue, validationError)) {
+      return makeError(400, "validation_error", "Invalid limit",
+                       validationError);
+    }
+    limit = limitValue;
+  }
+  auto offsetIt = ctx.query.find("offset");
+  if (offsetIt != ctx.query.end()) {
+    int offsetValue = 0;
+    if (!parseIntValue(offsetIt->second, offsetValue) || offsetValue < 0) {
+      return makeError(400, "validation_error", "Invalid offset",
+                       "Provide non-negative integer offset.");
+    }
+    if (offsetValue > MAX_PAGINATION_OFFSET) {
+      return makeError(400, "validation_error", "Offset too large",
+                       "offset must not exceed " +
+                           std::to_string(MAX_PAGINATION_OFFSET) + ".");
+    }
+    if (!limit.has_value()) {
+      return makeError(400, "validation_error", "Offset requires limit",
+                       "Provide limit when using offset.");
+    }
+    offset = offsetValue;
+  }
+  // Parse optional status and flag filters
+  std::string statusFilter;
+  std::string flagFilter;
+  static const std::unordered_set<std::string> kValidResultStatuses{
+      "PENDING", "ENTERED", "VALIDATED", "REJECTED", "REPEATED"};
+  static const std::unordered_set<std::string> kValidResultFlags{
+      "NORMAL", "LOW", "HIGH", "CRITICAL", "UNDEFINED"};
+  auto statusResultIt = ctx.query.find("status");
+  if (statusResultIt != ctx.query.end() && !statusResultIt->second.empty()) {
+    if (kValidResultStatuses.find(statusResultIt->second) ==
+        kValidResultStatuses.end()) {
+      return makeError(400, "validation_error", "Invalid status",
+                       "status must be one of: PENDING, ENTERED, VALIDATED, "
+                       "REJECTED, REPEATED");
+    }
+    statusFilter = statusResultIt->second;
+  }
+
+  auto flagResultIt = ctx.query.find("flag");
+  if (flagResultIt != ctx.query.end() && !flagResultIt->second.empty()) {
+    if (kValidResultFlags.find(flagResultIt->second) ==
+        kValidResultFlags.end()) {
+      return makeError(
+          400, "validation_error", "Invalid flag",
+          "flag must be one of: NORMAL, LOW, HIGH, CRITICAL, UNDEFINED");
+    }
+    flagFilter = flagResultIt->second;
+  }
+
+  std::optional<int> resultsOrderIdFilter;
+  auto orderIt = ctx.query.find("order_id");
+  // When in-memory filters are active, fetch a capped window then filter.
+  // Cap prevents unbounded table scans into RAM on large result sets.
+  constexpr int kMemFilterFetchCap = 10000;
+  bool hasMemFilter = !statusFilter.empty() || !flagFilter.empty();
+  std::optional<int> dbLimit =
+      hasMemFilter ? std::make_optional(kMemFilterFetchCap) : limit;
+  std::optional<int> dbOffset = hasMemFilter ? std::make_optional(0) : offset;
+  if (orderIt != ctx.query.end()) {
+    int orderId = 0;
+    if (!parseIntValue(orderIt->second, orderId) || orderId <= 0) {
+      return makeError(400, "validation_error", "Invalid order_id",
+                       "Provide numeric order_id.");
+    }
+    results = database_->getTestResultsByOrderId(orderId, dbLimit, dbOffset);
+    resultsOrderIdFilter = orderId;
+  } else {
+    results = database_->getAllTestResults(dbLimit, dbOffset);
+  }
+
+  // Apply status filter in-memory if provided
+  if (!statusFilter.empty()) {
+    std::vector<std::unique_ptr<core::TestResult>> filtered;
+    for (auto &r : results) {
+      if (r->getStatusString() == statusFilter) {
+        filtered.push_back(std::move(r));
+      }
+    }
+    results = std::move(filtered);
+  }
+  // Apply flag filter in-memory if provided
+  if (!flagFilter.empty()) {
+    std::vector<std::unique_ptr<core::TestResult>> filtered;
+    for (auto &r : results) {
+      if (r->getFlagString() == flagFilter) {
+        filtered.push_back(std::move(r));
+      }
+    }
+    results = std::move(filtered);
+  }
+
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+
+  // Total is now accurate: either filtered count (hasMem) or DB count (no
+  // filter)
+  int resultsTotal =
+      hasMemFilter ? static_cast<int>(results.size())
+                   : database_->getTestResultsCount(resultsOrderIdFilter);
+  if (!hasMemFilter && database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  // When in-memory filters ran (no DB limit/offset), apply pagination now
+  if (hasMemFilter && (limit.has_value() || offset.has_value())) {
+    int startIdx = offset.value_or(0);
+    int endIdx =
+        limit.has_value()
+            ? std::min(startIdx + *limit, static_cast<int>(results.size()))
+            : static_cast<int>(results.size());
+    if (startIdx < static_cast<int>(results.size())) {
+      std::vector<std::unique_ptr<core::TestResult>> paged;
+      for (int pi = startIdx; pi < endIdx; ++pi) {
+        paged.push_back(std::move(results[static_cast<size_t>(pi)]));
+      }
+      results = std::move(paged);
+    } else {
+      results.clear();
+    }
+  }
+  std::unordered_map<int, std::string> orderIdCache;
+  for (const auto &r : results) {
+    const int oid = r->getOrderId();
+    if (orderIdCache.find(oid) == orderIdCache.end()) {
+      auto ord = database_->getOrder(oid);
+      if (ord) {
+        orderIdCache[oid] = ord->getOrderId();
+      }
+    }
+  }
+  if (resultsTotal < 0)
+    resultsTotal = static_cast<int>(results.size());
+  json resultsArr = json::array();
+  for (const auto &r : results) {
+    const auto cit = orderIdCache.find(r->getOrderId());
+    const std::string &oidStr =
+        (cit != orderIdCache.end()) ? cit->second : "";
+    resultsArr.push_back(json::parse(resultToJson(*r, oidStr)));
+  }
+  const std::string out =
+      json{{"data", resultsArr}, {"total", resultsTotal}}.dump();
+
+  std::ostringstream details;
+  details << "API READ /results"
+          << "; count=" << results.size() << "; order_id="
+          << (orderIt != ctx.query.end() ? orderIt->second : "any") << "; limit="
+          << (limit.has_value() ? std::to_string(*limit) : "any")
+          << "; offset="
+          << (offset.has_value() ? std::to_string(*offset) : "any");
+  core::AuditEntry entry(core::AuditEntry::ActionType::ACCESS,
+                         core::AuditEntry::EntityType::RESULT, "*", ctx.actor,
+                         details.str());
+  if (!database_->logAudit(entry)) {
+    LOG_ERROR("[Audit] logAudit failed: {}", database_->getLastError());
+    return makeError(500, "internal_error", "Audit log failed",
+                     "Please contact the system administrator.");
+  }
+
+  return ApiResponse{200, out, "application/json"};
+}
+
+ApiResponse ApiRouter::handleGetResult(const RouteContext &ctx) const {
+  const std::string resultId =
+      ctx.path.substr(std::string("/api/v1/results/").size());
+  if (resultId.empty()) {
+    return makeError(400, "validation_error", "Missing result_id",
+                     "Provide result_id in URL path.");
+  }
+  auto result = database_->getTestResultByResultId(resultId);
+  if (database_->hasError()) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+  if (!result) {
+    return makeError(404, "not_found", "Result not found",
+                     "Verify the result_id.");
+  }
+
+  core::AuditEntry entry(core::AuditEntry::ActionType::ACCESS,
+                         core::AuditEntry::EntityType::RESULT, resultId,
+                         ctx.actor, "API READ /results/" + resultId);
+  if (!database_->logAudit(entry)) {
+    LOG_ERROR("[Audit] logAudit failed: {}", database_->getLastError());
+    return makeError(500, "internal_error", "Audit log failed",
+                     "Please contact the system administrator.");
+  }
+
+  {
+    std::string oidStr;
+    auto parentOrder = database_->getOrder(result->getOrderId());
+    if (parentOrder) {
+      oidStr = parentOrder->getOrderId();
+    }
+    return ApiResponse{200,
+                       "{\"data\":" + resultToJson(*result, oidStr) + "}",
+                       "application/json"};
+  }
+}
+
+ApiResponse ApiRouter::handleCreateSample(
+    const RouteContext &ctx,
+    std::unordered_map<std::string, std::string> &payload) const {
+  if (payload.find("sample_id") == payload.end() ||
+      payload["sample_id"].empty()) {
+    return makeError(400, "validation_error", "Missing sample_id",
+                     "Provide sample_id in request body.");
+  }
+  if (payload.find("patient_id") == payload.end() ||
+      payload["patient_id"].empty()) {
+    return makeError(400, "validation_error", "Missing patient_id",
+                     "Provide patient_id in request body.");
+  }
+
+  // Validate sample_id and patient_id length
+  std::string validationError;
+  if (!validateStringLength(payload["sample_id"], 1, 64, validationError)) {
+    return makeError(400, "validation_error", "Invalid sample_id",
+                     validationError);
+  }
+  if (!validateStringLength(payload["patient_id"], 1, 64, validationError)) {
+    return makeError(400, "validation_error", "Invalid patient_id",
+                     validationError);
+  }
+
+  core::Sample sample(payload["sample_id"], payload["patient_id"]);
+  auto nameIt = payload.find("patient_name");
+  if (nameIt != payload.end()) {
+    // Validate patient_name length if provided
+    if (!nameIt->second.empty() &&
+        !validateStringLength(nameIt->second, 1, 255, validationError)) {
+      return makeError(400, "validation_error", "Invalid patient_name",
+                       validationError);
+    }
+    sample.setPatientName(nameIt->second);
+  }
+  auto descIt = payload.find("description");
+  if (descIt != payload.end()) {
+    // Validate description length if provided
+    if (!descIt->second.empty() &&
+        !validateStringLength(descIt->second, 1, 5000, validationError)) {
+      return makeError(400, "validation_error", "Invalid description",
+                       validationError);
+    }
+    sample.setDescription(descIt->second);
+  }
+  auto statusIt = payload.find("status");
+  if (statusIt != payload.end() && !statusIt->second.empty()) {
+    try {
+      sample.setStatus(core::Sample::stringToStatus(statusIt->second));
+    } catch (const std::exception &e) {
+      return makeError(400, "validation_error", "Invalid status", e.what());
+    }
+  }
+  auto regIt = payload.find("registration_date");
+  if (regIt != payload.end() && !regIt->second.empty()) {
+    std::time_t ts{};
+    if (!parseTimeValue(regIt->second, ts)) {
+      return makeError(400, "validation_error", "Invalid registration_date",
+                       "Provide Unix timestamp for registration_date.");
+    }
+    if (ts <= 0 || ts > std::time(nullptr) + kMaxFutureDateTolerance) {
+      return makeError(400, "validation_error", "Invalid registration_date",
+                       "registration_date must not be in the future.");
+    }
+    sample.setRegistrationDate(ts);
+  }
+
+  if (!database_->createSample(sample, ctx.actor)) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+
+  auto created = database_->getSampleByBarcode(sample.getSampleId());
+  database_->clearError(); // Read-back failure is non-fatal; fall back to
+                           // in-memory object
+  const core::Sample &responseSample = created ? *created : sample;
+  return ApiResponse{201, "{\"data\":" + sampleToJson(responseSample) + "}",
+                     "application/json"};
+}
+
+ApiResponse ApiRouter::handleCreateOrder(
+    const RouteContext &ctx,
+    std::unordered_map<std::string, std::string> &payload) const {
+  if (payload.find("order_id") == payload.end() ||
+      payload["order_id"].empty()) {
+    return makeError(400, "validation_error", "Missing order_id",
+                     "Provide order_id in request body.");
+  }
+  if (payload.find("sample_id") == payload.end() ||
+      payload["sample_id"].empty()) {
+    return makeError(400, "validation_error", "Missing sample_id",
+                     "Provide sample_id in request body.");
+  }
+  if (payload.find("test_type") == payload.end() ||
+      payload["test_type"].empty()) {
+    return makeError(400, "validation_error", "Missing test_type",
+                     "Provide test_type in request body.");
+  }
+
+  // Validate required field lengths
+  std::string validationError;
+  if (!validateStringLength(payload["order_id"], 1, 64, validationError)) {
+    return makeError(400, "validation_error", "Invalid order_id",
+                     validationError);
+  }
+  if (!validateStringLength(payload["sample_id"], 1, 64, validationError)) {
+    return makeError(400, "validation_error", "Invalid sample_id",
+                     validationError);
+  }
+  // Validate sample_id references an existing sample
+  auto sampleRef = database_->getSampleByBarcode(payload["sample_id"]);
+  if (!sampleRef) {
+    return makeError(422, "unprocessable_entity", "Sample not found",
+                     "The provided sample_id does not exist.");
+  }
+  if (!validateStringLength(payload["test_type"], 1, 255, validationError)) {
+    return makeError(400, "validation_error", "Invalid test_type",
+                     validationError);
+  }
+
+  core::Order order(payload["order_id"], payload["sample_id"],
+                    payload["test_type"]);
+  auto statusIt = payload.find("status");
+  if (statusIt != payload.end() && !statusIt->second.empty()) {
+    try {
+      order.setStatus(core::Order::stringToStatus(statusIt->second));
+    } catch (const std::exception &e) {
+      return makeError(400, "validation_error", "Invalid status", e.what());
+    }
+  }
+  auto priorityIt = payload.find("priority");
+  if (priorityIt != payload.end() && !priorityIt->second.empty()) {
+    try {
+      order.setPriority(core::Order::stringToPriority(priorityIt->second));
+    } catch (const std::exception &e) {
+      return makeError(400, "validation_error", "Invalid priority", e.what());
+    }
+  }
+  auto requestedIt = payload.find("requested_date");
+  if (requestedIt != payload.end() && !requestedIt->second.empty()) {
+    std::time_t ts{};
+    if (!parseTimeValue(requestedIt->second, ts)) {
+      return makeError(400, "validation_error", "Invalid requested_date",
+                       "Provide Unix timestamp for requested_date.");
+    }
+    order.setRequestedDate(ts);
+  }
+  auto completedIt = payload.find("completed_date");
+  if (completedIt != payload.end() && !completedIt->second.empty()) {
+    std::time_t ts{};
+    if (!parseTimeValue(completedIt->second, ts)) {
+      return makeError(400, "validation_error", "Invalid completed_date",
+                       "Provide Unix timestamp for completed_date.");
+    }
+    order.setCompletedDate(ts);
+  }
+  auto requesterIt = payload.find("requested_by");
+  if (requesterIt != payload.end()) {
+    // Validate requested_by length if provided
+    if (!requesterIt->second.empty() &&
+        !validateStringLength(requesterIt->second, 1, 255, validationError)) {
+      return makeError(400, "validation_error", "Invalid requested_by",
+                       validationError);
+    }
+    order.setRequestedBy(requesterIt->second);
+  }
+  auto notesIt = payload.find("notes");
+  if (notesIt != payload.end()) {
+    // Validate notes length if provided
+    if (!notesIt->second.empty() &&
+        !validateStringLength(notesIt->second, 1, 5000, validationError)) {
+      return makeError(400, "validation_error", "Invalid notes",
+                       validationError);
+    }
+    order.setNotes(notesIt->second);
+  }
+
+  if (!database_->createOrder(order, ctx.actor)) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+
+  auto created = database_->getOrderByOrderId(order.getOrderId());
+  database_->clearError(); // Read-back failure is non-fatal; fall back to
+                           // in-memory object
+  const core::Order &responseOrder = created ? *created : order;
+  return ApiResponse{201, "{\"data\":" + orderToJson(responseOrder) + "}",
+                     "application/json"};
+}
+
+ApiResponse ApiRouter::handleCreateResult(
+    const RouteContext &ctx,
+    std::unordered_map<std::string, std::string> &payload) const {
+  if (payload.find("result_id") == payload.end() ||
+      payload["result_id"].empty()) {
+    return makeError(400, "validation_error", "Missing result_id",
+                     "Provide result_id in request body.");
+  }
+  if (payload.find("order_id") == payload.end() ||
+      payload["order_id"].empty()) {
+    return makeError(400, "validation_error", "Missing order_id",
+                     "Provide order_id in request body.");
+  }
+  if (payload.find("test_parameter") == payload.end() ||
+      payload["test_parameter"].empty()) {
+    return makeError(400, "validation_error", "Missing test_parameter",
+                     "Provide test_parameter in request body.");
+  }
+  if (payload.find("value") == payload.end() || payload["value"].empty()) {
+    return makeError(400, "validation_error", "Missing value",
+                     "Provide value in request body.");
+  }
+  if (payload.find("unit") == payload.end() || payload["unit"].empty()) {
+    return makeError(400, "validation_error", "Missing unit",
+                     "Provide unit in request body.");
+  }
+
+  int orderId = 0;
+  if (!parseIntValue(payload["order_id"], orderId) || orderId <= 0) {
+    return makeError(400, "validation_error", "Invalid order_id",
+                     "Provide numeric order_id.");
+  }
+  // Validate order exists and has active status (orderId is the numeric PK)
+  auto orderRef = database_->getOrder(orderId);
+  if (!orderRef) {
+    return makeError(422, "unprocessable_entity", "Order not found",
+                     "Provide the numeric order id (orders.id, not the "
+                     "order_id string).");
+  }
+  {
+    auto orderStatus = orderRef->getStatus();
+    if (orderStatus != core::Order::Status::IN_PROGRESS &&
+        orderStatus != core::Order::Status::COMPLETED) {
+      return makeError(
+          409, "conflict", "Order not active",
+          "Results can only be added to IN_PROGRESS or COMPLETED orders.");
+    }
+  }
+
+  // Validate required field lengths
+  std::string validationError;
+  if (!validateStringLength(payload["result_id"], 1, 64, validationError)) {
+    return makeError(400, "validation_error", "Invalid result_id",
+                     validationError);
+  }
+  if (!validateStringLength(payload["test_parameter"], 1, 255,
+                            validationError)) {
+    return makeError(400, "validation_error", "Invalid test_parameter",
+                     validationError);
+  }
+  if (!validateStringLength(payload["value"], 1, 255, validationError)) {
+    return makeError(400, "validation_error", "Invalid value",
+                     validationError);
+  }
+  if (!validateStringLength(payload["unit"], 1, 255, validationError)) {
+    return makeError(400, "validation_error", "Invalid unit",
+                     validationError);
+  }
+
+  core::TestResult result(payload["result_id"], orderId,
+                          payload["test_parameter"]);
+  result.setValue(payload["value"]);
+  result.setUnit(payload["unit"]);
+  auto refRangeIt = payload.find("reference_range");
+  if (refRangeIt != payload.end()) {
+    // Validate reference_range length if provided
+    if (!refRangeIt->second.empty() &&
+        !validateStringLength(refRangeIt->second, 1, 255, validationError)) {
+      return makeError(400, "validation_error", "Invalid reference_range",
+                       validationError);
+    }
+    result.setReferenceRange(refRangeIt->second);
+  }
+  auto refLowIt = payload.find("reference_low");
+  auto refHighIt = payload.find("reference_high");
+  double refLow = 0.0;
+  double refHigh = 0.0;
+  bool hasRefLow = false;
+  bool hasRefHigh = false;
+
+  if (refLowIt != payload.end() && !refLowIt->second.empty()) {
+    if (!parseDoubleValue(refLowIt->second, refLow)) {
+      return makeError(400, "validation_error", "Invalid reference_low",
+                       "Provide numeric reference_low.");
+    }
+    hasRefLow = true;
+    result.setReferenceLow(refLow);
+  }
+  if (refHighIt != payload.end() && !refHighIt->second.empty()) {
+    if (!parseDoubleValue(refHighIt->second, refHigh)) {
+      return makeError(400, "validation_error", "Invalid reference_high",
+                       "Provide numeric reference_high.");
+    }
+    hasRefHigh = true;
+    result.setReferenceHigh(refHigh);
+  }
+  // Validate that reference_high > reference_low when both are provided
+  if (hasRefLow && hasRefHigh && refHigh <= refLow) {
+    return makeError(400, "validation_error", "Invalid reference range",
+                     "reference_high must be greater than reference_low.");
+  }
+  auto statusIt = payload.find("status");
+  if (statusIt != payload.end() && !statusIt->second.empty()) {
+    try {
+      result.setStatus(core::TestResult::stringToStatus(statusIt->second));
+    } catch (const std::exception &e) {
+      return makeError(400, "validation_error", "Invalid status", e.what());
+    }
+  } else {
+    result.setStatus(core::TestResult::Status::ENTERED);
+  }
+  auto measuredIt = payload.find("measured_date");
+  if (measuredIt != payload.end() && !measuredIt->second.empty()) {
+    std::time_t ts{};
+    if (!parseTimeValue(measuredIt->second, ts)) {
+      return makeError(400, "validation_error", "Invalid measured_date",
+                       "Provide Unix timestamp for measured_date.");
+    }
+    result.setMeasuredDate(ts);
+  } else {
+    result.setMeasuredDate(std::time(nullptr));
+  }
+  auto measuredByIt = payload.find("measured_by");
+  if (measuredByIt != payload.end()) {
+    // Validate measured_by length if provided
+    if (!measuredByIt->second.empty() &&
+        !validateStringLength(measuredByIt->second, 1, 255, validationError)) {
+      return makeError(400, "validation_error", "Invalid measured_by",
+                       validationError);
+    }
+    result.setMeasuredBy(measuredByIt->second);
+  }
+  auto commentIt = payload.find("comment");
+  if (commentIt != payload.end()) {
+    // Validate comment length if provided
+    if (!commentIt->second.empty() &&
+        !validateStringLength(commentIt->second, 1, 5000, validationError)) {
+      return makeError(400, "validation_error", "Invalid comment",
+                       validationError);
+    }
+    result.setComment(commentIt->second);
+  }
+  auto flagIt = payload.find("flag");
+  if (flagIt != payload.end() && !flagIt->second.empty()) {
+    try {
+      result.setFlag(core::TestResult::stringToFlag(flagIt->second));
+    } catch (const std::exception &e) {
+      return makeError(400, "validation_error", "Invalid flag", e.what());
+    }
+  } else {
+    result.setFlag(result.evaluateFlag());
+  }
+
+  if (!database_->createTestResult(result, ctx.actor)) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+
+  auto created = database_->getTestResultByResultId(result.getResultId());
+  database_->clearError(); // Read-back failure is non-fatal; fall back to
+                           // in-memory object
+  const core::TestResult &responseResult = created ? *created : result;
+  {
+    std::string oidStr;
+    auto parentOrder = database_->getOrder(responseResult.getOrderId());
+    if (parentOrder) {
+      oidStr = parentOrder->getOrderId();
+    }
+    return ApiResponse{
+        201, "{\"data\":" + resultToJson(responseResult, oidStr) + "}",
+        "application/json"};
+  }
+}
+
 ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
   if (!database_) {
     return makeError(500, "internal_error", "Database unavailable",
@@ -666,28 +2462,12 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
 
   // Route: GET /api/v1/health (unauthenticated)
   if (method == "get" && path == "/api/v1/health") {
-    return ApiResponse{
-        200, json{{"status", "ok"}, {"service", "opensylab-lims"}}.dump(),
-        "application/json"};
+    return handleHealth();
   }
 
   // Route: GET /api/v1/openapi.yaml (unauthenticated — public spec)
   if (method == "get" && path == "/api/v1/openapi.yaml") {
-    static constexpr const char *kSpecPaths[] = {
-        "docs/openapi.yaml",
-        "/usr/share/opensylab/openapi.yaml",
-    };
-    for (const char *specPath : kSpecPaths) {
-      std::ifstream specFile(specPath);
-      if (specFile.is_open()) {
-        std::ostringstream buf;
-        buf << specFile.rdbuf();
-        return ApiResponse{200, buf.str(), "application/yaml"};
-      }
-    }
-    return ApiResponse{404,
-                       R"({"error":"OpenAPI specification file not found"})",
-                       "application/json"};
+    return handleOpenApiSpec();
   }
 
   // Route: POST /api/v1/auth/logout
@@ -846,6 +2626,11 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
   const std::unordered_map<std::string, std::string> query =
       parseQuery(queryString);
 
+  // Shared context threaded to extracted route handlers (Phase A decomposition).
+  const RouteContext ctx{request,       method,  path,   query,
+                         jwtPayload,     effectiveRole,   actor,
+                         isGet,          isPost,  isPut,  isDelete};
+
   // RBAC: VIEWER role cannot write lab data (applies to POST, PUT, DELETE)
   // Exceptions: own password change, MFA enrollment, MFA disable
   if (!isGet && (effectiveRole == "VIEWER" || effectiveRole == "CUSTOM") &&
@@ -879,141 +2664,17 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
 
   // POST /api/v1/auth/mfa/enroll — generate and return a fresh TOTP secret
   if (isPost && path == "/api/v1/auth/mfa/enroll") {
-    if (!jwtPayload.has_value()) {
-      return makeError(401, "unauthorized", "JWT required",
-                       "Use JWT authentication to enroll MFA.");
-    }
-    const std::string secret = database_->generateMfaSecret();
-    if (secret.empty()) {
-      LOG_ERROR("[MFA] Secret generation failed: {}",
-                database_->getLastError());
-      return makeError(500, "internal_error", "Secret generation failed",
-                       "Please contact the system administrator.");
-    }
-    // Store server-side so verify-enrollment can retrieve it without trusting
-    // the client. Reject a new request if a non-expired session already exists
-    // — avoids confusing the user whose authenticator app was already
-    // configured with the first secret.
-    {
-      std::lock_guard<std::mutex> lock(enrollmentMutex_);
-      const auto now = std::chrono::steady_clock::now();
-      auto existing = pendingEnrollments_.find(jwtPayload->userId);
-      if (existing != pendingEnrollments_.end() &&
-          existing->second.expiry > now) {
-        return makeError(409, "conflict", "Enrollment already in progress",
-                         "An active enrollment session exists. Complete it or "
-                         "wait for it to expire before starting a new one.");
-      }
-      pendingEnrollments_[jwtPayload->userId] = {
-          secret, now + std::chrono::minutes(10)};
-    }
-    const std::string uri =
-        database_->getMfaEnrollmentUri(jwtPayload->username, secret);
-    const json resp = {
-        {"secret_base32", secret},
-        {"otpauth_uri", uri},
-        {"instructions",
-         "Scan this QR code with your authenticator app, "
-         "then confirm by calling POST /api/v1/auth/mfa/verify-enrollment."}};
-    return ApiResponse{200, resp.dump(), "application/json"};
+    return handleMfaEnroll(ctx);
   }
 
   // POST /api/v1/auth/mfa/verify-enrollment — verify code and persist secret
   if (isPost && path == "/api/v1/auth/mfa/verify-enrollment") {
-    if (!jwtPayload.has_value()) {
-      return makeError(401, "unauthorized", "JWT required",
-                       "Use JWT authentication to verify MFA enrollment.");
-    }
-    const std::string enrollBody = trimLeadingNewlines(request.body);
-    if (enrollBody.empty()) {
-      return makeError(400, "validation_error", "Missing request body",
-                       "Provide JSON with secret_base32 and code.");
-    }
-    json enrollPayload;
-    try {
-      enrollPayload = json::parse(enrollBody);
-    } catch (const json::exception &) {
-      return makeError(400, "validation_error", "Invalid JSON payload",
-                       "Request body is not valid JSON.");
-    }
-    if (!enrollPayload.is_object()) {
-      return makeError(400, "validation_error", "Invalid JSON payload",
-                       "Expected a JSON object.");
-    }
-    const std::string enrollCode = enrollPayload.value("code", std::string{});
-    if (enrollCode.empty()) {
-      return makeError(400, "validation_error", "Missing code",
-                       "Provide the current 6-digit TOTP code.");
-    }
-    // Retrieve secret from server-side map — reject any client-supplied secret
-    std::string enrollSecret;
-    {
-      std::lock_guard<std::mutex> lock(enrollmentMutex_);
-      auto it = pendingEnrollments_.find(jwtPayload->userId);
-      if (it == pendingEnrollments_.end() ||
-          it->second.expiry <= std::chrono::steady_clock::now()) {
-        pendingEnrollments_.erase(jwtPayload->userId);
-        return makeError(
-            400, "enrollment_expired", "Enrollment session expired",
-            "Start enrollment again with POST /api/v1/auth/mfa/enroll.");
-      }
-      enrollSecret = it->second.secret;
-      pendingEnrollments_.erase(it);
-    }
-    int64_t enrollStep = -1;
-    if (!database_->verifyMfaCodeForEnrollment(enrollSecret, enrollCode,
-                                               enrollStep)) {
-      return makeError(400, "invalid_code", "Invalid TOTP code",
-                       "The supplied code does not match the secret. "
-                       "Ensure your device clock is correct and retry.");
-    }
-    if (!database_->setUserMfaSecret(jwtPayload->userId, enrollSecret,
-                                     enrollStep)) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-    return ApiResponse{200, R"({"message":"MFA successfully enabled"})",
-                       "application/json"};
+    return handleMfaVerifyEnrollment(ctx);
   }
 
   // DELETE /api/v1/auth/mfa — disable MFA for the currently authenticated user
   if (isDelete && path == "/api/v1/auth/mfa") {
-    if (!jwtPayload.has_value()) {
-      return makeError(401, "unauthorized", "JWT required",
-                       "Use JWT authentication to disable MFA.");
-    }
-    const std::string mfaDisableBody = trimLeadingNewlines(request.body);
-    if (mfaDisableBody.empty()) {
-      return makeError(
-          400, "validation_error", "Missing request body",
-          "Provide JSON with current_password to confirm MFA disable.");
-    }
-    std::unordered_map<std::string, std::string> mfaDisablePayload;
-    std::string mfaDisableParseErr;
-    if (!parseJsonBodyToMap(mfaDisableBody, mfaDisablePayload,
-                            mfaDisableParseErr)) {
-      return makeError(400, "validation_error", "Invalid JSON payload",
-                       mfaDisableParseErr);
-    }
-    const auto mfaDisablePwdIt = mfaDisablePayload.find("current_password");
-    if (mfaDisablePwdIt == mfaDisablePayload.end() ||
-        mfaDisablePwdIt->second.empty()) {
-      return makeError(400, "validation_error", "Missing current_password",
-                       "Provide current_password to confirm MFA disable.");
-    }
-    auto mfaDisableUser = database_->getUser(jwtPayload->userId);
-    if (!mfaDisableUser) {
-      return makeError(404, "not_found", "User not found",
-                       "User account not found.");
-    }
-    if (!mfaDisableUser->verifyPassword(mfaDisablePwdIt->second)) {
-      return makeError(401, "unauthorized", "Invalid password",
-                       "Current password is incorrect.");
-    }
-    if (!database_->disableUserMfa(jwtPayload->userId, jwtPayload->username)) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-    return ApiResponse{200, R"({"message":"MFA disabled"})",
-                       "application/json"};
+    return handleMfaDisable(ctx);
   }
 
   if ((isPost || isPut) && path.rfind("/api/v1/users", 0) != 0 &&
@@ -1064,376 +2725,15 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
     }
 
     if (path == "/api/v1/samples" && isPost) {
-      if (payload.find("sample_id") == payload.end() ||
-          payload["sample_id"].empty()) {
-        return makeError(400, "validation_error", "Missing sample_id",
-                         "Provide sample_id in request body.");
-      }
-      if (payload.find("patient_id") == payload.end() ||
-          payload["patient_id"].empty()) {
-        return makeError(400, "validation_error", "Missing patient_id",
-                         "Provide patient_id in request body.");
-      }
-
-      // Validate sample_id and patient_id length
-      std::string validationError;
-      if (!validateStringLength(payload["sample_id"], 1, 64, validationError)) {
-        return makeError(400, "validation_error", "Invalid sample_id",
-                         validationError);
-      }
-      if (!validateStringLength(payload["patient_id"], 1, 64,
-                                validationError)) {
-        return makeError(400, "validation_error", "Invalid patient_id",
-                         validationError);
-      }
-
-      core::Sample sample(payload["sample_id"], payload["patient_id"]);
-      auto nameIt = payload.find("patient_name");
-      if (nameIt != payload.end()) {
-        // Validate patient_name length if provided
-        if (!nameIt->second.empty() &&
-            !validateStringLength(nameIt->second, 1, 255, validationError)) {
-          return makeError(400, "validation_error", "Invalid patient_name",
-                           validationError);
-        }
-        sample.setPatientName(nameIt->second);
-      }
-      auto descIt = payload.find("description");
-      if (descIt != payload.end()) {
-        // Validate description length if provided
-        if (!descIt->second.empty() &&
-            !validateStringLength(descIt->second, 1, 5000, validationError)) {
-          return makeError(400, "validation_error", "Invalid description",
-                           validationError);
-        }
-        sample.setDescription(descIt->second);
-      }
-      auto statusIt = payload.find("status");
-      if (statusIt != payload.end() && !statusIt->second.empty()) {
-        try {
-          sample.setStatus(core::Sample::stringToStatus(statusIt->second));
-        } catch (const std::exception &e) {
-          return makeError(400, "validation_error", "Invalid status", e.what());
-        }
-      }
-      auto regIt = payload.find("registration_date");
-      if (regIt != payload.end() && !regIt->second.empty()) {
-        std::time_t ts{};
-        if (!parseTimeValue(regIt->second, ts)) {
-          return makeError(400, "validation_error", "Invalid registration_date",
-                           "Provide Unix timestamp for registration_date.");
-        }
-        if (ts <= 0 || ts > std::time(nullptr) + kMaxFutureDateTolerance) {
-          return makeError(400, "validation_error", "Invalid registration_date",
-                           "registration_date must not be in the future.");
-        }
-        sample.setRegistrationDate(ts);
-      }
-
-      if (!database_->createSample(sample, actor)) {
-        return makeDbErrorResponse(database_->getLastError());
-      }
-
-      auto created = database_->getSampleByBarcode(sample.getSampleId());
-      database_->clearError(); // Read-back failure is non-fatal; fall back to
-                               // in-memory object
-      const core::Sample &responseSample = created ? *created : sample;
-      return ApiResponse{201, "{\"data\":" + sampleToJson(responseSample) + "}",
-                         "application/json"};
+      return handleCreateSample(ctx, payload);
     }
 
     if (path == "/api/v1/orders" && isPost) {
-      if (payload.find("order_id") == payload.end() ||
-          payload["order_id"].empty()) {
-        return makeError(400, "validation_error", "Missing order_id",
-                         "Provide order_id in request body.");
-      }
-      if (payload.find("sample_id") == payload.end() ||
-          payload["sample_id"].empty()) {
-        return makeError(400, "validation_error", "Missing sample_id",
-                         "Provide sample_id in request body.");
-      }
-      if (payload.find("test_type") == payload.end() ||
-          payload["test_type"].empty()) {
-        return makeError(400, "validation_error", "Missing test_type",
-                         "Provide test_type in request body.");
-      }
-
-      // Validate required field lengths
-      std::string validationError;
-      if (!validateStringLength(payload["order_id"], 1, 64, validationError)) {
-        return makeError(400, "validation_error", "Invalid order_id",
-                         validationError);
-      }
-      if (!validateStringLength(payload["sample_id"], 1, 64, validationError)) {
-        return makeError(400, "validation_error", "Invalid sample_id",
-                         validationError);
-      }
-      // Validate sample_id references an existing sample
-      auto sampleRef = database_->getSampleByBarcode(payload["sample_id"]);
-      if (!sampleRef) {
-        return makeError(422, "unprocessable_entity", "Sample not found",
-                         "The provided sample_id does not exist.");
-      }
-      if (!validateStringLength(payload["test_type"], 1, 255,
-                                validationError)) {
-        return makeError(400, "validation_error", "Invalid test_type",
-                         validationError);
-      }
-
-      core::Order order(payload["order_id"], payload["sample_id"],
-                        payload["test_type"]);
-      auto statusIt = payload.find("status");
-      if (statusIt != payload.end() && !statusIt->second.empty()) {
-        try {
-          order.setStatus(core::Order::stringToStatus(statusIt->second));
-        } catch (const std::exception &e) {
-          return makeError(400, "validation_error", "Invalid status", e.what());
-        }
-      }
-      auto priorityIt = payload.find("priority");
-      if (priorityIt != payload.end() && !priorityIt->second.empty()) {
-        try {
-          order.setPriority(core::Order::stringToPriority(priorityIt->second));
-        } catch (const std::exception &e) {
-          return makeError(400, "validation_error", "Invalid priority",
-                           e.what());
-        }
-      }
-      auto requestedIt = payload.find("requested_date");
-      if (requestedIt != payload.end() && !requestedIt->second.empty()) {
-        std::time_t ts{};
-        if (!parseTimeValue(requestedIt->second, ts)) {
-          return makeError(400, "validation_error", "Invalid requested_date",
-                           "Provide Unix timestamp for requested_date.");
-        }
-        order.setRequestedDate(ts);
-      }
-      auto completedIt = payload.find("completed_date");
-      if (completedIt != payload.end() && !completedIt->second.empty()) {
-        std::time_t ts{};
-        if (!parseTimeValue(completedIt->second, ts)) {
-          return makeError(400, "validation_error", "Invalid completed_date",
-                           "Provide Unix timestamp for completed_date.");
-        }
-        order.setCompletedDate(ts);
-      }
-      auto requesterIt = payload.find("requested_by");
-      if (requesterIt != payload.end()) {
-        // Validate requested_by length if provided
-        if (!requesterIt->second.empty() &&
-            !validateStringLength(requesterIt->second, 1, 255,
-                                  validationError)) {
-          return makeError(400, "validation_error", "Invalid requested_by",
-                           validationError);
-        }
-        order.setRequestedBy(requesterIt->second);
-      }
-      auto notesIt = payload.find("notes");
-      if (notesIt != payload.end()) {
-        // Validate notes length if provided
-        if (!notesIt->second.empty() &&
-            !validateStringLength(notesIt->second, 1, 5000, validationError)) {
-          return makeError(400, "validation_error", "Invalid notes",
-                           validationError);
-        }
-        order.setNotes(notesIt->second);
-      }
-
-      if (!database_->createOrder(order, actor)) {
-        return makeDbErrorResponse(database_->getLastError());
-      }
-
-      auto created = database_->getOrderByOrderId(order.getOrderId());
-      database_->clearError(); // Read-back failure is non-fatal; fall back to
-                               // in-memory object
-      const core::Order &responseOrder = created ? *created : order;
-      return ApiResponse{201, "{\"data\":" + orderToJson(responseOrder) + "}",
-                         "application/json"};
+      return handleCreateOrder(ctx, payload);
     }
 
     if (path == "/api/v1/results" && isPost) {
-      if (payload.find("result_id") == payload.end() ||
-          payload["result_id"].empty()) {
-        return makeError(400, "validation_error", "Missing result_id",
-                         "Provide result_id in request body.");
-      }
-      if (payload.find("order_id") == payload.end() ||
-          payload["order_id"].empty()) {
-        return makeError(400, "validation_error", "Missing order_id",
-                         "Provide order_id in request body.");
-      }
-      if (payload.find("test_parameter") == payload.end() ||
-          payload["test_parameter"].empty()) {
-        return makeError(400, "validation_error", "Missing test_parameter",
-                         "Provide test_parameter in request body.");
-      }
-      if (payload.find("value") == payload.end() || payload["value"].empty()) {
-        return makeError(400, "validation_error", "Missing value",
-                         "Provide value in request body.");
-      }
-      if (payload.find("unit") == payload.end() || payload["unit"].empty()) {
-        return makeError(400, "validation_error", "Missing unit",
-                         "Provide unit in request body.");
-      }
-
-      int orderId = 0;
-      if (!parseIntValue(payload["order_id"], orderId) || orderId <= 0) {
-        return makeError(400, "validation_error", "Invalid order_id",
-                         "Provide numeric order_id.");
-      }
-      // Validate order exists and has active status (orderId is the numeric PK)
-      auto orderRef = database_->getOrder(orderId);
-      if (!orderRef) {
-        return makeError(422, "unprocessable_entity", "Order not found",
-                         "Provide the numeric order id (orders.id, not the "
-                         "order_id string).");
-      }
-      {
-        auto orderStatus = orderRef->getStatus();
-        if (orderStatus != core::Order::Status::IN_PROGRESS &&
-            orderStatus != core::Order::Status::COMPLETED) {
-          return makeError(
-              409, "conflict", "Order not active",
-              "Results can only be added to IN_PROGRESS or COMPLETED orders.");
-        }
-      }
-
-      // Validate required field lengths
-      std::string validationError;
-      if (!validateStringLength(payload["result_id"], 1, 64, validationError)) {
-        return makeError(400, "validation_error", "Invalid result_id",
-                         validationError);
-      }
-      if (!validateStringLength(payload["test_parameter"], 1, 255,
-                                validationError)) {
-        return makeError(400, "validation_error", "Invalid test_parameter",
-                         validationError);
-      }
-      if (!validateStringLength(payload["value"], 1, 255, validationError)) {
-        return makeError(400, "validation_error", "Invalid value",
-                         validationError);
-      }
-      if (!validateStringLength(payload["unit"], 1, 255, validationError)) {
-        return makeError(400, "validation_error", "Invalid unit",
-                         validationError);
-      }
-
-      core::TestResult result(payload["result_id"], orderId,
-                              payload["test_parameter"]);
-      result.setValue(payload["value"]);
-      result.setUnit(payload["unit"]);
-      auto refRangeIt = payload.find("reference_range");
-      if (refRangeIt != payload.end()) {
-        // Validate reference_range length if provided
-        if (!refRangeIt->second.empty() &&
-            !validateStringLength(refRangeIt->second, 1, 255,
-                                  validationError)) {
-          return makeError(400, "validation_error", "Invalid reference_range",
-                           validationError);
-        }
-        result.setReferenceRange(refRangeIt->second);
-      }
-      auto refLowIt = payload.find("reference_low");
-      auto refHighIt = payload.find("reference_high");
-      double refLow = 0.0;
-      double refHigh = 0.0;
-      bool hasRefLow = false;
-      bool hasRefHigh = false;
-
-      if (refLowIt != payload.end() && !refLowIt->second.empty()) {
-        if (!parseDoubleValue(refLowIt->second, refLow)) {
-          return makeError(400, "validation_error", "Invalid reference_low",
-                           "Provide numeric reference_low.");
-        }
-        hasRefLow = true;
-        result.setReferenceLow(refLow);
-      }
-      if (refHighIt != payload.end() && !refHighIt->second.empty()) {
-        if (!parseDoubleValue(refHighIt->second, refHigh)) {
-          return makeError(400, "validation_error", "Invalid reference_high",
-                           "Provide numeric reference_high.");
-        }
-        hasRefHigh = true;
-        result.setReferenceHigh(refHigh);
-      }
-      // Validate that reference_high > reference_low when both are provided
-      if (hasRefLow && hasRefHigh && refHigh <= refLow) {
-        return makeError(400, "validation_error", "Invalid reference range",
-                         "reference_high must be greater than reference_low.");
-      }
-      auto statusIt = payload.find("status");
-      if (statusIt != payload.end() && !statusIt->second.empty()) {
-        try {
-          result.setStatus(core::TestResult::stringToStatus(statusIt->second));
-        } catch (const std::exception &e) {
-          return makeError(400, "validation_error", "Invalid status", e.what());
-        }
-      } else {
-        result.setStatus(core::TestResult::Status::ENTERED);
-      }
-      auto measuredIt = payload.find("measured_date");
-      if (measuredIt != payload.end() && !measuredIt->second.empty()) {
-        std::time_t ts{};
-        if (!parseTimeValue(measuredIt->second, ts)) {
-          return makeError(400, "validation_error", "Invalid measured_date",
-                           "Provide Unix timestamp for measured_date.");
-        }
-        result.setMeasuredDate(ts);
-      } else {
-        result.setMeasuredDate(std::time(nullptr));
-      }
-      auto measuredByIt = payload.find("measured_by");
-      if (measuredByIt != payload.end()) {
-        // Validate measured_by length if provided
-        if (!measuredByIt->second.empty() &&
-            !validateStringLength(measuredByIt->second, 1, 255,
-                                  validationError)) {
-          return makeError(400, "validation_error", "Invalid measured_by",
-                           validationError);
-        }
-        result.setMeasuredBy(measuredByIt->second);
-      }
-      auto commentIt = payload.find("comment");
-      if (commentIt != payload.end()) {
-        // Validate comment length if provided
-        if (!commentIt->second.empty() &&
-            !validateStringLength(commentIt->second, 1, 5000,
-                                  validationError)) {
-          return makeError(400, "validation_error", "Invalid comment",
-                           validationError);
-        }
-        result.setComment(commentIt->second);
-      }
-      auto flagIt = payload.find("flag");
-      if (flagIt != payload.end() && !flagIt->second.empty()) {
-        try {
-          result.setFlag(core::TestResult::stringToFlag(flagIt->second));
-        } catch (const std::exception &e) {
-          return makeError(400, "validation_error", "Invalid flag", e.what());
-        }
-      } else {
-        result.setFlag(result.evaluateFlag());
-      }
-
-      if (!database_->createTestResult(result, actor)) {
-        return makeDbErrorResponse(database_->getLastError());
-      }
-
-      auto created = database_->getTestResultByResultId(result.getResultId());
-      database_->clearError(); // Read-back failure is non-fatal; fall back to
-                               // in-memory object
-      const core::TestResult &responseResult = created ? *created : result;
-      {
-        std::string oidStr;
-        auto parentOrder = database_->getOrder(responseResult.getOrderId());
-        if (parentOrder) {
-          oidStr = parentOrder->getOrderId();
-        }
-        return ApiResponse{
-            201, "{\"data\":" + resultToJson(responseResult, oidStr) + "}",
-            "application/json"};
-      }
+      return handleCreateResult(ctx, payload);
     }
 
     if (isPut && path.rfind("/api/v1/samples/", 0) == 0) {
@@ -2141,655 +3441,42 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
   }
 
   if (path == "/api/v1/samples") {
-    db::IDatabase::SampleFilter filter;
-    auto qIt = query.find("q");
-    if (qIt != query.end()) {
-      if (qIt->second.size() > 255) {
-        return makeError(400, "validation_error", "Query too long",
-                         "Search query must not exceed 255 characters.");
-      }
-      filter.query = qIt->second;
-    }
-    auto statusIt = query.find("status");
-    if (statusIt != query.end()) {
-      if (!core::Sample::isValidStatusString(statusIt->second)) {
-        return makeError(
-            400, "validation_error", "Invalid status",
-            "Use Erfasst, In Analyse, Analysiert, Validiert, Archiviert.");
-      }
-      filter.status = core::Sample::statusToString(
-          core::Sample::stringToStatus(statusIt->second));
-    }
-    auto limitIt = query.find("limit");
-    if (limitIt != query.end()) {
-      int limitValue = 0;
-      if (!parseIntValue(limitIt->second, limitValue)) {
-        return makeError(400, "validation_error", "Invalid limit",
-                         "Provide integer limit.");
-      }
-      // Validate and cap limit to prevent DoS
-      std::string validationError;
-      if (!validateAndCapLimit(limitValue, validationError)) {
-        return makeError(400, "validation_error", "Invalid limit",
-                         validationError);
-      }
-      filter.limit = limitValue;
-    }
-    auto offsetIt = query.find("offset");
-    if (offsetIt != query.end()) {
-      int offsetValue = 0;
-      if (!parseIntValue(offsetIt->second, offsetValue) || offsetValue < 0) {
-        return makeError(400, "validation_error", "Invalid offset",
-                         "Provide non-negative integer offset.");
-      }
-      if (offsetValue > MAX_PAGINATION_OFFSET) {
-        return makeError(400, "validation_error", "Offset too large",
-                         "offset must not exceed " +
-                             std::to_string(MAX_PAGINATION_OFFSET) + ".");
-      }
-      if (!filter.limit.has_value()) {
-        return makeError(400, "validation_error", "Offset requires limit",
-                         "Provide limit when using offset.");
-      }
-      filter.offset = offsetValue;
-    }
-    auto fromIt = query.find("from");
-    auto toIt = query.find("to");
-    bool hasFrom = false;
-    bool hasTo = false;
-
-    if (fromIt != query.end()) {
-      std::time_t ts{};
-      if (!parseTimeValue(fromIt->second, ts)) {
-        return makeError(400, "validation_error", "Invalid 'from' value",
-                         "Provide Unix timestamp for from.");
-      }
-      filter.fromDate = ts;
-      hasFrom = true;
-    }
-    if (toIt != query.end()) {
-      std::time_t ts{};
-      if (!parseTimeValue(toIt->second, ts)) {
-        return makeError(400, "validation_error", "Invalid 'to' value",
-                         "Provide Unix timestamp for to.");
-      }
-      filter.toDate = ts;
-      hasTo = true;
-    }
-    // Validate that from <= to when both are provided
-    if (hasFrom && hasTo && filter.fromDate > filter.toDate) {
-      return makeError(400, "validation_error", "Invalid date range",
-                       "'from' date must be less than or equal to 'to' date.");
-    }
-
-    auto samples = database_->getSamplesByFilter(filter);
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-
-    int total = database_->getSamplesCount(filter);
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-    if (total < 0) {
-      total = static_cast<int>(samples.size());
-    }
-
-    json samplesArr = json::array();
-    for (const auto &s : samples) {
-      samplesArr.push_back(json::parse(sampleToJson(*s)));
-    }
-    const std::string out = json{{"data", samplesArr}, {"total", total}}.dump();
-
-    std::ostringstream details;
-    details
-        << "API READ /samples"
-        << "; count=" << samples.size()
-        << "; q=" << (filter.query.empty() ? "any" : filter.query)
-        << "; status=" << (filter.status.empty() ? "any" : filter.status)
-        << "; from="
-        << (filter.fromDate.has_value() ? std::to_string(*filter.fromDate)
-                                        : "any")
-        << "; to="
-        << (filter.toDate.has_value() ? std::to_string(*filter.toDate) : "any")
-        << "; limit="
-        << (filter.limit.has_value() ? std::to_string(*filter.limit) : "any")
-        << "; offset="
-        << (filter.offset.has_value() ? std::to_string(*filter.offset) : "any");
-    core::AuditEntry entry(core::AuditEntry::ActionType::ACCESS,
-                           core::AuditEntry::EntityType::SAMPLE, "*", actor,
-                           details.str());
-    if (!database_->logAudit(entry)) {
-      LOG_ERROR("[Audit] logAudit failed: {}", database_->getLastError());
-      return makeError(500, "internal_error", "Audit log failed",
-                       "Please contact the system administrator.");
-    }
-
-    return ApiResponse{200, out, "application/json"};
+    return handleListSamples(ctx);
   }
 
   if (path.rfind("/api/v1/samples/", 0) == 0) {
-    const std::string sampleId =
-        path.substr(std::string("/api/v1/samples/").size());
-    if (sampleId.empty()) {
-      return makeError(400, "validation_error", "Missing sample_id",
-                       "Provide sample_id in URL path.");
-    }
-    auto sample = database_->getSampleByBarcode(sampleId);
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-    if (!sample) {
-      return makeError(404, "not_found", "Sample not found",
-                       "Verify the sample_id.");
-    }
-
-    core::AuditEntry entry(core::AuditEntry::ActionType::ACCESS,
-                           core::AuditEntry::EntityType::SAMPLE, sampleId,
-                           actor, "API READ /samples/" + sampleId);
-    if (!database_->logAudit(entry)) {
-      LOG_ERROR("[Audit] logAudit failed: {}", database_->getLastError());
-      return makeError(500, "internal_error", "Audit log failed",
-                       "Please contact the system administrator.");
-    }
-
-    return ApiResponse{200, "{\"data\":" + sampleToJson(*sample) + "}",
-                       "application/json"};
+    return handleGetSample(ctx);
   }
 
   if (path == "/api/v1/orders") {
-    db::IDatabase::OrderFilter filter;
-    auto statusIt = query.find("status");
-    if (statusIt != query.end()) {
-      if (!core::Order::isValidStatusString(statusIt->second)) {
-        return makeError(
-            400, "validation_error", "Invalid status",
-            "Use REQUESTED, IN_PROGRESS, COMPLETED, VALIDATED, CANCELLED.");
-      }
-      filter.status = core::Order::statusToString(
-          core::Order::stringToStatus(statusIt->second));
-    }
-    auto sampleIt = query.find("sample_id");
-    if (sampleIt != query.end()) {
-      if (sampleIt->second.size() > 64) {
-        return makeError(400, "validation_error", "sample_id too long",
-                         "sample_id filter must not exceed 64 characters.");
-      }
-      filter.sampleId = sampleIt->second;
-    }
-    auto priorityIt = query.find("priority");
-    if (priorityIt != query.end()) {
-      if (!core::Order::isValidPriorityString(priorityIt->second)) {
-        return makeError(400, "validation_error", "Invalid priority",
-                         "Use NORMAL, URGENT, EMERGENCY.");
-      }
-      filter.priority = core::Order::priorityToString(
-          core::Order::stringToPriority(priorityIt->second));
-    }
-    auto limitIt = query.find("limit");
-    if (limitIt != query.end()) {
-      int limitValue = 0;
-      if (!parseIntValue(limitIt->second, limitValue)) {
-        return makeError(400, "validation_error", "Invalid limit",
-                         "Provide integer limit.");
-      }
-      // Validate and cap limit to prevent DoS
-      std::string validationError;
-      if (!validateAndCapLimit(limitValue, validationError)) {
-        return makeError(400, "validation_error", "Invalid limit",
-                         validationError);
-      }
-      filter.limit = limitValue;
-    }
-    auto offsetIt = query.find("offset");
-    if (offsetIt != query.end()) {
-      int offsetValue = 0;
-      if (!parseIntValue(offsetIt->second, offsetValue) || offsetValue < 0) {
-        return makeError(400, "validation_error", "Invalid offset",
-                         "Provide non-negative integer offset.");
-      }
-      if (offsetValue > MAX_PAGINATION_OFFSET) {
-        return makeError(400, "validation_error", "Offset too large",
-                         "offset must not exceed " +
-                             std::to_string(MAX_PAGINATION_OFFSET) + ".");
-      }
-      if (!filter.limit.has_value()) {
-        return makeError(400, "validation_error", "Offset requires limit",
-                         "Provide limit when using offset.");
-      }
-      filter.offset = offsetValue;
-    }
-
-    auto orders = database_->getOrdersByFilter(filter);
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-
-    int ordersTotal = database_->getOrdersCount(filter);
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-    if (ordersTotal < 0)
-      ordersTotal = static_cast<int>(orders.size());
-    json ordersArr = json::array();
-    for (const auto &o : orders) {
-      ordersArr.push_back(json::parse(orderToJson(*o)));
-    }
-    const std::string out =
-        json{{"data", ordersArr}, {"total", ordersTotal}}.dump();
-
-    std::ostringstream details;
-    details
-        << "API READ /orders"
-        << "; count=" << orders.size()
-        << "; status=" << (filter.status.empty() ? "any" : filter.status)
-        << "; sample_id=" << (filter.sampleId.empty() ? "any" : filter.sampleId)
-        << "; priority=" << (filter.priority.empty() ? "any" : filter.priority)
-        << "; limit="
-        << (filter.limit.has_value() ? std::to_string(*filter.limit) : "any")
-        << "; offset="
-        << (filter.offset.has_value() ? std::to_string(*filter.offset) : "any");
-    core::AuditEntry entry(core::AuditEntry::ActionType::ACCESS,
-                           core::AuditEntry::EntityType::ORDER, "*", actor,
-                           details.str());
-    if (!database_->logAudit(entry)) {
-      LOG_ERROR("[Audit] logAudit failed: {}", database_->getLastError());
-      return makeError(500, "internal_error", "Audit log failed",
-                       "Please contact the system administrator.");
-    }
-
-    return ApiResponse{200, out, "application/json"};
+    return handleListOrders(ctx);
   }
 
   if (path.rfind("/api/v1/orders/", 0) == 0) {
-    const std::string orderId =
-        path.substr(std::string("/api/v1/orders/").size());
-    if (orderId.empty()) {
-      return makeError(400, "validation_error", "Missing order_id",
-                       "Provide order_id in URL path.");
-    }
-    auto order = database_->getOrderByOrderId(orderId);
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-    if (!order) {
-      return makeError(404, "not_found", "Order not found",
-                       "Verify the order_id.");
-    }
-
-    core::AuditEntry entry(core::AuditEntry::ActionType::ACCESS,
-                           core::AuditEntry::EntityType::ORDER, orderId, actor,
-                           "API READ /orders/" + orderId);
-    if (!database_->logAudit(entry)) {
-      LOG_ERROR("[Audit] logAudit failed: {}", database_->getLastError());
-      return makeError(500, "internal_error", "Audit log failed",
-                       "Please contact the system administrator.");
-    }
-
-    return ApiResponse{200, "{\"data\":" + orderToJson(*order) + "}",
-                       "application/json"};
+    return handleGetOrder(ctx);
   }
 
   if (path == "/api/v1/results") {
-    std::vector<std::unique_ptr<core::TestResult>> results;
-    std::optional<int> limit;
-    std::optional<int> offset;
-    auto limitIt = query.find("limit");
-    if (limitIt != query.end()) {
-      int limitValue = 0;
-      if (!parseIntValue(limitIt->second, limitValue)) {
-        return makeError(400, "validation_error", "Invalid limit",
-                         "Provide integer limit.");
-      }
-      // Validate and cap limit to prevent DoS
-      std::string validationError;
-      if (!validateAndCapLimit(limitValue, validationError)) {
-        return makeError(400, "validation_error", "Invalid limit",
-                         validationError);
-      }
-      limit = limitValue;
-    }
-    auto offsetIt = query.find("offset");
-    if (offsetIt != query.end()) {
-      int offsetValue = 0;
-      if (!parseIntValue(offsetIt->second, offsetValue) || offsetValue < 0) {
-        return makeError(400, "validation_error", "Invalid offset",
-                         "Provide non-negative integer offset.");
-      }
-      if (offsetValue > MAX_PAGINATION_OFFSET) {
-        return makeError(400, "validation_error", "Offset too large",
-                         "offset must not exceed " +
-                             std::to_string(MAX_PAGINATION_OFFSET) + ".");
-      }
-      if (!limit.has_value()) {
-        return makeError(400, "validation_error", "Offset requires limit",
-                         "Provide limit when using offset.");
-      }
-      offset = offsetValue;
-    }
-    // Parse optional status and flag filters
-    std::string statusFilter;
-    std::string flagFilter;
-    static const std::unordered_set<std::string> kValidResultStatuses{
-        "PENDING", "ENTERED", "VALIDATED", "REJECTED", "REPEATED"};
-    static const std::unordered_set<std::string> kValidResultFlags{
-        "NORMAL", "LOW", "HIGH", "CRITICAL", "UNDEFINED"};
-    auto statusResultIt = query.find("status");
-    if (statusResultIt != query.end() && !statusResultIt->second.empty()) {
-      if (kValidResultStatuses.find(statusResultIt->second) ==
-          kValidResultStatuses.end()) {
-        return makeError(400, "validation_error", "Invalid status",
-                         "status must be one of: PENDING, ENTERED, VALIDATED, "
-                         "REJECTED, REPEATED");
-      }
-      statusFilter = statusResultIt->second;
-    }
-
-    auto flagResultIt = query.find("flag");
-    if (flagResultIt != query.end() && !flagResultIt->second.empty()) {
-      if (kValidResultFlags.find(flagResultIt->second) ==
-          kValidResultFlags.end()) {
-        return makeError(
-            400, "validation_error", "Invalid flag",
-            "flag must be one of: NORMAL, LOW, HIGH, CRITICAL, UNDEFINED");
-      }
-      flagFilter = flagResultIt->second;
-    }
-
-    std::optional<int> resultsOrderIdFilter;
-    auto orderIt = query.find("order_id");
-    // When in-memory filters are active, fetch a capped window then filter.
-    // Cap prevents unbounded table scans into RAM on large result sets.
-    constexpr int kMemFilterFetchCap = 10000;
-    bool hasMemFilter = !statusFilter.empty() || !flagFilter.empty();
-    std::optional<int> dbLimit =
-        hasMemFilter ? std::make_optional(kMemFilterFetchCap) : limit;
-    std::optional<int> dbOffset = hasMemFilter ? std::make_optional(0) : offset;
-    if (orderIt != query.end()) {
-      int orderId = 0;
-      if (!parseIntValue(orderIt->second, orderId) || orderId <= 0) {
-        return makeError(400, "validation_error", "Invalid order_id",
-                         "Provide numeric order_id.");
-      }
-      results = database_->getTestResultsByOrderId(orderId, dbLimit, dbOffset);
-      resultsOrderIdFilter = orderId;
-    } else {
-      results = database_->getAllTestResults(dbLimit, dbOffset);
-    }
-
-    // Apply status filter in-memory if provided
-    if (!statusFilter.empty()) {
-      std::vector<std::unique_ptr<core::TestResult>> filtered;
-      for (auto &r : results) {
-        if (r->getStatusString() == statusFilter) {
-          filtered.push_back(std::move(r));
-        }
-      }
-      results = std::move(filtered);
-    }
-    // Apply flag filter in-memory if provided
-    if (!flagFilter.empty()) {
-      std::vector<std::unique_ptr<core::TestResult>> filtered;
-      for (auto &r : results) {
-        if (r->getFlagString() == flagFilter) {
-          filtered.push_back(std::move(r));
-        }
-      }
-      results = std::move(filtered);
-    }
-
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-
-    // Total is now accurate: either filtered count (hasMem) or DB count (no
-    // filter)
-    int resultsTotal =
-        hasMemFilter ? static_cast<int>(results.size())
-                     : database_->getTestResultsCount(resultsOrderIdFilter);
-    if (!hasMemFilter && database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-    // When in-memory filters ran (no DB limit/offset), apply pagination now
-    if (hasMemFilter && (limit.has_value() || offset.has_value())) {
-      int startIdx = offset.value_or(0);
-      int endIdx =
-          limit.has_value()
-              ? std::min(startIdx + *limit, static_cast<int>(results.size()))
-              : static_cast<int>(results.size());
-      if (startIdx < static_cast<int>(results.size())) {
-        std::vector<std::unique_ptr<core::TestResult>> paged;
-        for (int pi = startIdx; pi < endIdx; ++pi) {
-          paged.push_back(std::move(results[static_cast<size_t>(pi)]));
-        }
-        results = std::move(paged);
-      } else {
-        results.clear();
-      }
-    }
-    std::unordered_map<int, std::string> orderIdCache;
-    for (const auto &r : results) {
-      const int oid = r->getOrderId();
-      if (orderIdCache.find(oid) == orderIdCache.end()) {
-        auto ord = database_->getOrder(oid);
-        if (ord) {
-          orderIdCache[oid] = ord->getOrderId();
-        }
-      }
-    }
-    if (resultsTotal < 0)
-      resultsTotal = static_cast<int>(results.size());
-    json resultsArr = json::array();
-    for (const auto &r : results) {
-      const auto cit = orderIdCache.find(r->getOrderId());
-      const std::string &oidStr =
-          (cit != orderIdCache.end()) ? cit->second : "";
-      resultsArr.push_back(json::parse(resultToJson(*r, oidStr)));
-    }
-    const std::string out =
-        json{{"data", resultsArr}, {"total", resultsTotal}}.dump();
-
-    std::ostringstream details;
-    details << "API READ /results"
-            << "; count=" << results.size() << "; order_id="
-            << (orderIt != query.end() ? orderIt->second : "any") << "; limit="
-            << (limit.has_value() ? std::to_string(*limit) : "any")
-            << "; offset="
-            << (offset.has_value() ? std::to_string(*offset) : "any");
-    core::AuditEntry entry(core::AuditEntry::ActionType::ACCESS,
-                           core::AuditEntry::EntityType::RESULT, "*", actor,
-                           details.str());
-    if (!database_->logAudit(entry)) {
-      LOG_ERROR("[Audit] logAudit failed: {}", database_->getLastError());
-      return makeError(500, "internal_error", "Audit log failed",
-                       "Please contact the system administrator.");
-    }
-
-    return ApiResponse{200, out, "application/json"};
+    return handleListResults(ctx);
   }
 
   if (path.rfind("/api/v1/results/", 0) == 0) {
-    const std::string resultId =
-        path.substr(std::string("/api/v1/results/").size());
-    if (resultId.empty()) {
-      return makeError(400, "validation_error", "Missing result_id",
-                       "Provide result_id in URL path.");
-    }
-    auto result = database_->getTestResultByResultId(resultId);
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-    if (!result) {
-      return makeError(404, "not_found", "Result not found",
-                       "Verify the result_id.");
-    }
-
-    core::AuditEntry entry(core::AuditEntry::ActionType::ACCESS,
-                           core::AuditEntry::EntityType::RESULT, resultId,
-                           actor, "API READ /results/" + resultId);
-    if (!database_->logAudit(entry)) {
-      LOG_ERROR("[Audit] logAudit failed: {}", database_->getLastError());
-      return makeError(500, "internal_error", "Audit log failed",
-                       "Please contact the system administrator.");
-    }
-
-    {
-      std::string oidStr;
-      auto parentOrder = database_->getOrder(result->getOrderId());
-      if (parentOrder) {
-        oidStr = parentOrder->getOrderId();
-      }
-      return ApiResponse{200,
-                         "{\"data\":" + resultToJson(*result, oidStr) + "}",
-                         "application/json"};
-    }
+    return handleGetResult(ctx);
   }
 
   // GET /api/v1/users - List all users (admin only)
   if (path == "/api/v1/users" && isGet) {
-    // Check if user is admin
-    if (effectiveRole != "ADMIN") {
-      return makeError(403, "forbidden", "Admin access required",
-                       "Only administrators can list users.");
-    }
-
-    auto users = database_->getAllUsers();
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-
-    json usersArr = json::array();
-    for (const auto &u : users) {
-      usersArr.push_back(json::parse(userToJson(*u)));
-    }
-    (void)database_->logAudit(core::AuditEntry(
-        core::AuditEntry::ActionType::ACCESS,
-        core::AuditEntry::EntityType::USER, "all",
-        jwtPayload.has_value() ? jwtPayload->username : "unknown",
-        "Admin listed all users"));
-    return ApiResponse{200, json{{"data", usersArr}}.dump(),
-                       "application/json"};
+    return handleListUsers(ctx);
   }
 
   // GET /api/v1/users/me - Get current user profile
   if (path == "/api/v1/users/me" && isGet) {
-    if (!jwtPayload.has_value()) {
-      return makeError(401, "unauthorized", "JWT required",
-                       "Use JWT authentication to access profile.");
-    }
-
-    auto user = database_->getUser(jwtPayload->userId);
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-    if (!user) {
-      return makeError(404, "not_found", "User not found",
-                       "User profile not found.");
-    }
-
-    (void)database_->logAudit(core::AuditEntry(
-        core::AuditEntry::ActionType::ACCESS,
-        core::AuditEntry::EntityType::USER, std::to_string(jwtPayload->userId),
-        jwtPayload->username, "User accessed own profile"));
-    return ApiResponse{200, "{\"data\":" + userToJson(*user) + "}",
-                       "application/json"};
+    return handleGetOwnProfile(ctx);
   }
 
   // POST /api/v1/users - Create new user (admin only)
   if (path == "/api/v1/users" && isPost) {
-    if (effectiveRole != "ADMIN") {
-      return makeError(403, "forbidden", "Admin access required",
-                       "Only administrators can create users.");
-    }
-
-    const std::string body = trimLeadingNewlines(request.body);
-    if (body.empty()) {
-      return makeError(400, "validation_error", "Missing request body",
-                       "Provide JSON payload in request body.");
-    }
-
-    std::unordered_map<std::string, std::string> payload;
-    std::string parseError;
-    if (!parseJsonBodyToMap(body, payload, parseError)) {
-      return makeError(400, "validation_error", "Invalid JSON payload",
-                       parseError);
-    }
-
-    auto usernameIt = payload.find("username");
-    auto passwordIt = payload.find("password");
-    auto roleIt = payload.find("role");
-
-    if (usernameIt == payload.end() || usernameIt->second.empty()) {
-      return makeError(400, "validation_error", "Missing username",
-                       "Provide username in request body.");
-    }
-    if (passwordIt == payload.end() || passwordIt->second.empty()) {
-      return makeError(400, "validation_error", "Missing password",
-                       "Provide password in request body.");
-    }
-
-    // Validate username format
-    std::string validationError;
-    if (!validateUsername(usernameIt->second, validationError)) {
-      return makeError(400, "validation_error", "Invalid username",
-                       validationError);
-    }
-
-    // Validate password strength
-    if (!validatePassword(passwordIt->second, validationError)) {
-      return makeError(400, "validation_error", "Invalid password",
-                       validationError);
-    }
-
-    core::User::Role role = core::User::Role::OPERATOR; // Default
-    if (roleIt != payload.end() && !roleIt->second.empty()) {
-      static const std::unordered_set<std::string> kValidRoles{
-          "ADMIN", "OPERATOR", "VIEWER", "CUSTOM"};
-      if (kValidRoles.find(roleIt->second) == kValidRoles.end()) {
-        return makeError(
-            400, "validation_error", "Invalid role",
-            "Role must be one of: ADMIN, OPERATOR, VIEWER, CUSTOM");
-      }
-      role = core::User::stringToRole(roleIt->second);
-    }
-
-    core::User newUser(usernameIt->second, "", role);
-    newUser.setPassword(passwordIt->second);
-    newUser.setMustChangePassword(true);
-
-    auto fullNameIt = payload.find("full_name");
-    if (fullNameIt != payload.end()) {
-      if (!fullNameIt->second.empty() &&
-          !validateStringLength(fullNameIt->second, 1, 255, validationError)) {
-        return makeError(400, "validation_error", "Invalid full_name",
-                         validationError);
-      }
-      newUser.setFullName(fullNameIt->second);
-    }
-    auto emailIt = payload.find("email");
-    if (emailIt != payload.end()) {
-      if (!emailIt->second.empty() &&
-          !validateEmail(emailIt->second, validationError)) {
-        return makeError(400, "validation_error", "Invalid email",
-                         validationError);
-      }
-      newUser.setEmail(emailIt->second);
-    }
-    auto activeIt = payload.find("active");
-    if (activeIt != payload.end()) {
-      newUser.setActive(activeIt->second == "true" || activeIt->second == "1");
-    }
-
-    if (!database_->createUser(newUser, actor)) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-
-    auto created = database_->getUserByUsername(newUser.getUsername());
-    database_->clearError(); // Read-back failure is non-fatal; fall back to
-                             // in-memory object
-    const core::User &responseUser = created ? *created : newUser;
-    return ApiResponse{201, "{\"data\":" + userToJson(responseUser) + "}",
-                       "application/json"};
+    return handleCreateUser(ctx);
   }
 
   // PUT /api/v1/users/:id - Update user (admin only)
@@ -2797,630 +3484,58 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
     const std::string userIdStr =
         path.substr(std::string("/api/v1/users/").size());
     if (!userIdStr.empty() && userIdStr != "me" && userIdStr != "me/password") {
-      if (userIdStr.rfind("me/", 0) == 0) {
-        return makeError(404, "not_found", "Unknown endpoint",
-                         "The requested endpoint does not exist.");
-      }
-
-      // RBAC check before ID parsing — non-admins always get 403
-      if (effectiveRole != "ADMIN") {
-        return makeError(403, "forbidden", "Admin access required",
-                         "Only administrators can update users.");
-      }
-
-      int userId = 0;
-      if (!parseIntValue(userIdStr, userId) || userId <= 0) {
-        return makeError(400, "validation_error", "Invalid user_id",
-                         "Provide numeric user_id.");
-      }
-
-      auto existing = database_->getUser(userId);
-      if (database_->hasError()) {
-        return makeDbErrorResponse(database_->getLastError());
-      }
-      if (!existing) {
-        return makeError(404, "not_found", "User not found",
-                         "Verify the user_id.");
-      }
-
-      const std::string body = trimLeadingNewlines(request.body);
-      if (body.empty()) {
-        return makeError(400, "validation_error", "Missing request body",
-                         "Provide JSON payload in request body.");
-      }
-
-      std::unordered_map<std::string, std::string> payload;
-      std::string parseError;
-      if (!parseJsonBodyToMap(body, payload, parseError)) {
-        return makeError(400, "validation_error", "Invalid JSON payload",
-                         parseError);
-      }
-
-      core::User updated = *existing;
-
-      auto usernameIt = payload.find("username");
-      if (usernameIt != payload.end()) {
-        // Validate username format
-        std::string validationError;
-        if (!validateUsername(usernameIt->second, validationError)) {
-          return makeError(400, "validation_error", "Invalid username",
-                           validationError);
-        }
-        updated.setUsername(usernameIt->second);
-      }
-      auto roleIt = payload.find("role");
-      if (roleIt != payload.end() && !roleIt->second.empty()) {
-        static const std::unordered_set<std::string> kValidRoles{
-            "ADMIN", "OPERATOR", "VIEWER", "CUSTOM"};
-        if (kValidRoles.find(roleIt->second) == kValidRoles.end()) {
-          return makeError(
-              400, "validation_error", "Invalid role",
-              "Role must be one of: ADMIN, OPERATOR, VIEWER, CUSTOM");
-        }
-        updated.setRole(core::User::stringToRole(roleIt->second));
-      }
-      auto fullNameIt = payload.find("full_name");
-      if (fullNameIt != payload.end()) {
-        // Validate full_name length if provided and not empty
-        if (!fullNameIt->second.empty()) {
-          std::string validationError;
-          if (!validateStringLength(fullNameIt->second, 1, 255,
-                                    validationError)) {
-            return makeError(400, "validation_error", "Invalid full_name",
-                             validationError);
-          }
-        }
-        updated.setFullName(fullNameIt->second);
-      }
-      auto emailIt = payload.find("email");
-      if (emailIt != payload.end()) {
-        // Validate email format if provided and not empty
-        if (!emailIt->second.empty()) {
-          std::string validationError;
-          if (!validateEmail(emailIt->second, validationError)) {
-            return makeError(400, "validation_error", "Invalid email",
-                             validationError);
-          }
-        }
-        updated.setEmail(emailIt->second);
-      }
-      auto activeIt = payload.find("active");
-      if (activeIt != payload.end()) {
-        updated.setActive(activeIt->second == "true" ||
-                          activeIt->second == "1");
-      }
-      auto passwordIt = payload.find("password");
-      const bool passwordChanged =
-          passwordIt != payload.end() && !passwordIt->second.empty();
-      if (passwordChanged) {
-        // Validate password strength
-        std::string validationError;
-        if (!validatePassword(passwordIt->second, validationError)) {
-          return makeError(400, "validation_error", "Invalid password",
-                           validationError);
-        }
-        updated.setPassword(passwordIt->second);
-        updated.setMustChangePassword(false);
-      }
-
-      if (!database_->updateUser(updated, actor)) {
-        return makeDbErrorResponse(database_->getLastError());
-      }
-
-      // Re-fetch from DB so the response reflects the committed state
-      // (e.g. auto-cleared must_change_password) rather than the in-memory
-      // copy.
-      auto refreshed = database_->getUser(updated.getId());
-      const core::User &rspUser = refreshed ? *refreshed : updated;
-      return ApiResponse{200, "{\"data\":" + userToJson(rspUser) + "}",
-                         "application/json"};
+      return handleUpdateUser(ctx);
     }
   }
 
   // PUT /api/v1/users/me/password - Change own password
   if (path == "/api/v1/users/me/password" && isPut) {
-    if (!jwtPayload.has_value()) {
-      return makeError(401, "unauthorized", "JWT required",
-                       "Use JWT authentication to change password.");
-    }
-
-    const std::string body = trimLeadingNewlines(request.body);
-    if (body.empty()) {
-      return makeError(400, "validation_error", "Missing request body",
-                       "Provide JSON payload in request body.");
-    }
-
-    std::unordered_map<std::string, std::string> payload;
-    std::string parseError;
-    if (!parseJsonBodyToMap(body, payload, parseError)) {
-      return makeError(400, "validation_error", "Invalid JSON payload",
-                       parseError);
-    }
-
-    auto currentPwdIt = payload.find("current_password");
-    auto newPwdIt = payload.find("new_password");
-
-    if (currentPwdIt == payload.end() || currentPwdIt->second.empty()) {
-      return makeError(400, "validation_error", "Missing current_password",
-                       "Provide current_password in request body.");
-    }
-    if (newPwdIt == payload.end() || newPwdIt->second.empty()) {
-      return makeError(400, "validation_error", "Missing new_password",
-                       "Provide new_password in request body.");
-    }
-
-    if (newPwdIt->second == currentPwdIt->second) {
-      return makeError(400, "validation_error", "Password unchanged",
-                       "New password must differ from the current password.");
-    }
-
-    // Validate new password strength
-    std::string validationError;
-    if (!validatePassword(newPwdIt->second, validationError)) {
-      return makeError(400, "validation_error", "Invalid new_password",
-                       validationError);
-    }
-
-    auto user = database_->getUser(jwtPayload->userId);
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-    if (!user) {
-      return makeError(404, "not_found", "User not found",
-                       "User profile not found.");
-    }
-
-    // Verify current password
-    if (!user->verifyPassword(currentPwdIt->second)) {
-      return makeError(401, "unauthorized", "Invalid current password",
-                       "Current password is incorrect.");
-    }
-
-    // Update password and clear forced-change flag
-    user->setPassword(newPwdIt->second);
-    user->setMustChangePassword(false);
-    if (!database_->updateUser(*user, actor)) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-
-    return ApiResponse{200, "{\"success\":true}", "application/json"};
+    return handleChangeOwnPassword(ctx);
   }
 
   // DELETE /api/v1/users/:id - Delete user (admin only)
   if (isDelete && path.rfind("/api/v1/users/", 0) == 0) {
-    const std::string userIdStr =
-        path.substr(std::string("/api/v1/users/").size());
-    if (userIdStr.empty()) {
-      return makeError(400, "validation_error", "Missing user_id",
-                       "Provide user_id in URL path.");
-    }
-
-    // RBAC check before ID parsing — non-admins always get 403
-    if (effectiveRole != "ADMIN") {
-      return makeError(403, "forbidden", "Admin access required",
-                       "Only administrators can delete users.");
-    }
-
-    int userId = 0;
-    if (!parseIntValue(userIdStr, userId) || userId <= 0) {
-      return makeError(400, "validation_error", "Invalid user_id",
-                       "Provide numeric user_id.");
-    }
-
-    // Account deletion must be session-bound (JWT) so the self-delete guard
-    // is always enforceable. API-key auth cannot identify the caller's userId.
-    if (!jwtPayload.has_value()) {
-      return makeError(401, "unauthorized", "JWT required",
-                       "User deletion requires JWT session authentication.");
-    }
-    if (jwtPayload->userId == userId) {
-      return makeError(400, "validation_error", "Cannot delete own account",
-                       "Administrators cannot delete their own account.");
-    }
-
-    auto existing = database_->getUser(userId);
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-    if (!existing) {
-      return makeError(404, "not_found", "User not found",
-                       "Verify the user_id.");
-    }
-
-    if (!database_->deleteUser(userId, actor)) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-
-    return ApiResponse{204, "", "application/json"};
+    return handleDeleteUser(ctx);
   }
 
   // GET /api/v1/audit - Get audit log (admin only)
   if (path == "/api/v1/audit" && isGet) {
-    if (effectiveRole != "ADMIN") {
-      return makeError(403, "forbidden", "Admin access required",
-                       "Only administrators can view audit logs.");
-    }
-
-    db::IDatabase::AuditLogFilter filter;
-
-    auto limitIt = query.find("limit");
-    if (limitIt != query.end()) {
-      int limitValue = 0;
-      if (!parseIntValue(limitIt->second, limitValue) || limitValue <= 0) {
-        return makeError(400, "validation_error", "Invalid limit",
-                         "Provide a positive integer for limit.");
-      }
-      std::string validationError;
-      if (!validateAndCapLimit(limitValue, validationError)) {
-        return makeError(400, "validation_error", "Invalid limit",
-                         validationError);
-      }
-      filter.limit = limitValue;
-    } else {
-      filter.limit = MAX_PAGINATION_LIMIT;
-    }
-
-    auto userFilterIt = query.find("user");
-    if (userFilterIt != query.end() && !userFilterIt->second.empty()) {
-      if (userFilterIt->second.size() > 255) {
-        return makeError(400, "validation_error", "user filter too long",
-                         "user filter must not exceed 255 characters.");
-      }
-      filter.user = userFilterIt->second;
-    }
-
-    auto actionIt = query.find("action");
-    if (actionIt != query.end() && !actionIt->second.empty()) {
-      try {
-        filter.action = core::AuditEntry::stringToAction(actionIt->second);
-      } catch (...) {
-        // Ignore invalid action
-      }
-    }
-
-    auto entityIt = query.find("entity");
-    if (entityIt != query.end() && !entityIt->second.empty()) {
-      try {
-        filter.entity = core::AuditEntry::stringToEntity(entityIt->second);
-      } catch (...) {
-        // Ignore invalid entity
-      }
-    }
-
-    auto fromIt = query.find("from");
-    if (fromIt != query.end()) {
-      std::time_t ts{};
-      if (parseTimeValue(fromIt->second, ts)) {
-        filter.fromTime = ts;
-      }
-    }
-
-    auto toIt = query.find("to");
-    if (toIt != query.end()) {
-      std::time_t ts{};
-      if (parseTimeValue(toIt->second, ts)) {
-        filter.toTime = ts;
-      }
-    }
-
-    auto entries = database_->getAuditLogFiltered(filter);
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-
-    json auditArr = json::array();
-    for (const auto &e : entries) {
-      auditArr.push_back(json::parse(auditEntryToJson(*e)));
-    }
-    return ApiResponse{200, json{{"data", auditArr}}.dump(),
-                       "application/json"};
+    return handleGetAudit(ctx);
   }
 
   // GET /api/v1/stats - Get dashboard statistics
   if (path == "/api/v1/stats" && isGet) {
-    if (effectiveRole == "CUSTOM") {
-      return makeError(403, "forbidden", "Insufficient permissions",
-                       "CUSTOM role cannot access aggregate statistics.");
-    }
-    db::IDatabase::StatsFilter filter;
-
-    auto fromIt = query.find("from");
-    if (fromIt != query.end()) {
-      std::time_t ts{};
-      if (parseTimeValue(fromIt->second, ts)) {
-        filter.fromDate = ts;
-      }
-    }
-
-    auto toIt = query.find("to");
-    if (toIt != query.end()) {
-      std::time_t ts{};
-      if (parseTimeValue(toIt->second, ts)) {
-        filter.toDate = ts;
-      }
-    }
-
-    auto sampleStats = database_->getSampleStats(filter);
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-    auto orderStats = database_->getOrderStats(filter);
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-    auto resultStats = database_->getResultStats(filter);
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-
-    auto orderPriorityStats = database_->getOrderPriorityStats();
-    const int criticalCount = database_->getCriticalResultCount();
-
-    json orderPriorityArr = json::array();
-    for (const auto &p : orderPriorityStats) {
-      orderPriorityArr.push_back({{"status", p.status}, {"count", p.count}});
-    }
-    const json statsOut = {
-        {"samples", json::parse(statsToJson(sampleStats, "samples"))},
-        {"orders", json::parse(statsToJson(orderStats, "orders"))},
-        {"results", json::parse(statsToJson(resultStats, "results"))},
-        {"order_priority", orderPriorityArr},
-        {"critical_count", criticalCount}};
-
-    return ApiResponse{200, statsOut.dump(), "application/json"};
+    return handleGetStats(ctx);
   }
 
   // GET /api/v1/audit/verify — Verify audit chain integrity (ADMIN only)
   if (isGet && path == "/api/v1/audit/verify") {
-    if (effectiveRole != "ADMIN") {
-      return makeError(403, "forbidden", "Admin access required",
-                       "Only administrators can verify the audit chain.");
-    }
-    std::string brokenAt;
-    const bool valid = database_->verifyAuditChain(brokenAt);
-    if (valid) {
-      return ApiResponse{
-          200,
-          json{{"valid", true}, {"message", "Audit chain integrity verified"}}
-              .dump(),
-          "application/json"};
-    }
-    return ApiResponse{200,
-                       json{{"valid", false},
-                            {"broken_at", brokenAt},
-                            {"message", "Chain integrity violation"}}
-                           .dump(),
-                       "application/json"};
+    return handleAuditVerify(ctx);
   }
 
   // GET /api/v1/audit/export — Audit-Log als CSV herunterladen (ADMIN only)
   if (isGet && path == "/api/v1/audit/export") {
-    if (effectiveRole != "ADMIN") {
-      return makeError(403, "forbidden", "Admin access required",
-                       "Only administrators can export the audit log.");
-    }
-
-    db::IDatabase::AuditLogFilter filter;
-    auto fromIt = query.find("from");
-    if (fromIt != query.end()) {
-      std::time_t ts{};
-      if (parseTimeValue(fromIt->second, ts))
-        filter.fromTime = ts;
-    }
-    auto toIt = query.find("to");
-    if (toIt != query.end()) {
-      std::time_t ts{};
-      if (parseTimeValue(toIt->second, ts))
-        filter.toTime = ts;
-    }
-    auto limitIt = query.find("limit");
-    if (limitIt != query.end()) {
-      int lim = 0;
-      if (!parseIntValue(limitIt->second, lim) || lim <= 0) {
-        return makeError(400, "validation_error", "Invalid limit",
-                         "Provide a positive integer limit.");
-      }
-      std::string capError;
-      if (!validateAndCapLimit(lim, capError)) {
-        return makeError(400, "validation_error", "Invalid limit", capError);
-      }
-      filter.limit = lim;
-    } else {
-      filter.limit = MAX_PAGINATION_LIMIT;
-    }
-
-    // Use mkstemp for unpredictable name — prevents TOCTOU/symlink attacks.
-    // The file is created with 0600 permissions by mkstemp itself.
-    char tmpTemplate[] = "/tmp/opensylab_audit_XXXXXX";
-    const int tmpFd = ::mkstemp(tmpTemplate);
-    if (tmpFd == -1) {
-      return makeError(500, "internal_error", "Export failed",
-                       "Could not create temporary file.");
-    }
-    ::close(tmpFd);
-    const std::string tmpPath = tmpTemplate;
-
-    // RAII guard: always delete the temp file when this scope exits.
-    struct TmpGuard {
-      const std::string &path;
-      ~TmpGuard() { std::remove(path.c_str()); }
-    } guard{tmpPath};
-
-    int exportedCount = 0;
-    if (!database_->exportAuditLogToCsv(tmpPath, filter, actor,
-                                        exportedCount)) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-
-    std::ifstream f(tmpPath, std::ios::binary);
-    if (!f.is_open()) {
-      return makeError(500, "internal_error", "Export failed",
-                       "Could not read export file.");
-    }
-    std::ostringstream buf;
-    buf << f.rdbuf();
-
-    ApiResponse csvResp{200, buf.str(), "text/csv; charset=utf-8"};
-    csvResp.extraHeaders["Content-Disposition"] =
-        "attachment; filename=\"audit_export.csv\"";
-    return csvResp;
+    return handleAuditExport(ctx);
   }
 
   // POST /api/v1/hl7/import - HL7 v2.5.1 Import
   if (method == "post" && path == "/api/v1/hl7/import") {
-    if (effectiveRole == "VIEWER" || effectiveRole == "CUSTOM") {
-      return makeError(403, "forbidden", "Insufficient permissions",
-                       "OPERATOR or ADMIN role required.");
-    }
-    const std::string hl7Body = trimLeadingNewlines(request.body);
-    if (hl7Body.empty()) {
-      return makeError(400, "validation_error", "Missing request body",
-                       "Provide HL7 v2.5.1 message in request body.");
-    }
-    utils::Hl7Exchange exchange(database_);
-    utils::Hl7Exchange::ImportSummary summary;
-    if (!exchange.importOruR01Message(hl7Body, actor, summary)) {
-      LOG_ERROR("[HL7] Import failed: {}", summary.lastError);
-      return makeError(
-          422, "import_error", "HL7 import failed",
-          "Message could not be processed. Check server logs for details.");
-    }
-    return ApiResponse{200,
-                       json{{"imported",
-                             {{"samples", summary.samplesCreated},
-                              {"orders", summary.ordersCreated},
-                              {"results", summary.resultsCreated}}}}
-                           .dump(),
-                       "application/json"};
+    return handleHl7Import(ctx);
   }
 
   // GET /api/v1/hl7/export/{id} - HL7 v2.5.1 Export
   if (method == "get" && path.rfind("/api/v1/hl7/export/", 0) == 0) {
-    if (effectiveRole == "VIEWER" || effectiveRole == "CUSTOM") {
-      return makeError(403, "forbidden", "Insufficient permissions",
-                       "OPERATOR or ADMIN role required.");
-    }
-    const std::string pathSegment = path.substr(path.rfind('/') + 1);
-    if (pathSegment.empty()) {
-      return makeError(400, "validation_error", "Missing sample id",
-                       "Provide sample id in URL path.");
-    }
-    int sampleId = 0;
-    if (!parseIntValue(pathSegment, sampleId) || sampleId <= 0) {
-      return makeError(400, "validation_error", "Invalid sample id",
-                       "Provide numeric sample id.");
-    }
-    auto sample = database_->getSample(sampleId);
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-    if (!sample) {
-      return makeError(404, "not_found", "Sample not found",
-                       "Verify the sample id.");
-    }
-    auto orders = database_->getOrdersBySampleId(sample->getSampleId());
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-    if (orders.empty()) {
-      return makeError(404, "not_found", "No orders found",
-                       "Sample has no associated orders.");
-    }
-    const core::Order &order = *orders[0];
-    auto resultPtrs = database_->getTestResultsByOrderId(
-        order.getId(), std::nullopt, std::nullopt);
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-
-    std::vector<core::TestResult> resultCopies;
-    resultCopies.reserve(resultPtrs.size());
-    for (const auto &r : resultPtrs) {
-      resultCopies.push_back(*r);
-    }
-
-    utils::Hl7Exchange exchange(database_);
-    std::string hl7Body =
-        exchange.exportOruR01Message(*sample, order, resultCopies);
-    return ApiResponse{200, hl7Body, "application/hl7-v2"};
+    return handleHl7Export(ctx);
   }
 
   // POST /api/v1/fhir/import - FHIR R4 Import
   if (method == "post" && path == "/api/v1/fhir/import") {
-    if (effectiveRole == "VIEWER" || effectiveRole == "CUSTOM") {
-      return makeError(403, "forbidden", "Insufficient permissions",
-                       "OPERATOR or ADMIN role required.");
-    }
-    const std::string fhirBody = trimLeadingNewlines(request.body);
-    if (fhirBody.empty()) {
-      return makeError(400, "validation_error", "Missing request body",
-                       "Provide FHIR R4 Bundle JSON in request body.");
-    }
-    utils::FhirExchange exchange(database_);
-    utils::FhirExchange::ImportSummary summary;
-    if (!exchange.importBundle(fhirBody, actor, summary)) {
-      LOG_ERROR("[FHIR] Import failed: {}", summary.lastError);
-      return makeError(
-          422, "import_error", "FHIR import failed",
-          "Bundle could not be processed. Check server logs for details.");
-    }
-    return ApiResponse{200,
-                       json{{"imported",
-                             {{"samples", summary.samplesCreated},
-                              {"orders", summary.ordersCreated},
-                              {"results", summary.resultsCreated}}}}
-                           .dump(),
-                       "application/json"};
+    return handleFhirImport(ctx);
   }
 
   // GET /api/v1/fhir/export/{id} - FHIR R4 Export
   if (method == "get" && path.rfind("/api/v1/fhir/export/", 0) == 0) {
-    if (effectiveRole == "VIEWER" || effectiveRole == "CUSTOM") {
-      return makeError(403, "forbidden", "Insufficient permissions",
-                       "OPERATOR or ADMIN role required.");
-    }
-    const std::string pathSegment = path.substr(path.rfind('/') + 1);
-    if (pathSegment.empty()) {
-      return makeError(400, "validation_error", "Missing sample id",
-                       "Provide sample id in URL path.");
-    }
-    int sampleId = 0;
-    if (!parseIntValue(pathSegment, sampleId) || sampleId <= 0) {
-      return makeError(400, "validation_error", "Invalid sample id",
-                       "Provide numeric sample id.");
-    }
-    auto sample = database_->getSample(sampleId);
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-    if (!sample) {
-      return makeError(404, "not_found", "Sample not found",
-                       "Verify the sample id.");
-    }
-    auto orders = database_->getOrdersBySampleId(sample->getSampleId());
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-    if (orders.empty()) {
-      return makeError(404, "not_found", "No orders found",
-                       "Sample has no associated orders.");
-    }
-    const core::Order &order = *orders[0];
-    auto resultPtrs = database_->getTestResultsByOrderId(
-        order.getId(), std::nullopt, std::nullopt);
-    if (database_->hasError()) {
-      return makeDbErrorResponse(database_->getLastError());
-    }
-
-    std::vector<core::TestResult> resultCopies;
-    resultCopies.reserve(resultPtrs.size());
-    for (const auto &r : resultPtrs) {
-      resultCopies.push_back(*r);
-    }
-
-    utils::FhirExchange exchange(database_);
-    std::string fhirBody = exchange.exportBundle(*sample, order, resultCopies);
-    return ApiResponse{200, fhirBody, "application/fhir+json"};
+    return handleFhirExport(ctx);
   }
 
   return makeError(404, "not_found", "Endpoint not found",
