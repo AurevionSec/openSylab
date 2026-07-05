@@ -13,7 +13,7 @@ info:
 
     **Audit Trail:** All write operations on samples, orders, results, and users
     produce an immutable HMAC-SHA256 audit entry (ISO 15189).
-  version: "0.9.0"
+  version: "1.0.0"
   contact:
     name: OpenSylab Project
   license:
@@ -854,6 +854,60 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
+  /hl7/export/{id}:
+    get:
+      summary: Export a sample (with its orders and results) as an HL7 v2 ORU^R01 message
+      tags: [Export]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Numeric sample id
+      responses:
+        "200":
+          description: HL7 v2 ORU^R01 message
+          content:
+            application/hl7-v2:
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /fhir/export/{id}:
+    get:
+      summary: Export a sample (with its orders and results) as a FHIR R4 Bundle
+      tags: [Export]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Numeric sample id
+      responses:
+        "200":
+          description: FHIR R4 Bundle
+          content:
+            application/fhir+json:
+              schema:
+                type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   # ---------------------------------------------------------------------------
   # OpenAPI spec self-serve
   # ---------------------------------------------------------------------------
@@ -1018,18 +1072,14 @@ components:
 
     HealthResponse:
       type: object
-      required: [status, database]
+      required: [status, service]
       properties:
         status:
           type: string
-          enum: [ok, degraded, error]
-        database:
+          enum: [ok]
+        service:
           type: string
-          enum: [ok, error]
-        version:
-          type: string
-        uptime_seconds:
-          type: integer
+          example: opensylab-lims
 
     # ---- Sample -------------------------------------------------------------
 

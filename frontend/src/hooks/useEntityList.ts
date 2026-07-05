@@ -39,41 +39,33 @@ export function useEntityList<T>(
     return () => { mountedRef.current = false; };
   }, []);
 
-  const refetch = useCallback(() => {
+  // Monotonic id so only the most recent load applies its result. This covers
+  // BOTH the dependency-driven effect and manual refetch(): if a filter change
+  // (or another refetch) starts a newer load while an older one is in flight,
+  // the older response is discarded instead of overwriting the newer data.
+  const requestIdRef = useRef(0);
+
+  const runLoad = useCallback(() => {
+    const myId = ++requestIdRef.current;
+    const isCurrent = () => mountedRef.current && requestIdRef.current === myId;
     setLoading(true);
     setError('');
     loadFnRef.current()
       .then(result => {
-        if (mountedRef.current) { setData(result.data); setTotal(result.total); }
+        if (isCurrent()) { setData(result.data); setTotal(result.total); }
       })
       .catch((err: unknown) => {
-        if (mountedRef.current) {
-          const message = err instanceof Error ? err.message : 'Failed to load data';
-          setError(message);
+        if (isCurrent()) {
+          setError(err instanceof Error ? err.message : 'Failed to load data');
         }
       })
-      .finally(() => { if (mountedRef.current) setLoading(false); });
-   
+      .finally(() => { if (isCurrent()) setLoading(false); });
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError('');
-    loadFnRef.current()
-      .then(result => {
-        if (!cancelled) { setData(result.data); setTotal(result.total); }
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          const message = err instanceof Error ? err.message : 'Failed to load data';
-          setError(message);
-        }
-      })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+    runLoad();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
 
-  return { data, total, loading, error, refetch };
+  return { data, total, loading, error, refetch: runLoad };
 }

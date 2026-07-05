@@ -253,18 +253,32 @@ bool CsvResultImport::processRecord(const std::string &record, int recordNumber,
   }
 
   if (fields.size() > 5) {
-    try {
-      result.setReferenceLow(std::stod(trim(fields[5])));
-    } catch (...) {
-      result.setReferenceLow(0.0);
+    const std::string refLowStr = trim(fields[5]);
+    if (!refLowStr.empty()) {
+      try {
+        result.setReferenceLow(std::stod(refLowStr));
+      } catch (...) {
+        // A malformed reference bound must reject the record, not silently
+        // become 0.0 (which would skew flag evaluation for medical results).
+        const std::string error = "ref_low ist keine gültige Zahl: " + refLowStr;
+        LOG_ERROR("Fehler Record {}: {}", recordNumber, error);
+        addFailedRecord(recordNumber, record, error);
+        return false;
+      }
     }
   }
 
   if (fields.size() > 6) {
-    try {
-      result.setReferenceHigh(std::stod(trim(fields[6])));
-    } catch (...) {
-      result.setReferenceHigh(0.0);
+    const std::string refHighStr = trim(fields[6]);
+    if (!refHighStr.empty()) {
+      try {
+        result.setReferenceHigh(std::stod(refHighStr));
+      } catch (...) {
+        const std::string error = "ref_high ist keine gültige Zahl: " + refHighStr;
+        LOG_ERROR("Fehler Record {}: {}", recordNumber, error);
+        addFailedRecord(recordNumber, record, error);
+        return false;
+      }
     }
   }
 
@@ -305,6 +319,15 @@ std::vector<std::string> CsvResultImport::parseLine(const std::string &line) {
 
   for (size_t i = 0; i < line.size(); ++i) {
     char c = line[i];
+
+    // A '"' that was pending as a possible closing quote is confirmed as a
+    // closing quote as soon as the next character is not another '"'. Resolve
+    // it here so the delimiter test below sees inQuotes == false and terminates
+    // the field correctly (otherwise the delimiter was appended to the value).
+    if (prevWasQuote && c != '"') {
+      inQuotes = false;
+      prevWasQuote = false;
+    }
 
     if (c == '"') {
       if (inQuotes && prevWasQuote) {

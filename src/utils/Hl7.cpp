@@ -418,7 +418,9 @@ bool Hl7Parser::parse(const std::string &rawMessage) {
     }
   }
   messageControlId_ = fieldValue(*msh, 9);
-  version_ = fieldValue(*msh, 12);
+  // MSH-N maps to field index N-1 (fields[0] == "MSH"); MSH-12 (version) is
+  // index 11, not 12.
+  version_ = fieldValue(*msh, 11);
 
   return true;
 }

@@ -306,6 +306,12 @@ private:
   std::string dbPath_;
   sqlite3 *db_ = nullptr;
   bool isOpen_ = false;
+  // Serializes ALL public Database access. The single sqlite3 connection is
+  // shared across the server's per-connection threads; without this two
+  // concurrent transactions would collide (nested BEGIN) and could corrupt the
+  // audit hash chain. Recursive because some methods call others (e.g. a write
+  // path calls logAudit).
+  mutable std::recursive_mutex dbMutex_;
   mutable std::mutex errorMutex_;
   std::string lastError_;
   std::string auditHmacKey_;

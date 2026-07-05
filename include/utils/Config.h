@@ -15,7 +15,9 @@ struct AppConfig {
     std::string tlsKey;
     bool        forceHttps{false};
     std::string jwtSecretFile;
-    std::string corsOrigin{"*"};
+    // Match the API server's env-path default; a wildcard must be opt-in, not
+    // the fallback, for a medical system.
+    std::string corsOrigin{"http://localhost:5173"};
     std::string logLevel{"info"};
     std::string logFile;
     int         loginRateLimitPerMinute{10};

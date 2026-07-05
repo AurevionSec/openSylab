@@ -970,6 +970,16 @@ ApiResponse ApiRouter::handleHl7Export(const RouteContext &ctx) const {
   utils::Hl7Exchange exchange(database_);
   std::string hl7Body =
       exchange.exportOruR01Message(*sample, order, resultCopies);
+  // ISO 15189: a patient-record disclosure must be audited, like every other read.
+  core::AuditEntry hl7Entry(
+      core::AuditEntry::ActionType::ACCESS, core::AuditEntry::EntityType::SAMPLE,
+      sample->getSampleId(), ctx.actor,
+      "API HL7 export /hl7/export/" + std::to_string(sampleId));
+  if (!database_->logAudit(hl7Entry)) {
+    LOG_ERROR("[Audit] logAudit failed: {}", database_->getLastError());
+    return makeError(500, "internal_error", "Audit log failed",
+                     "Please contact the system administrator.");
+  }
   return ApiResponse{200, hl7Body, "application/hl7-v2"};
 }
 
@@ -1046,6 +1056,16 @@ ApiResponse ApiRouter::handleFhirExport(const RouteContext &ctx) const {
 
   utils::FhirExchange exchange(database_);
   std::string fhirBody = exchange.exportBundle(*sample, order, resultCopies);
+  // ISO 15189: a patient-record disclosure must be audited, like every other read.
+  core::AuditEntry fhirEntry(
+      core::AuditEntry::ActionType::ACCESS, core::AuditEntry::EntityType::SAMPLE,
+      sample->getSampleId(), ctx.actor,
+      "API FHIR export /fhir/export/" + std::to_string(sampleId));
+  if (!database_->logAudit(fhirEntry)) {
+    LOG_ERROR("[Audit] logAudit failed: {}", database_->getLastError());
+    return makeError(500, "internal_error", "Audit log failed",
+                     "Please contact the system administrator.");
+  }
   return ApiResponse{200, fhirBody, "application/fhir+json"};
 }
 
@@ -1331,7 +1351,7 @@ ApiResponse ApiRouter::handleCreateUser(const RouteContext &ctx) const {
 
 ApiResponse ApiRouter::handleUpdateUser(const RouteContext &ctx) const {
   const std::string userIdStr =
-      ctx.path.substr(std::string("/api/v1/users/").size());
+      urlDecode(ctx.path.substr(std::string("/api/v1/users/").size()));
   if (userIdStr.rfind("me/", 0) == 0) {
     return makeError(404, "not_found", "Unknown endpoint",
                      "The requested endpoint does not exist.");
@@ -1518,7 +1538,7 @@ ApiResponse ApiRouter::handleChangeOwnPassword(const RouteContext &ctx) const {
 
 ApiResponse ApiRouter::handleDeleteUser(const RouteContext &ctx) const {
   const std::string userIdStr =
-      ctx.path.substr(std::string("/api/v1/users/").size());
+      urlDecode(ctx.path.substr(std::string("/api/v1/users/").size()));
   if (userIdStr.empty()) {
     return makeError(400, "validation_error", "Missing user_id",
                      "Provide user_id in URL path.");
@@ -1693,7 +1713,7 @@ ApiResponse ApiRouter::handleListSamples(const RouteContext &ctx) const {
 
 ApiResponse ApiRouter::handleGetSample(const RouteContext &ctx) const {
   const std::string sampleId =
-      ctx.path.substr(std::string("/api/v1/samples/").size());
+      urlDecode(ctx.path.substr(std::string("/api/v1/samples/").size()));
   if (sampleId.empty()) {
     return makeError(400, "validation_error", "Missing sample_id",
                      "Provide sample_id in URL path.");
@@ -1826,7 +1846,7 @@ ApiResponse ApiRouter::handleListOrders(const RouteContext &ctx) const {
 
 ApiResponse ApiRouter::handleGetOrder(const RouteContext &ctx) const {
   const std::string orderId =
-      ctx.path.substr(std::string("/api/v1/orders/").size());
+      urlDecode(ctx.path.substr(std::string("/api/v1/orders/").size()));
   if (orderId.empty()) {
     return makeError(400, "validation_error", "Missing order_id",
                      "Provide order_id in URL path.");
@@ -2033,7 +2053,7 @@ ApiResponse ApiRouter::handleListResults(const RouteContext &ctx) const {
 
 ApiResponse ApiRouter::handleGetResult(const RouteContext &ctx) const {
   const std::string resultId =
-      ctx.path.substr(std::string("/api/v1/results/").size());
+      urlDecode(ctx.path.substr(std::string("/api/v1/results/").size()));
   if (resultId.empty()) {
     return makeError(400, "validation_error", "Missing result_id",
                      "Provide result_id in URL path.");
@@ -2444,7 +2464,7 @@ ApiResponse ApiRouter::handleUpdateSample(
     const RouteContext &ctx,
     const std::unordered_map<std::string, std::string> &payload) const {
   const std::string sampleId =
-      ctx.path.substr(std::string("/api/v1/samples/").size());
+      urlDecode(ctx.path.substr(std::string("/api/v1/samples/").size()));
   if (sampleId.empty()) {
     return makeError(400, "validation_error", "Missing sample_id",
                      "Provide sample_id in URL path.");
@@ -2541,6 +2561,13 @@ ApiResponse ApiRouter::handleUpdateSample(
                          "Transition from " + cs + " to " + ns +
                              " is not allowed.");
       }
+      // ISO 15189: only ADMIN may release (VALIDATE) a sample — mirrors the
+      // order/result guards.
+      if (ns == "VALIDATED" && ctx.effectiveRole != "ADMIN") {
+        return makeError(
+            403, "forbidden", "Admin access required",
+            "Only administrators can validate (release) samples.");
+      }
       updated.setStatus(newStatus);
     } catch (const std::exception &e) {
       return makeError(400, "validation_error", "Invalid status", e.what());
@@ -2574,7 +2601,7 @@ ApiResponse ApiRouter::handleUpdateOrder(
     const RouteContext &ctx,
     const std::unordered_map<std::string, std::string> &payload) const {
   const std::string orderId =
-      ctx.path.substr(std::string("/api/v1/orders/").size());
+      urlDecode(ctx.path.substr(std::string("/api/v1/orders/").size()));
   if (orderId.empty()) {
     return makeError(400, "validation_error", "Missing order_id",
                      "Provide order_id in URL path.");
@@ -2735,7 +2762,7 @@ ApiResponse ApiRouter::handleUpdateResult(
     const RouteContext &ctx,
     const std::unordered_map<std::string, std::string> &payload) const {
   const std::string resultId =
-      ctx.path.substr(std::string("/api/v1/results/").size());
+      urlDecode(ctx.path.substr(std::string("/api/v1/results/").size()));
   if (resultId.empty()) {
     return makeError(400, "validation_error", "Missing result_id",
                      "Provide result_id in URL path.");
@@ -2966,7 +2993,7 @@ ApiResponse ApiRouter::handleUpdateResult(
 
 ApiResponse ApiRouter::handleDeleteSample(const RouteContext &ctx) const {
   const std::string sampleId =
-      ctx.path.substr(std::string("/api/v1/samples/").size());
+      urlDecode(ctx.path.substr(std::string("/api/v1/samples/").size()));
   if (sampleId.empty()) {
     return makeError(400, "validation_error", "Missing sample_id",
                      "Provide sample_id in URL path.");
@@ -3028,7 +3055,7 @@ ApiResponse ApiRouter::handleDeleteSample(const RouteContext &ctx) const {
 
 ApiResponse ApiRouter::handleDeleteOrder(const RouteContext &ctx) const {
   const std::string orderId =
-      ctx.path.substr(std::string("/api/v1/orders/").size());
+      urlDecode(ctx.path.substr(std::string("/api/v1/orders/").size()));
   if (orderId.empty()) {
     return makeError(400, "validation_error", "Missing order_id",
                      "Provide order_id in URL path.");
@@ -3084,7 +3111,7 @@ ApiResponse ApiRouter::handleDeleteOrder(const RouteContext &ctx) const {
 
 ApiResponse ApiRouter::handleDeleteResult(const RouteContext &ctx) const {
   const std::string resultId =
-      ctx.path.substr(std::string("/api/v1/results/").size());
+      urlDecode(ctx.path.substr(std::string("/api/v1/results/").size()));
   if (resultId.empty()) {
     return makeError(400, "validation_error", "Missing result_id",
                      "Provide result_id in URL path.");
@@ -3225,19 +3252,22 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
   bool authenticated = false;
   std::string actor;
 
+  // For JWT sessions the effective role is taken from the *live* DB user, not
+  // the (possibly stale) token claim, so a role change takes effect immediately.
+  std::string jwtLiveRole;
   if (jwtPayload.has_value()) {
     // JWT authentication successful
     authenticated = true;
     actor = "user:" + jwtPayload->username +
             " (id:" + std::to_string(jwtPayload->userId) + ")";
-    // Reject tokens belonging to deactivated or deleted users
-    {
-      auto liveUser = database_->getUser(jwtPayload->userId);
-      if (!liveUser || !liveUser->isActive()) {
-        return makeError(401, "unauthorized", "Account deactivated",
-                         "This account has been deactivated or deleted.");
-      }
+    // Reject tokens belonging to deactivated or deleted users; capture the
+    // current role at the same time.
+    auto liveUser = database_->getUser(jwtPayload->userId);
+    if (!liveUser || !liveUser->isActive()) {
+      return makeError(401, "unauthorized", "Account deactivated",
+                       "This account has been deactivated or deleted.");
     }
+    jwtLiveRole = liveUser->getRoleString();
     // Invalidate tokens issued before a password change
     if (jwtPayload->iat > 0) {
       const std::time_t pwChangedAt =
@@ -3270,7 +3300,7 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
   // fail.
   const auto rawEffectiveRole =
       jwtPayload.has_value()
-          ? jwtPayload->role
+          ? jwtLiveRole
           : (apiKeyRole.has_value() ? apiKeyRole.value()
                                     : std::string("OPERATOR"));
   const std::string effectiveRole = [&]() -> std::string {
@@ -3333,7 +3363,13 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
       !(isPost && path == "/api/v1/auth/mfa/verify-enrollment") &&
       !(isDelete && path == "/api/v1/auth/mfa")) {
     auto currentUser = database_->getUser(jwtPayload->userId);
-    if (currentUser && currentUser->mustChangePassword()) {
+    // Fail closed: if the account can't be loaded (deleted mid-session / DB
+    // error), do not let the mutating request through.
+    if (!currentUser) {
+      return makeError(401, "unauthorized", "Account unavailable",
+                       "Your account could not be verified. Re-authenticate.");
+    }
+    if (currentUser->mustChangePassword()) {
       return makeError(
           403, "password_change_required", "Password change required",
           "You must change your password before performing this action.");

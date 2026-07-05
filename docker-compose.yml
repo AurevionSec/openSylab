@@ -15,11 +15,10 @@ services:
       - ./certs:/app/certs:ro
     environment:
       - OPENSYLAB_DB_PATH=/app/data/opensylab.db
-      - OPENSYLAB_API_PORT=8080
-      # SECURITY: Replace both secrets before deploying to production!
-      # Generate with: openssl rand -hex 32
-      - OPENSYLAB_JWT_SECRET=opensylab-jwt-local-dev-key-replace-before-production-0000
-      - OPENSYLAB_AUDIT_HMAC_KEY=opensylab-audit-hmac-local-dev-key-replace-before-prod-00
+      # SECURITY: both secrets come from an untracked .env file (see .env.example).
+      # Never commit real secrets. Generate with: openssl rand -hex 32
+      - OPENSYLAB_JWT_SECRET=${OPENSYLAB_JWT_SECRET:?set OPENSYLAB_JWT_SECRET in .env (min 32 chars)}
+      - OPENSYLAB_AUDIT_HMAC_KEY=${OPENSYLAB_AUDIT_HMAC_KEY:?set OPENSYLAB_AUDIT_HMAC_KEY in .env (min 32 chars)}
       # Optional: Enable TLS
       # - OPENSYLAB_TLS_CERT=/app/certs/server.crt
       # - OPENSYLAB_TLS_KEY=/app/certs/server.key

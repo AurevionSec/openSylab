@@ -1,5 +1,6 @@
 #include "core/TestResult.h"
 #include <cctype>
+#include <cmath>
 #include <cstdlib>
 #include <stdexcept>
 #include <unordered_map>
@@ -111,7 +112,7 @@ bool TestResult::isNumeric() const {
 
   const char *str = value_.c_str();
   char *end = nullptr;
-  std::strtod(str, &end);
+  const double parsed = std::strtod(str, &end);
 
   // Wert ist numerisch, wenn alle Zeichen verarbeitet wurden
   // (nach evtl. führenden Whitespace)
@@ -119,7 +120,10 @@ bool TestResult::isNumeric() const {
     ++end;
   }
 
-  return end != str && *end == '\0';
+  // strtod also parses "nan"/"inf"; reject non-finite values — a NaN result
+  // would otherwise pass every comparison in evaluateFlag() and be flagged
+  // NORMAL.
+  return end != str && *end == '\0' && std::isfinite(parsed);
 }
 
 double TestResult::getNumericValue() const {

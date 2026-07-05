@@ -59,11 +59,10 @@ EXPOSE 8080
 
 # Set environment variables
 ENV OPENSYLAB_DB_PATH=/app/data/opensylab.db
-ENV OPENSYLAB_API_PORT=8080
 
-# Health check (simple port check, no auth required)
+# Health check — the backend only serves /api/v1/*, so hit the health endpoint.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8080/ || exit 1
+    CMD curl -sf http://localhost:8080/api/v1/health || exit 1
 
 # Run the application
 CMD ["/app/OpenSylab", "--api", "--api-port", "8080"]

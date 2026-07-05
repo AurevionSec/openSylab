@@ -12,10 +12,12 @@ export const Header = () => {
     if (e.key !== 'Enter') return;
     const q = searchQuery.trim();
     if (!q) return;
-    // Route by prefix: S- → samples, O- → orders, R- → results, otherwise samples
-    if (q.toUpperCase().startsWith('O-')) {
+    // Route by the actual ID conventions: orders are "ORD-…", results are
+    // "R<digit>…"; everything else searches samples.
+    const upper = q.toUpperCase();
+    if (upper.startsWith('ORD')) {
       navigate(`/orders?q=${encodeURIComponent(q)}`);
-    } else if (q.toUpperCase().startsWith('R-')) {
+    } else if (/^R\d/.test(upper)) {
       navigate(`/results?q=${encodeURIComponent(q)}`);
     } else {
       navigate(`/samples?q=${encodeURIComponent(q)}`);

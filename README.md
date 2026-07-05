@@ -4,7 +4,7 @@
 
 [![Version](https://img.shields.io/badge/version-1.0.0-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-green)](#license)
-[![Tests](https://img.shields.io/badge/tests-228%20passing-brightgreen)](#tests)
+[![Tests](https://img.shields.io/badge/tests-236%20passing-brightgreen)](#tests)
 [![C++](https://img.shields.io/badge/C%2B%2B-17-orange)](src/)
 [![React](https://img.shields.io/badge/React-19-61dafb)](frontend/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue)](frontend/src/)
@@ -46,7 +46,7 @@ Design philosophy: "User Competence over User Delight." Monospace data font for 
 
 ### Dashboard
 <!-- SCREENSHOT: Hauptansicht nach Login -->
-<!-- Aufnahme: http://192.168.10.140:5173/ (als admin eingeloggt) -->
+<!-- Aufnahme: http://localhost:5173/ (als admin eingeloggt) -->
 <!-- Zeigt: KPI-Kacheln (Proben, Aufträge, Ergebnisse, Kritisch), Aktivitäts-Charts, letzte Proben-Tabelle -->
 ![Dashboard](docs/screenshots/dashboard.png)
 *Real-time overview: samples, orders, critical results, and activity chart*
@@ -168,7 +168,7 @@ OpenSylab is **not** suitable for: high-throughput laboratories with >100 concur
 ### Quality
 | Metric | Value |
 |--------|------|
-| **Unit tests** | 228 passing |
+| **Unit tests** | 236 passing |
 | **TypeScript** | strict mode, 0 errors |
 | **npm audit** | 0 vulnerabilities |
 | **Bug hunts (v0.9.0)** | 36 waves, 3 consecutive APPROVED — 28 bugs fixed across 21 files |
@@ -332,7 +332,7 @@ cd frontend && npx tsc --noEmit
 timeout 60 ./build/bin/opensylab_tests
 ```
 
-**228 unit tests passing** — backend (C++): database, domain entities, API router, CSV import, HL7, FHIR, statistics, utils.
+**236 unit tests passing** — backend (C++): database, domain entities, API router, CSV import, HL7, FHIR, statistics, utils.
 
 Further details: [docs/TESTING.md](docs/TESTING.md)
 
@@ -374,4 +374,4 @@ Developed with [Claude Code](https://claude.ai/code) (Anthropic).
 
 Full version history: [CHANGELOG.md](CHANGELOG.md)
 
-**Current version: [0.9.0](CHANGELOG.md#090)** — architecture modernization: IDatabase interface, nlohmann/json, spdlog, migration framework, OpenAPI spec, HMAC audit hash chain, 228 tests passing.
+**Current version: [1.0.0](CHANGELOG.md#100)** — God-file decomposition, full test pyramid (backend + frontend + E2E), governance + security hardening; 236 tests passing.

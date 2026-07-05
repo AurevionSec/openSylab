@@ -1,6 +1,6 @@
 # OpenSylab — Roadmap & TODO
 
-**Current version:** v0.9.0 (2026-05-25)
+**Current version:** v1.0.0 (2026-07-05)
 **Next version:** v1.0.0
 **Branch:** main
 

@@ -35,7 +35,7 @@ std::string writeTempFile(const std::string& content) {
 bool test_config_Defaults() {
     const AppConfig cfg = Config::defaults();
     ASSERT_EQ(cfg.apiPort, 8080);
-    ASSERT_EQ(cfg.corsOrigin, std::string("*"));
+    ASSERT_EQ(cfg.corsOrigin, std::string("http://localhost:5173"));
     ASSERT_EQ(cfg.logLevel, std::string("info"));
     ASSERT_FALSE(cfg.forceHttps);
     ASSERT_EQ(cfg.loginRateLimitPerMinute, 10);
@@ -61,7 +61,7 @@ bool test_config_EmptyFileReturnsDefaults() {
     const AppConfig cfg = Config::loadFromFile(path);
     std::remove(path.c_str());
     ASSERT_EQ(cfg.apiPort, 8080);
-    ASSERT_EQ(cfg.corsOrigin, std::string("*"));
+    ASSERT_EQ(cfg.corsOrigin, std::string("http://localhost:5173"));
     return true;
 }
 

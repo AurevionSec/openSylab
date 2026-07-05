@@ -924,6 +924,35 @@ bool test_api_UpdateOrderValidateRequiresAdmin() {
   return true;
 }
 
+// Non-ADMIN (OPERATOR key) may not validate (release) a sample (403).
+bool test_api_UpdateSampleValidateRequiresAdmin() {
+  std::string dbPath = uniqueDbPath();
+  auto db = std::make_shared<Database>(dbPath);
+  ASSERT_TRUE(db->open());
+  ASSERT_TRUE(db->initializeSchema());
+  ASSERT_TRUE(db->upsertApiKey(kOpKey, true));
+
+  Sample sample("S_SVAL", "P1");
+  ASSERT_TRUE(db->createSample(sample));
+  // ANALYZED -> VALIDATED is a legal transition, so only the ADMIN gate blocks.
+  ASSERT_TRUE(forceSampleStatus(*db, "S_SVAL", Sample::Status::ANALYZED));
+
+  ApiRouter router(db);
+  ApiRequest req;
+  req.method = "PUT";
+  req.path = "/api/v1/samples/S_SVAL";
+  req.headers["x-api-key"] = kOpKey;
+  req.headers["content-type"] = "application/json";
+  req.body = "{\"patient_id\":\"P1\",\"status\":\"VALIDATED\"}";
+
+  ApiResponse res = router.handleRequest(req);
+  ASSERT_EQ(res.status, 403);
+
+  db->close();
+  std::remove(dbPath.c_str());
+  return true;
+}
+
 // Non-ADMIN (OPERATOR key) may not validate (release) a result (403).
 bool test_api_UpdateResultValidateRequiresAdmin() {
   std::string dbPath = uniqueDbPath();
@@ -1101,6 +1130,8 @@ void registerApiTests() {
                test_api_UpdateSampleImmutableWhenValidated);
   registerTest("Api::UpdateSampleInvalidStatusTransition",
                test_api_UpdateSampleInvalidStatusTransition);
+  registerTest("Api::UpdateSampleValidateRequiresAdmin",
+               test_api_UpdateSampleValidateRequiresAdmin);
   registerTest("Api::UpdateOrderValidateRequiresAdmin",
                test_api_UpdateOrderValidateRequiresAdmin);
   registerTest("Api::UpdateResultValidateRequiresAdmin",

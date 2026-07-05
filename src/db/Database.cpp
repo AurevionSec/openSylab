@@ -476,11 +476,14 @@ namespace opensylab {
 namespace db {
 
 Database::Database(const std::string &dbPath)
-    : dbPath_(dbPath), db_(nullptr), isOpen_(false), lastError_("") {}
+    : dbPath_(dbPath), db_(nullptr), isOpen_(false), lastError_("") {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
+}
 
 Database::~Database() { close(); }
 
 bool Database::open() {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (isOpen_) {
@@ -495,6 +498,11 @@ bool Database::open() {
     db_ = nullptr;
     return false;
   }
+
+  // Wait up to 5s on a locked DB instead of failing immediately with SQLITE_BUSY
+  // (WAL still serializes writers; dbMutex_ serializes this process's threads,
+  // busy_timeout covers other processes / WAL checkpoints).
+  sqlite3_busy_timeout(db_, 5000);
 
   // WAL-Modus aktivieren für bessere Concurrency
   char *walErrMsg = nullptr;
@@ -632,6 +640,7 @@ const std::vector<Database::Migration> &Database::getMigrations() {
 }
 
 int Database::getCurrentSchemaVersion() {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   if (!isOpen_ || db_ == nullptr) {
     return 0;
   }
@@ -649,6 +658,7 @@ int Database::getCurrentSchemaVersion() {
 }
 
 bool Database::applyMigration(const Migration &migration) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   char *errMsg = nullptr;
   if (sqlite3_exec(db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr, &errMsg) !=
       SQLITE_OK) {
@@ -726,6 +736,7 @@ bool Database::applyMigration(const Migration &migration) {
 }
 
 bool Database::runMigrations() {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   const int currentVersion = getCurrentSchemaVersion();
   const auto &migrations = getMigrations();
 
@@ -790,6 +801,7 @@ bool Database::runMigrations() {
 // ---------------------------------------------------------------------------
 
 bool Database::close() {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_ || db_ == nullptr) {
@@ -809,6 +821,7 @@ bool Database::close() {
 }
 
 bool Database::initializeSchema() {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -1115,6 +1128,7 @@ bool Database::initializeSchema() {
 }
 
 Database::HealthStatus Database::getHealthStatus() {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
   HealthStatus status;
 
@@ -1159,6 +1173,7 @@ Database::HealthStatus Database::getHealthStatus() {
 
 bool Database::createSample(const core::Sample &sample,
                             const std::string &actor) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -1248,6 +1263,7 @@ bool Database::createSample(const core::Sample &sample,
 Database::BatchInsertResult
 Database::createSamplesBatch(const std::vector<core::Sample> &samples,
                              const std::string &actor) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   BatchInsertResult result;
   clearError();
 
@@ -1391,6 +1407,7 @@ Database::createSamplesBatch(const std::vector<core::Sample> &samples,
 }
 
 std::unique_ptr<core::Sample> Database::getSample(int id) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   // Skip clearError when called inside an active transaction so the
   // transaction owner's error state is not clobbered.
   if (sqlite3_get_autocommit(db_)) { clearError(); }
@@ -1440,6 +1457,7 @@ std::unique_ptr<core::Sample> Database::getSample(int id) {
 
 std::unique_ptr<core::Sample>
 Database::getSampleByBarcode(const std::string &barcode) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -1486,6 +1504,7 @@ Database::getSampleByBarcode(const std::string &barcode) {
 }
 
 std::vector<std::unique_ptr<core::Sample>> Database::getAllSamples() {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   std::vector<std::unique_ptr<core::Sample>> samples;
 
   clearError();
@@ -1532,6 +1551,7 @@ std::vector<std::unique_ptr<core::Sample>> Database::getAllSamples() {
 
 std::vector<std::unique_ptr<core::Sample>>
 Database::getSamplesByFilter(const SampleFilter &filter) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   std::vector<std::unique_ptr<core::Sample>> samples;
 
   clearError();
@@ -1659,6 +1679,7 @@ Database::getSamplesByFilter(const SampleFilter &filter) {
 }
 
 int Database::getSamplesCount(const SampleFilter &filter) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -1763,6 +1784,7 @@ int Database::getSamplesCount(const SampleFilter &filter) {
 
 bool Database::updateSample(const core::Sample &sample,
                             const std::string &actor) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -1883,6 +1905,7 @@ bool Database::updateSample(const core::Sample &sample,
 }
 
 bool Database::deleteSample(int id, const std::string &actor) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -1984,6 +2007,7 @@ bool Database::deleteSample(int id, const std::string &actor) {
 }
 
 bool Database::exportSamplesToCsv(const std::string &filePath) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -2055,6 +2079,7 @@ bool Database::exportSamplesToCsv(const std::string &filePath) {
 // ============================================================================
 
 bool Database::createOrder(const core::Order &order, const std::string &actor) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -2179,6 +2204,7 @@ bool Database::createOrder(const core::Order &order, const std::string &actor) {
 }
 
 std::unique_ptr<core::Order> Database::getOrder(int id) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   if (sqlite3_get_autocommit(db_)) { clearError(); }
 
   if (!isOpen_) {
@@ -2225,6 +2251,7 @@ std::unique_ptr<core::Order> Database::getOrder(int id) {
 
 std::unique_ptr<core::Order>
 Database::getOrderByOrderId(const std::string &orderId) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -2271,6 +2298,7 @@ Database::getOrderByOrderId(const std::string &orderId) {
 
 std::vector<std::unique_ptr<core::Order>>
 Database::getOrdersBySampleId(const std::string &sampleId) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   std::vector<std::unique_ptr<core::Order>> orders;
 
   if (sqlite3_get_autocommit(db_)) { clearError(); }
@@ -2318,6 +2346,7 @@ Database::getOrdersBySampleId(const std::string &sampleId) {
 }
 
 std::vector<std::unique_ptr<core::Order>> Database::getAllOrders() {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   std::vector<std::unique_ptr<core::Order>> orders;
 
   clearError();
@@ -2364,6 +2393,7 @@ std::vector<std::unique_ptr<core::Order>> Database::getAllOrders() {
 
 std::vector<std::unique_ptr<core::Order>>
 Database::getOrdersByFilter(const OrderFilter &filter) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   std::vector<std::unique_ptr<core::Order>> orders;
@@ -2450,6 +2480,7 @@ Database::getOrdersByFilter(const OrderFilter &filter) {
 }
 
 int Database::getOrdersCount(const OrderFilter &filter) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
   if (!isOpen_) {
     setError("Datenbank ist nicht geöffnet");
@@ -2488,6 +2519,7 @@ int Database::getOrdersCount(const OrderFilter &filter) {
 }
 
 bool Database::updateOrder(const core::Order &order, const std::string &actor) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -2617,6 +2649,7 @@ bool Database::updateOrder(const core::Order &order, const std::string &actor) {
 }
 
 bool Database::deleteOrder(int id, const std::string &actor) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -2729,6 +2762,7 @@ bool Database::deleteOrder(int id, const std::string &actor) {
 
 bool Database::createTestResult(const core::TestResult &result,
                                 const std::string &actor) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -2864,6 +2898,7 @@ bool Database::createTestResult(const core::TestResult &result,
 Database::BatchInsertResult
 Database::createTestResultsBatch(const std::vector<core::TestResult> &results,
                                  const std::string &actor) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   BatchInsertResult result;
   clearError();
 
@@ -3019,6 +3054,7 @@ Database::createTestResultsBatch(const std::vector<core::TestResult> &results,
 }
 
 std::unique_ptr<core::TestResult> Database::getTestResult(int id) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   if (sqlite3_get_autocommit(db_)) { clearError(); }
 
   if (!isOpen_) {
@@ -3067,6 +3103,7 @@ std::unique_ptr<core::TestResult> Database::getTestResult(int id) {
 
 std::unique_ptr<core::TestResult>
 Database::getTestResultByResultId(const std::string &resultId) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -3116,6 +3153,7 @@ Database::getTestResultByResultId(const std::string &resultId) {
 std::vector<std::unique_ptr<core::TestResult>>
 Database::getTestResultsByOrderId(int orderId, std::optional<int> limit,
                                   std::optional<int> offset) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   std::vector<std::unique_ptr<core::TestResult>> results;
 
   if (sqlite3_get_autocommit(db_)) { clearError(); }
@@ -3179,6 +3217,7 @@ Database::getTestResultsByOrderId(int orderId, std::optional<int> limit,
 }
 
 int Database::getTestResultsCount(std::optional<int> orderIdFilter) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
   if (!isOpen_) {
     setError("Datenbank ist nicht geöffnet");
@@ -3214,6 +3253,7 @@ int Database::getTestResultsCount(std::optional<int> orderIdFilter) {
 std::vector<std::unique_ptr<core::TestResult>>
 Database::getAllTestResults(std::optional<int> limit,
                             std::optional<int> offset) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   std::vector<std::unique_ptr<core::TestResult>> results;
 
   clearError();
@@ -3276,6 +3316,7 @@ Database::getAllTestResults(std::optional<int> limit,
 
 bool Database::updateTestResult(const core::TestResult &result,
                                 const std::string &actor) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -3368,6 +3409,7 @@ bool Database::updateTestResult(const core::TestResult &result,
 }
 
 bool Database::updateTestResultCore(const core::TestResult &result) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   const std::string computedFlag =
       core::TestResult::flagToString(result.evaluateFlag());
   const char *updateSQL = R"(
@@ -3466,6 +3508,7 @@ bool Database::updateTestResultCore(const core::TestResult &result) {
 
 bool Database::updateTestResultWithAudit(const core::TestResult &result,
                                          const std::string &user) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -3562,6 +3605,7 @@ bool Database::updateTestResultWithAudit(const core::TestResult &result,
 bool Database::exportValidatedResultsToCsv(const std::string &filePath,
                                            const std::string &user,
                                            std::optional<int> orderId) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -3699,6 +3743,7 @@ bool Database::exportValidatedResultsToCsv(const std::string &filePath,
 
 bool Database::validateTestResult(const std::string &resultId,
                                   const std::string &user) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -3764,6 +3809,7 @@ bool Database::validateTestResult(const std::string &resultId,
 }
 
 bool Database::deleteTestResult(int id, const std::string &actor) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -3854,6 +3900,7 @@ bool Database::deleteTestResult(int id, const std::string &actor) {
 // ============================================================================
 
 Database::EntityStats Database::getSampleStats(const StatsFilter &filter) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   EntityStats stats;
   clearError();
 
@@ -3936,6 +3983,7 @@ Database::EntityStats Database::getSampleStats(const StatsFilter &filter) {
 }
 
 Database::EntityStats Database::getOrderStats(const StatsFilter &filter) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   EntityStats stats;
   clearError();
 
@@ -4018,6 +4066,7 @@ Database::EntityStats Database::getOrderStats(const StatsFilter &filter) {
 }
 
 Database::EntityStats Database::getResultStats(const StatsFilter &filter) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   EntityStats stats;
   clearError();
 
@@ -4100,6 +4149,7 @@ Database::EntityStats Database::getResultStats(const StatsFilter &filter) {
 }
 
 std::vector<Database::StatusCount> Database::getOrderPriorityStats() {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   std::vector<StatusCount> result;
   if (!isOpen_) return result;
   const char *sql =
@@ -4120,6 +4170,7 @@ std::vector<Database::StatusCount> Database::getOrderPriorityStats() {
 }
 
 int Database::getCriticalResultCount() {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   if (!isOpen_) return 0;
   const char *sql =
       "SELECT COUNT(*) FROM test_results "
@@ -4139,6 +4190,7 @@ bool Database::exportStatsReportToCsv(
     const std::string &filePath, const StatsFilter &sampleFilter,
     const StatsFilter &orderFilter, const StatsFilter &resultFilter,
     const std::string &actor) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -4281,6 +4333,7 @@ bool Database::exportStatsReportToCsv(
 // ============================================================================
 
 bool Database::logAudit(const core::AuditEntry &entry) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -4338,6 +4391,17 @@ bool Database::logAudit(const core::AuditEntry &entry) {
   const std::string newHash = computeAuditHash(
       auditHmacKey_, prevHash, actionStr, entityStr, entityId, user, timestampStr, details);
 
+  // Fail-closed: an empty/short hash means HMAC computation failed. Never insert
+  // a chain-breaking row (it would look like tampering to verifyAuditChain and
+  // report success to the caller). Abort the audit write instead.
+  if (newHash.size() != 64) {
+    if (ownTransaction) {
+      sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    }
+    setError("Audit-Hash-Berechnung fehlgeschlagen (chain_hash leer)");
+    return false;
+  }
+
   const char *insertSQL = R"(
         INSERT INTO audit_log (action, entity, entity_id, user, timestamp, details, chain_hash)
         VALUES (?, ?, ?, ?, ?, ?, ?);
@@ -4390,6 +4454,7 @@ bool Database::logAudit(const core::AuditEntry &entry) {
 }
 
 std::string Database::getLastAuditHash() {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   if (!isOpen_ || db_ == nullptr) {
     return std::string(64, '0');
   }
@@ -4414,6 +4479,7 @@ std::string Database::getLastAuditHash() {
 }
 
 bool Database::verifyAuditChain(std::string &firstBrokenAt) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   firstBrokenAt.clear();
 
   if (!isOpen_ || db_ == nullptr) {
@@ -4528,6 +4594,7 @@ bool Database::verifyAuditChain(std::string &firstBrokenAt) {
 
 std::vector<std::unique_ptr<core::AuditEntry>>
 Database::getAuditLog(int limit) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   std::vector<std::unique_ptr<core::AuditEntry>> entries;
 
   clearError();
@@ -4576,6 +4643,7 @@ Database::getAuditLog(int limit) {
 std::vector<std::unique_ptr<core::AuditEntry>>
 Database::getAuditLogByEntity(core::AuditEntry::EntityType entity,
                               const std::string &entityId) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   std::vector<std::unique_ptr<core::AuditEntry>> entries;
 
   clearError();
@@ -4627,6 +4695,7 @@ Database::getAuditLogByEntity(core::AuditEntry::EntityType entity,
 
 std::vector<std::unique_ptr<core::AuditEntry>>
 Database::getAuditLogFiltered(const AuditLogFilter &filter) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   std::vector<std::unique_ptr<core::AuditEntry>> entries;
 
   clearError();
@@ -4740,6 +4809,7 @@ bool Database::exportAuditLogToCsv(const std::string &filePath,
                                    const AuditLogFilter &filter,
                                    const std::string &actor,
                                    int &exportedCount) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
   exportedCount = 0;
 
@@ -4899,6 +4969,7 @@ bool Database::exportAuditLogToCsv(const std::string &filePath,
 
 std::vector<std::unique_ptr<core::AuditEntry>>
 Database::getDiagnosticsLogs(const DiagnosticsFilter &filter) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   AuditLogFilter auditFilter;
   auditFilter.entity = filter.component;
   auditFilter.fromTime = filter.fromTime;
@@ -4911,6 +4982,7 @@ bool Database::exportDiagnosticsLogsToCsv(const std::string &filePath,
                                           const DiagnosticsFilter &filter,
                                           const std::string &actor,
                                           int &exportedCount) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   AuditLogFilter auditFilter;
   auditFilter.entity = filter.component;
   auditFilter.fromTime = filter.fromTime;
@@ -4920,6 +4992,7 @@ bool Database::exportDiagnosticsLogsToCsv(const std::string &filePath,
 }
 
 int Database::getRetentionDays() {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -4954,6 +5027,7 @@ int Database::getRetentionDays() {
 }
 
 bool Database::setRetentionDays(int days) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -4992,6 +5066,7 @@ bool Database::setRetentionDays(int days) {
 
 bool Database::applyAuditRetention(const std::string &actor,
                                    int &purgedCount) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   purgedCount = 0;
@@ -5120,6 +5195,7 @@ void Database::logSampleAction(core::AuditEntry::ActionType action,
                                const std::string &sampleId,
                                const std::string &user,
                                const std::string &details) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   const std::string actor = normalizeActor(user);
   core::AuditEntry entry(action, core::AuditEntry::EntityType::SAMPLE, sampleId,
                          actor, details);
@@ -5130,6 +5206,7 @@ void Database::logOrderAction(core::AuditEntry::ActionType action,
                               const std::string &orderId,
                               const std::string &user,
                               const std::string &details) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   const std::string actor = normalizeActor(user);
   core::AuditEntry entry(action, core::AuditEntry::EntityType::ORDER, orderId,
                          actor, details);
@@ -5140,6 +5217,7 @@ void Database::logResultAction(core::AuditEntry::ActionType action,
                                const std::string &resultId,
                                const std::string &user,
                                const std::string &details) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   const std::string actor = normalizeActor(user);
   core::AuditEntry entry(action, core::AuditEntry::EntityType::RESULT, resultId,
                          actor, details);
@@ -5150,6 +5228,7 @@ void Database::logUserAction(core::AuditEntry::ActionType action,
                              const std::string &username,
                              const std::string &user,
                              const std::string &details) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   const std::string actor = normalizeActor(user);
   core::AuditEntry entry(action, core::AuditEntry::EntityType::USER, username,
                          actor, details);
@@ -5160,6 +5239,7 @@ void Database::logRoleAction(core::AuditEntry::ActionType action,
                              const std::string &roleName,
                              const std::string &user,
                              const std::string &details) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   const std::string actor = normalizeActor(user);
   core::AuditEntry entry(action, core::AuditEntry::EntityType::ROLE, roleName,
                          actor, details);
@@ -5170,6 +5250,7 @@ bool Database::logSupportAccess(core::AuditEntry::EntityType entity,
                                 const std::string &entityId,
                                 const std::string &user,
                                 const std::string &details) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   const std::string actor = normalizeActor(user);
   const std::string info = details.empty() ? "support_access" : details;
   core::AuditEntry entry(core::AuditEntry::ActionType::ACCESS, entity, entityId,
@@ -5180,6 +5261,7 @@ bool Database::logSupportAccess(core::AuditEntry::EntityType entity,
 bool Database::logResultRetryImport(const std::vector<std::string> &resultIds,
                                     const std::string &user,
                                     const std::string &filePath) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
   if (!isOpen_) {
     setError("Datenbank ist nicht geöffnet");
@@ -5230,6 +5312,7 @@ bool Database::logResultRetryImport(const std::vector<std::string> &resultIds,
 // ============================================================================
 
 bool Database::createUser(const core::User &user, const std::string &actor) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -5322,6 +5405,7 @@ bool Database::createUser(const core::User &user, const std::string &actor) {
 }
 
 std::unique_ptr<core::User> Database::getUser(int id) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -5368,6 +5452,7 @@ std::unique_ptr<core::User> Database::getUser(int id) {
 
 std::unique_ptr<core::User>
 Database::getUserByUsername(const std::string &username) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -5413,6 +5498,7 @@ Database::getUserByUsername(const std::string &username) {
 }
 
 std::vector<std::unique_ptr<core::User>> Database::getAllUsers() {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   std::vector<std::unique_ptr<core::User>> users;
 
   clearError();
@@ -5458,6 +5544,7 @@ std::vector<std::unique_ptr<core::User>> Database::getAllUsers() {
 }
 
 bool Database::updateUser(const core::User &user, const std::string &actor) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -5650,6 +5737,7 @@ bool Database::updateUser(const core::User &user, const std::string &actor) {
 }
 
 bool Database::deleteUser(int id, const std::string &actor) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -5778,6 +5866,7 @@ bool Database::deleteUser(int id, const std::string &actor) {
 bool Database::createRole(const std::string &name,
                           const std::vector<std::string> &permissions,
                           const std::string &actor) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -5885,6 +5974,7 @@ bool Database::createRole(const std::string &name,
 bool Database::updateRole(const std::string &name,
                           const std::vector<std::string> &permissions,
                           const std::string &actor) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -6017,6 +6107,7 @@ bool Database::updateRole(const std::string &name,
 }
 
 std::vector<std::string> Database::getRolePermissions(const std::string &name) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   std::vector<std::string> permissions;
 
   clearError();
@@ -6059,6 +6150,7 @@ std::vector<std::string> Database::getRolePermissions(const std::string &name) {
 }
 
 std::vector<std::string> Database::getAllRoles() {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   std::vector<std::string> roles;
 
   clearError();
@@ -6097,6 +6189,7 @@ std::vector<std::string> Database::getAllRoles() {
 
 bool Database::assignUserRole(int userId, const std::string &roleName,
                               const std::string &actor) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -6239,6 +6332,7 @@ bool Database::assignUserRole(int userId, const std::string &roleName,
 // ============================================================================
 
 bool Database::setAuthConfig(const std::string &key, const std::string &value) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -6274,6 +6368,7 @@ bool Database::setAuthConfig(const std::string &key, const std::string &value) {
 }
 
 std::optional<std::string> Database::getAuthConfig(const std::string &key) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -6308,10 +6403,12 @@ std::optional<std::string> Database::getAuthConfig(const std::string &key) {
 }
 
 bool Database::setLdapEnabled(bool enabled) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   return setAuthConfig("ldap_enabled", enabled ? "1" : "0");
 }
 
 bool Database::isLdapEnabled() {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   auto value = getAuthConfig("ldap_enabled");
   if (!value.has_value()) {
     clearError();
@@ -6323,6 +6420,7 @@ bool Database::isLdapEnabled() {
 bool Database::upsertApiKey(const std::string &key, bool active,
                              const std::string &role,
                              const std::string &actor) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -6421,6 +6519,7 @@ bool Database::upsertApiKey(const std::string &key, bool active,
 }
 
 std::optional<std::string> Database::isApiKeyValid(const std::string &key) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -6472,6 +6571,7 @@ bool Database::upsertLdapUser(const std::string &username,
                               const std::string &passwordHash, bool active,
                               bool mfaRequired,
                               const std::string &mfaSecret) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -6522,6 +6622,7 @@ bool Database::upsertLdapUser(const std::string &username,
 bool Database::setUserMfaRequirement(const std::string &username,
                                      bool required,
                                      const std::string &mfaSecret) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -6567,6 +6668,7 @@ bool Database::setUserMfaRequirement(const std::string &username,
 
 bool Database::setRoleMfaRequirement(const std::string &roleName,
                                      bool required) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -6610,6 +6712,7 @@ bool Database::setRoleMfaRequirement(const std::string &roleName,
 
 bool Database::isMfaRequiredForUser(const std::string &username,
                                     const std::string &roleName) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -6673,6 +6776,7 @@ bool Database::isMfaRequiredForUser(const std::string &username,
 
 bool Database::verifyUserMfa(const std::string &username,
                              const std::string &code) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -6726,6 +6830,7 @@ bool Database::verifyUserMfa(const std::string &username,
 // ============================================================================
 
 std::optional<int> Database::getActiveSessionId(int userId) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -6767,6 +6872,7 @@ std::optional<int> Database::getActiveSessionId(int userId) {
 }
 
 int Database::getActiveSessionCount(int userId) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -6802,6 +6908,7 @@ int Database::getActiveSessionCount(int userId) {
 }
 
 int Database::getSessionCount(int userId) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -6837,11 +6944,13 @@ int Database::getSessionCount(int userId) {
 }
 
 bool Database::hasActiveSession(int userId) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   return getActiveSessionCount(userId) > 0;
 }
 
 bool Database::endSession(int userId, const std::string &username,
                           const std::string &reason) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -6920,6 +7029,7 @@ bool Database::endSession(int userId, const std::string &username,
 
 bool Database::startSession(int userId, const std::string &username,
                             AuthMethod method, const std::string &details) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -7025,6 +7135,7 @@ bool Database::startSession(int userId, const std::string &username,
 }
 
 std::optional<Database::SessionInfo> Database::getSessionById(int sessionId) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -7076,6 +7187,7 @@ std::optional<Database::SessionInfo> Database::getSessionById(int sessionId) {
 
 std::optional<Database::SessionInfo>
 Database::getLatestSessionForUser(int userId) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -7117,6 +7229,7 @@ Database::getLatestSessionForUser(int userId) {
 }
 
 int Database::expireStaleSessionsOlderThan(int maxLifetimeSeconds) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   if (!isOpen_ || db_ == nullptr || maxLifetimeSeconds <= 0) {
     return 0;
   }
@@ -7185,6 +7298,7 @@ int Database::expireStaleSessionsOlderThan(int maxLifetimeSeconds) {
 
 Database::AuthResult Database::authenticatePrimary(const std::string &username,
                                                    const std::string &password) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
   AuthResult result;
 
@@ -7338,6 +7452,7 @@ std::unique_ptr<core::User>
 Database::authenticateUser(const std::string &username,
                            const std::string &password,
                            const std::optional<std::string> &mfaCode) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
 
@@ -7430,6 +7545,7 @@ Database::authenticateUser(const std::string &username,
 }
 
 void Database::setError(const std::string &error) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   {
     std::lock_guard<std::mutex> lg(errorMutex_);
     lastError_ = error;
@@ -7442,6 +7558,7 @@ void Database::setError(const std::string &error) {
 // ============================================================================
 
 std::string Database::generateMfaSecret() {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   // Generate 20 cryptographically-random bytes (160 bits) via OpenSSL
   std::vector<uint8_t> randomBytes(20);
   if (RAND_bytes(randomBytes.data(), static_cast<int>(randomBytes.size())) != 1) {
@@ -7453,6 +7570,7 @@ std::string Database::generateMfaSecret() {
 
 std::string Database::getMfaEnrollmentUri(const std::string &username,
                                           const std::string &base32Secret) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   // Percent-encode username so special characters can't inject query params
   // into the otpauth:// URI (e.g. a username containing '?' or '&').
   std::string encodedUsername;
@@ -7473,6 +7591,7 @@ std::string Database::getMfaEnrollmentUri(const std::string &username,
 
 bool Database::setUserMfaSecret(int userId, const std::string &base32Secret,
                                 int64_t initialUsedStep) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -7557,6 +7676,7 @@ bool Database::setUserMfaSecret(int userId, const std::string &base32Secret,
 }
 
 bool Database::disableUserMfa(int userId, const std::string &actor) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   clearError();
 
   if (!isOpen_) {
@@ -7640,6 +7760,7 @@ bool Database::disableUserMfa(int userId, const std::string &actor) {
 bool Database::verifyMfaCodeForEnrollment(const std::string &base32Secret,
                                           const std::string &code,
                                           int64_t &matchedStep) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   matchedStep = -1;
   int provided = -1;
   try {
@@ -7664,6 +7785,7 @@ bool Database::verifyMfaCodeForEnrollment(const std::string &base32Secret,
 bool Database::verifyAndConsumeMfaCode(const std::string &username,
                                        const std::string &secret,
                                        const std::string &code) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   if (secret.empty() || code.empty() || username.empty()) {
     return false;
   }
@@ -7756,6 +7878,7 @@ bool Database::verifyAndConsumeMfaCode(const std::string &username,
 }
 
 std::time_t Database::getPasswordChangedAt(int userId) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   if (!isOpen_ || db_ == nullptr) {
     return 0;
   }
@@ -7775,6 +7898,7 @@ std::time_t Database::getPasswordChangedAt(int userId) {
 
 bool Database::persistBlacklistedToken(const std::string &token,
                                        std::time_t expiresAt) {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   if (!isOpen_ || db_ == nullptr || token.empty()) {
     return false;
   }
@@ -7791,6 +7915,7 @@ bool Database::persistBlacklistedToken(const std::string &token,
 }
 
 void Database::pruneExpiredBlacklistedTokens() {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   if (!isOpen_ || db_ == nullptr) {
     return;
   }
@@ -7808,6 +7933,7 @@ void Database::pruneExpiredBlacklistedTokens() {
 
 std::vector<std::pair<std::string, std::time_t>>
 Database::loadActiveBlacklistedTokens() {
+  std::lock_guard<std::recursive_mutex> _dbLock(dbMutex_);
   pruneExpiredBlacklistedTokens();
   std::vector<std::pair<std::string, std::time_t>> result;
   if (!isOpen_ || db_ == nullptr) {
