@@ -17,6 +17,11 @@ const dispatchAuthExpired = () =>
 
 // Add JWT Bearer token interceptor
 api.interceptors.request.use((config) => {
+  // The login request must never be blocked by a stale/expired token lingering
+  // in localStorage (e.g. from another tab) — it carries no auth of its own.
+  if ((config.url ?? '').includes('/auth/login')) {
+    return config;
+  }
   // Try JWT token first
   const jwtToken = localStorage.getItem(JWT_TOKEN_STORAGE_KEY);
   if (jwtToken) {

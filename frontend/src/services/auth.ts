@@ -1,5 +1,6 @@
 import api from './api';
 import { JWT_TOKEN_STORAGE_KEY, USER_INFO_STORAGE_KEY, API_KEY_STORAGE_KEY } from '../utils/constants';
+import { normalizeRole } from '../utils/roles';
 
 export interface User {
   id: number;
@@ -26,15 +27,9 @@ export const login = async (username: string, password: string, mfaCode?: string
 
 
     const { token, user: rawUser, expiresIn } = response.data;
-    // Normalize role to uppercase short form for consistent RBAC comparison
-    const roleMap: Record<string, string> = {
-      'Administrator': 'ADMIN', 'admin': 'ADMIN',
-      'Operator': 'OPERATOR', 'operator': 'OPERATOR',
-      'Betrachter': 'VIEWER', 'viewer': 'VIEWER',
-      'Custom': 'CUSTOM', 'custom': 'CUSTOM', 'Benutzerdefiniert': 'CUSTOM', 'Unbekannt': 'VIEWER',
-    };
-    const rawRole: string = rawUser.role ?? '';
-    const user = { ...rawUser, role: roleMap[rawRole] ?? (rawRole ? rawRole.toUpperCase() : 'VIEWER') };
+    // Normalize role to the canonical UserRole code for consistent RBAC checks
+    // (shared with users.ts via the single source of truth in utils/roles).
+    const user = { ...rawUser, role: normalizeRole(rawUser.role) };
 
     // Store JWT token and user info
     localStorage.setItem(JWT_TOKEN_STORAGE_KEY, token);

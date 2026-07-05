@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Layout } from '../components/Layout/Layout';
 import { Card } from '../components/common/Card';
 import { Button } from '../components/common/Button';
@@ -17,6 +18,8 @@ export const Results = () => {
   useDocumentTitle({ module: 'Test Results' });
   const { user } = useAuth();
   const canWrite = user?.role === 'ADMIN' || user?.role === 'OPERATOR';
+  const location = useLocation();
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedStatus, setSelectedStatus] = useState<string>('');
   const [selectedFlag, setSelectedFlag] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -38,6 +41,26 @@ export const Results = () => {
       }).then((r) => ({ data: r.results, total: r.total })),
     [selectedStatus, selectedFlag, currentPage]
   );
+
+  // Read ?q= from the URL (header global search routes result-id lookups here).
+  // The /results backend endpoint has no server-side text search, so filter the
+  // loaded page client-side by result id / parameter / order id.
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    setSearchQuery(params.get('q') || '');
+    setCurrentPage(1);
+  }, [location.search]);
+
+  const displayedResults = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return results;
+    return results.filter(
+      (r) =>
+        r.result_id.toLowerCase().includes(q) ||
+        r.parameter.toLowerCase().includes(q) ||
+        r.order_id.toLowerCase().includes(q)
+    );
+  }, [results, searchQuery]);
 
   const totalPages = Math.ceil(totalResults / itemsPerPage);
 
@@ -156,7 +179,7 @@ export const Results = () => {
                   <p className="mt-4 text-gray-600">Loading results...</p>
                 </div>
               </div>
-            ) : results.length === 0 ? (
+            ) : displayedResults.length === 0 ? (
               <div className="text-center py-12">
                 <p className="text-gray-500 text-lg">No results found</p>
               </div>
@@ -176,7 +199,7 @@ export const Results = () => {
                     </tr>
                   </thead>
                   <tbody className="bg-white">
-                    {results.map((result, idx) => (
+                    {displayedResults.map((result, idx) => (
                       <tr key={result.id} className={`hover:bg-[#F4F5F7] transition-colors duration-100 ${idx % 2 === 1 ? 'bg-[#FAFBFC]' : ''}`}>
                         <td className="px-6 py-2.5 whitespace-nowrap text-sm font-mono font-bold text-[#1A1C20] border-b border-[#E2E8F0]">
                           {result.result_id}

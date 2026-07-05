@@ -1,21 +1,24 @@
 // Audit log type definitions
-export type AuditAction = 
+export type AuditAction =
   | 'CREATE'
   | 'UPDATE'
   | 'DELETE'
   | 'LOGIN'
+  | 'LOGIN_FAILED'
   | 'LOGOUT'
   | 'VALIDATE'
   | 'EXPORT'
-  | 'ACCESS';
+  | 'ACCESS'
+  | 'UNKNOWN';
 
-export type AuditEntity = 
+export type AuditEntity =
   | 'SAMPLE'
   | 'ORDER'
   | 'RESULT'
   | 'USER'
   | 'ROLE'
-  | 'SYSTEM';
+  | 'SYSTEM'
+  | 'UNKNOWN';
 
 export interface AuditEntry {
   id: number;
@@ -41,10 +44,12 @@ export const AUDIT_ACTIONS: Record<AuditAction, string> = {
   UPDATE: 'Update',
   DELETE: 'Delete',
   LOGIN: 'Login',
+  LOGIN_FAILED: 'Login failed',
   LOGOUT: 'Logout',
   VALIDATE: 'Validate',
   EXPORT: 'Export',
   ACCESS: 'Access',
+  UNKNOWN: 'Unknown',
 };
 
 export const AUDIT_ENTITIES: Record<AuditEntity, string> = {
@@ -54,6 +59,7 @@ export const AUDIT_ENTITIES: Record<AuditEntity, string> = {
   USER: 'User',
   ROLE: 'Role',
   SYSTEM: 'System',
+  UNKNOWN: 'Unknown',
 };
 
 export const ACTION_COLORS: Record<AuditAction, string> = {
@@ -61,8 +67,10 @@ export const ACTION_COLORS: Record<AuditAction, string> = {
   UPDATE: 'bg-blue-100 text-blue-800',
   DELETE: 'bg-red-100 text-red-800',
   LOGIN: 'bg-gray-100 text-gray-800',
+  LOGIN_FAILED: 'bg-red-100 text-red-800',
   LOGOUT: 'bg-gray-100 text-gray-800',
   VALIDATE: 'bg-purple-100 text-purple-800',
   EXPORT: 'bg-yellow-100 text-yellow-800',
   ACCESS: 'bg-indigo-100 text-indigo-800',
+  UNKNOWN: 'bg-gray-100 text-gray-800',
 };
