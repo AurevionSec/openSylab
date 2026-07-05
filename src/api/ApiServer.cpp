@@ -1351,7 +1351,7 @@ ApiResponse ApiRouter::handleCreateUser(const RouteContext &ctx) const {
 
 ApiResponse ApiRouter::handleUpdateUser(const RouteContext &ctx) const {
   const std::string userIdStr =
-      ctx.path.substr(std::string("/api/v1/users/").size());
+      urlDecode(ctx.path.substr(std::string("/api/v1/users/").size()));
   if (userIdStr.rfind("me/", 0) == 0) {
     return makeError(404, "not_found", "Unknown endpoint",
                      "The requested endpoint does not exist.");
@@ -1538,7 +1538,7 @@ ApiResponse ApiRouter::handleChangeOwnPassword(const RouteContext &ctx) const {
 
 ApiResponse ApiRouter::handleDeleteUser(const RouteContext &ctx) const {
   const std::string userIdStr =
-      ctx.path.substr(std::string("/api/v1/users/").size());
+      urlDecode(ctx.path.substr(std::string("/api/v1/users/").size()));
   if (userIdStr.empty()) {
     return makeError(400, "validation_error", "Missing user_id",
                      "Provide user_id in URL path.");
@@ -1713,7 +1713,7 @@ ApiResponse ApiRouter::handleListSamples(const RouteContext &ctx) const {
 
 ApiResponse ApiRouter::handleGetSample(const RouteContext &ctx) const {
   const std::string sampleId =
-      ctx.path.substr(std::string("/api/v1/samples/").size());
+      urlDecode(ctx.path.substr(std::string("/api/v1/samples/").size()));
   if (sampleId.empty()) {
     return makeError(400, "validation_error", "Missing sample_id",
                      "Provide sample_id in URL path.");
@@ -1846,7 +1846,7 @@ ApiResponse ApiRouter::handleListOrders(const RouteContext &ctx) const {
 
 ApiResponse ApiRouter::handleGetOrder(const RouteContext &ctx) const {
   const std::string orderId =
-      ctx.path.substr(std::string("/api/v1/orders/").size());
+      urlDecode(ctx.path.substr(std::string("/api/v1/orders/").size()));
   if (orderId.empty()) {
     return makeError(400, "validation_error", "Missing order_id",
                      "Provide order_id in URL path.");
@@ -2053,7 +2053,7 @@ ApiResponse ApiRouter::handleListResults(const RouteContext &ctx) const {
 
 ApiResponse ApiRouter::handleGetResult(const RouteContext &ctx) const {
   const std::string resultId =
-      ctx.path.substr(std::string("/api/v1/results/").size());
+      urlDecode(ctx.path.substr(std::string("/api/v1/results/").size()));
   if (resultId.empty()) {
     return makeError(400, "validation_error", "Missing result_id",
                      "Provide result_id in URL path.");
@@ -2464,7 +2464,7 @@ ApiResponse ApiRouter::handleUpdateSample(
     const RouteContext &ctx,
     const std::unordered_map<std::string, std::string> &payload) const {
   const std::string sampleId =
-      ctx.path.substr(std::string("/api/v1/samples/").size());
+      urlDecode(ctx.path.substr(std::string("/api/v1/samples/").size()));
   if (sampleId.empty()) {
     return makeError(400, "validation_error", "Missing sample_id",
                      "Provide sample_id in URL path.");
@@ -2601,7 +2601,7 @@ ApiResponse ApiRouter::handleUpdateOrder(
     const RouteContext &ctx,
     const std::unordered_map<std::string, std::string> &payload) const {
   const std::string orderId =
-      ctx.path.substr(std::string("/api/v1/orders/").size());
+      urlDecode(ctx.path.substr(std::string("/api/v1/orders/").size()));
   if (orderId.empty()) {
     return makeError(400, "validation_error", "Missing order_id",
                      "Provide order_id in URL path.");
@@ -2762,7 +2762,7 @@ ApiResponse ApiRouter::handleUpdateResult(
     const RouteContext &ctx,
     const std::unordered_map<std::string, std::string> &payload) const {
   const std::string resultId =
-      ctx.path.substr(std::string("/api/v1/results/").size());
+      urlDecode(ctx.path.substr(std::string("/api/v1/results/").size()));
   if (resultId.empty()) {
     return makeError(400, "validation_error", "Missing result_id",
                      "Provide result_id in URL path.");
@@ -2993,7 +2993,7 @@ ApiResponse ApiRouter::handleUpdateResult(
 
 ApiResponse ApiRouter::handleDeleteSample(const RouteContext &ctx) const {
   const std::string sampleId =
-      ctx.path.substr(std::string("/api/v1/samples/").size());
+      urlDecode(ctx.path.substr(std::string("/api/v1/samples/").size()));
   if (sampleId.empty()) {
     return makeError(400, "validation_error", "Missing sample_id",
                      "Provide sample_id in URL path.");
@@ -3055,7 +3055,7 @@ ApiResponse ApiRouter::handleDeleteSample(const RouteContext &ctx) const {
 
 ApiResponse ApiRouter::handleDeleteOrder(const RouteContext &ctx) const {
   const std::string orderId =
-      ctx.path.substr(std::string("/api/v1/orders/").size());
+      urlDecode(ctx.path.substr(std::string("/api/v1/orders/").size()));
   if (orderId.empty()) {
     return makeError(400, "validation_error", "Missing order_id",
                      "Provide order_id in URL path.");
@@ -3111,7 +3111,7 @@ ApiResponse ApiRouter::handleDeleteOrder(const RouteContext &ctx) const {
 
 ApiResponse ApiRouter::handleDeleteResult(const RouteContext &ctx) const {
   const std::string resultId =
-      ctx.path.substr(std::string("/api/v1/results/").size());
+      urlDecode(ctx.path.substr(std::string("/api/v1/results/").size()));
   if (resultId.empty()) {
     return makeError(400, "validation_error", "Missing result_id",
                      "Provide result_id in URL path.");
