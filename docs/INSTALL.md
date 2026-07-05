@@ -1,4 +1,4 @@
-# OpenSylab v0.7.0 - Installation und Deployment
+# OpenSylab v1.0.0 - Installation und Deployment
 
 ## Überblick
 
@@ -27,7 +27,7 @@ OpenSylab kann auf verschiedene Arten installiert werden:
 
 ## 🐳 Installation mit Docker (Empfohlen)
 
-Docker ist die **empfohlene Installationsmethode** für OpenSylab v0.7.0. Sie bietet:
+Docker ist die **empfohlene Installationsmethode** für OpenSylab v1.0.0. Sie bietet:
 
 - ✅ Keine manuelle Abhängigkeiten-Installation
 - ✅ Konsistente Umgebung auf allen Betriebssystemen
@@ -73,9 +73,9 @@ docker compose up -d
 docker compose ps
 ```
 
-**Das war's!** OpenSylab läuft jetzt:
-- **Frontend**: http://localhost:5173
-- **Backend API**: http://localhost:8080
+**Das war's!** OpenSylab läuft jetzt (Docker mappt auf die Host-Ports 9090/9080):
+- **Frontend**: http://localhost:9090
+- **Backend API**: http://localhost:9080
 - **Default Login**: admin / admin ⚠️ **MUSS geändert werden!**
 
 ### Docker Compose Konfiguration
@@ -85,16 +85,16 @@ Die `docker-compose.yml` definiert zwei Services:
 ```yaml
 services:
   backend:
-    # C++ Backend mit API-Server
+    # C++ Backend mit API-Server (Container-Port 8080 → Host-Port 9080)
     ports:
-      - "8080:8080"
+      - "9080:8080"
     volumes:
       - ./data:/app/data  # Datenbank-Persistenz
 
   frontend:
-    # React Frontend
+    # React Frontend (nginx auf Container-Port 80 → Host-Port 9090)
     ports:
-      - "5173:5173"
+      - "9090:80"
     depends_on:
       - backend
 ```
@@ -154,7 +154,7 @@ Für Produktionsumgebungen:
 ```yaml
 services:
   backend:
-    image: opensylab/backend:0.7.0
+    image: opensylab/backend:1.0.0
     restart: unless-stopped
     environment:
       - OPENSYLAB_DB_PATH=/app/data/opensylab.db
@@ -168,7 +168,7 @@ services:
       - opensylab-net
 
   frontend:
-    image: opensylab/frontend:0.7.0
+    image: opensylab/frontend:1.0.0
     restart: unless-stopped
     environment:
       - VITE_API_URL=https://api.yourdomain.com
@@ -385,9 +385,9 @@ ctest --output-on-failure
 
 **Erwartetes Ergebnis:**
 ```
-✓ Passed: 62
+✓ Passed: 235
 ✗ Failed: 0
-Total:   62
+Total:   235
 ```
 
 ### Frontend Tests (v0.8.0+)
@@ -504,13 +504,13 @@ docker compose logs
 docker compose ps
 
 # Ports prüfen
-sudo netstat -tulpn | grep -E '5173|8080'
+sudo netstat -tulpn | grep -E '9090|9080'
 ```
 
 **Port bereits belegt:**
 ```bash
-# Ports in docker-compose.yml ändern
-# z.B. "5174:5173" statt "5173:5173"
+# Host-Ports in docker-compose.yml ändern
+# z.B. "9091:80" statt "9090:80" (Frontend) oder "9081:8080" (Backend)
 ```
 
 ### Native Build-Probleme
@@ -624,6 +624,6 @@ npm run build
 
 ---
 
-**Version:** 0.7.0
-**Letzte Aktualisierung:** 2026-05-11
-**Nächste Version:** 0.8.0 (Production Security & Docker Improvements)
+**Version:** 1.0.0
+**Letzte Aktualisierung:** 2026-07-05
+**Nächste Version:** 1.1.0 (PostgreSQL-Backend, Multi-Site)
