@@ -132,6 +132,7 @@ export const Sidebar = () => {
           <Link
             key={item.path}
             to={item.path}
+            aria-current={isActive(item.path) ? 'page' : undefined}
             className={`group flex items-center px-5 py-3 text-sm font-medium transition-colors border-l-4 ${
               isActive(item.path)
                 ? 'text-white bg-gray-800 border-[#0055FF]'
@@ -165,6 +166,7 @@ export const Sidebar = () => {
           <Link
             key={item.path}
             to={item.path}
+            aria-current={isActive(item.path) ? 'page' : undefined}
             className={`group flex items-center px-5 py-3 text-sm font-medium transition-colors border-l-4 ${
               isActive(item.path)
                 ? 'text-white bg-gray-800 border-[#0055FF]'
