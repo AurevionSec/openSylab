@@ -101,6 +101,19 @@ private:
   ApiResponse handleGetOrder(const RouteContext &ctx) const;
   ApiResponse handleListResults(const RouteContext &ctx) const;
   ApiResponse handleGetResult(const RouteContext &ctx) const;
+  // Write handlers additionally receive the parsed JSON body as a string map,
+  // built once by handleRequest's shared write-block preamble. Taken by
+  // non-const ref because the original inline code uses operator[] on it; the
+  // map is a throwaway local in the caller, so mutation is unobservable.
+  ApiResponse handleCreateSample(
+      const RouteContext &ctx,
+      std::unordered_map<std::string, std::string> &payload) const;
+  ApiResponse handleCreateOrder(
+      const RouteContext &ctx,
+      std::unordered_map<std::string, std::string> &payload) const;
+  ApiResponse handleCreateResult(
+      const RouteContext &ctx,
+      std::unordered_map<std::string, std::string> &payload) const;
 
   // JWT validation helper
   std::optional<auth::JwtAuth::TokenPayload>

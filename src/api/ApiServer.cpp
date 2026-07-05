@@ -2068,6 +2068,378 @@ ApiResponse ApiRouter::handleGetResult(const RouteContext &ctx) const {
   }
 }
 
+ApiResponse ApiRouter::handleCreateSample(
+    const RouteContext &ctx,
+    std::unordered_map<std::string, std::string> &payload) const {
+  if (payload.find("sample_id") == payload.end() ||
+      payload["sample_id"].empty()) {
+    return makeError(400, "validation_error", "Missing sample_id",
+                     "Provide sample_id in request body.");
+  }
+  if (payload.find("patient_id") == payload.end() ||
+      payload["patient_id"].empty()) {
+    return makeError(400, "validation_error", "Missing patient_id",
+                     "Provide patient_id in request body.");
+  }
+
+  // Validate sample_id and patient_id length
+  std::string validationError;
+  if (!validateStringLength(payload["sample_id"], 1, 64, validationError)) {
+    return makeError(400, "validation_error", "Invalid sample_id",
+                     validationError);
+  }
+  if (!validateStringLength(payload["patient_id"], 1, 64, validationError)) {
+    return makeError(400, "validation_error", "Invalid patient_id",
+                     validationError);
+  }
+
+  core::Sample sample(payload["sample_id"], payload["patient_id"]);
+  auto nameIt = payload.find("patient_name");
+  if (nameIt != payload.end()) {
+    // Validate patient_name length if provided
+    if (!nameIt->second.empty() &&
+        !validateStringLength(nameIt->second, 1, 255, validationError)) {
+      return makeError(400, "validation_error", "Invalid patient_name",
+                       validationError);
+    }
+    sample.setPatientName(nameIt->second);
+  }
+  auto descIt = payload.find("description");
+  if (descIt != payload.end()) {
+    // Validate description length if provided
+    if (!descIt->second.empty() &&
+        !validateStringLength(descIt->second, 1, 5000, validationError)) {
+      return makeError(400, "validation_error", "Invalid description",
+                       validationError);
+    }
+    sample.setDescription(descIt->second);
+  }
+  auto statusIt = payload.find("status");
+  if (statusIt != payload.end() && !statusIt->second.empty()) {
+    try {
+      sample.setStatus(core::Sample::stringToStatus(statusIt->second));
+    } catch (const std::exception &e) {
+      return makeError(400, "validation_error", "Invalid status", e.what());
+    }
+  }
+  auto regIt = payload.find("registration_date");
+  if (regIt != payload.end() && !regIt->second.empty()) {
+    std::time_t ts{};
+    if (!parseTimeValue(regIt->second, ts)) {
+      return makeError(400, "validation_error", "Invalid registration_date",
+                       "Provide Unix timestamp for registration_date.");
+    }
+    if (ts <= 0 || ts > std::time(nullptr) + kMaxFutureDateTolerance) {
+      return makeError(400, "validation_error", "Invalid registration_date",
+                       "registration_date must not be in the future.");
+    }
+    sample.setRegistrationDate(ts);
+  }
+
+  if (!database_->createSample(sample, ctx.actor)) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+
+  auto created = database_->getSampleByBarcode(sample.getSampleId());
+  database_->clearError(); // Read-back failure is non-fatal; fall back to
+                           // in-memory object
+  const core::Sample &responseSample = created ? *created : sample;
+  return ApiResponse{201, "{\"data\":" + sampleToJson(responseSample) + "}",
+                     "application/json"};
+}
+
+ApiResponse ApiRouter::handleCreateOrder(
+    const RouteContext &ctx,
+    std::unordered_map<std::string, std::string> &payload) const {
+  if (payload.find("order_id") == payload.end() ||
+      payload["order_id"].empty()) {
+    return makeError(400, "validation_error", "Missing order_id",
+                     "Provide order_id in request body.");
+  }
+  if (payload.find("sample_id") == payload.end() ||
+      payload["sample_id"].empty()) {
+    return makeError(400, "validation_error", "Missing sample_id",
+                     "Provide sample_id in request body.");
+  }
+  if (payload.find("test_type") == payload.end() ||
+      payload["test_type"].empty()) {
+    return makeError(400, "validation_error", "Missing test_type",
+                     "Provide test_type in request body.");
+  }
+
+  // Validate required field lengths
+  std::string validationError;
+  if (!validateStringLength(payload["order_id"], 1, 64, validationError)) {
+    return makeError(400, "validation_error", "Invalid order_id",
+                     validationError);
+  }
+  if (!validateStringLength(payload["sample_id"], 1, 64, validationError)) {
+    return makeError(400, "validation_error", "Invalid sample_id",
+                     validationError);
+  }
+  // Validate sample_id references an existing sample
+  auto sampleRef = database_->getSampleByBarcode(payload["sample_id"]);
+  if (!sampleRef) {
+    return makeError(422, "unprocessable_entity", "Sample not found",
+                     "The provided sample_id does not exist.");
+  }
+  if (!validateStringLength(payload["test_type"], 1, 255, validationError)) {
+    return makeError(400, "validation_error", "Invalid test_type",
+                     validationError);
+  }
+
+  core::Order order(payload["order_id"], payload["sample_id"],
+                    payload["test_type"]);
+  auto statusIt = payload.find("status");
+  if (statusIt != payload.end() && !statusIt->second.empty()) {
+    try {
+      order.setStatus(core::Order::stringToStatus(statusIt->second));
+    } catch (const std::exception &e) {
+      return makeError(400, "validation_error", "Invalid status", e.what());
+    }
+  }
+  auto priorityIt = payload.find("priority");
+  if (priorityIt != payload.end() && !priorityIt->second.empty()) {
+    try {
+      order.setPriority(core::Order::stringToPriority(priorityIt->second));
+    } catch (const std::exception &e) {
+      return makeError(400, "validation_error", "Invalid priority", e.what());
+    }
+  }
+  auto requestedIt = payload.find("requested_date");
+  if (requestedIt != payload.end() && !requestedIt->second.empty()) {
+    std::time_t ts{};
+    if (!parseTimeValue(requestedIt->second, ts)) {
+      return makeError(400, "validation_error", "Invalid requested_date",
+                       "Provide Unix timestamp for requested_date.");
+    }
+    order.setRequestedDate(ts);
+  }
+  auto completedIt = payload.find("completed_date");
+  if (completedIt != payload.end() && !completedIt->second.empty()) {
+    std::time_t ts{};
+    if (!parseTimeValue(completedIt->second, ts)) {
+      return makeError(400, "validation_error", "Invalid completed_date",
+                       "Provide Unix timestamp for completed_date.");
+    }
+    order.setCompletedDate(ts);
+  }
+  auto requesterIt = payload.find("requested_by");
+  if (requesterIt != payload.end()) {
+    // Validate requested_by length if provided
+    if (!requesterIt->second.empty() &&
+        !validateStringLength(requesterIt->second, 1, 255, validationError)) {
+      return makeError(400, "validation_error", "Invalid requested_by",
+                       validationError);
+    }
+    order.setRequestedBy(requesterIt->second);
+  }
+  auto notesIt = payload.find("notes");
+  if (notesIt != payload.end()) {
+    // Validate notes length if provided
+    if (!notesIt->second.empty() &&
+        !validateStringLength(notesIt->second, 1, 5000, validationError)) {
+      return makeError(400, "validation_error", "Invalid notes",
+                       validationError);
+    }
+    order.setNotes(notesIt->second);
+  }
+
+  if (!database_->createOrder(order, ctx.actor)) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+
+  auto created = database_->getOrderByOrderId(order.getOrderId());
+  database_->clearError(); // Read-back failure is non-fatal; fall back to
+                           // in-memory object
+  const core::Order &responseOrder = created ? *created : order;
+  return ApiResponse{201, "{\"data\":" + orderToJson(responseOrder) + "}",
+                     "application/json"};
+}
+
+ApiResponse ApiRouter::handleCreateResult(
+    const RouteContext &ctx,
+    std::unordered_map<std::string, std::string> &payload) const {
+  if (payload.find("result_id") == payload.end() ||
+      payload["result_id"].empty()) {
+    return makeError(400, "validation_error", "Missing result_id",
+                     "Provide result_id in request body.");
+  }
+  if (payload.find("order_id") == payload.end() ||
+      payload["order_id"].empty()) {
+    return makeError(400, "validation_error", "Missing order_id",
+                     "Provide order_id in request body.");
+  }
+  if (payload.find("test_parameter") == payload.end() ||
+      payload["test_parameter"].empty()) {
+    return makeError(400, "validation_error", "Missing test_parameter",
+                     "Provide test_parameter in request body.");
+  }
+  if (payload.find("value") == payload.end() || payload["value"].empty()) {
+    return makeError(400, "validation_error", "Missing value",
+                     "Provide value in request body.");
+  }
+  if (payload.find("unit") == payload.end() || payload["unit"].empty()) {
+    return makeError(400, "validation_error", "Missing unit",
+                     "Provide unit in request body.");
+  }
+
+  int orderId = 0;
+  if (!parseIntValue(payload["order_id"], orderId) || orderId <= 0) {
+    return makeError(400, "validation_error", "Invalid order_id",
+                     "Provide numeric order_id.");
+  }
+  // Validate order exists and has active status (orderId is the numeric PK)
+  auto orderRef = database_->getOrder(orderId);
+  if (!orderRef) {
+    return makeError(422, "unprocessable_entity", "Order not found",
+                     "Provide the numeric order id (orders.id, not the "
+                     "order_id string).");
+  }
+  {
+    auto orderStatus = orderRef->getStatus();
+    if (orderStatus != core::Order::Status::IN_PROGRESS &&
+        orderStatus != core::Order::Status::COMPLETED) {
+      return makeError(
+          409, "conflict", "Order not active",
+          "Results can only be added to IN_PROGRESS or COMPLETED orders.");
+    }
+  }
+
+  // Validate required field lengths
+  std::string validationError;
+  if (!validateStringLength(payload["result_id"], 1, 64, validationError)) {
+    return makeError(400, "validation_error", "Invalid result_id",
+                     validationError);
+  }
+  if (!validateStringLength(payload["test_parameter"], 1, 255,
+                            validationError)) {
+    return makeError(400, "validation_error", "Invalid test_parameter",
+                     validationError);
+  }
+  if (!validateStringLength(payload["value"], 1, 255, validationError)) {
+    return makeError(400, "validation_error", "Invalid value",
+                     validationError);
+  }
+  if (!validateStringLength(payload["unit"], 1, 255, validationError)) {
+    return makeError(400, "validation_error", "Invalid unit",
+                     validationError);
+  }
+
+  core::TestResult result(payload["result_id"], orderId,
+                          payload["test_parameter"]);
+  result.setValue(payload["value"]);
+  result.setUnit(payload["unit"]);
+  auto refRangeIt = payload.find("reference_range");
+  if (refRangeIt != payload.end()) {
+    // Validate reference_range length if provided
+    if (!refRangeIt->second.empty() &&
+        !validateStringLength(refRangeIt->second, 1, 255, validationError)) {
+      return makeError(400, "validation_error", "Invalid reference_range",
+                       validationError);
+    }
+    result.setReferenceRange(refRangeIt->second);
+  }
+  auto refLowIt = payload.find("reference_low");
+  auto refHighIt = payload.find("reference_high");
+  double refLow = 0.0;
+  double refHigh = 0.0;
+  bool hasRefLow = false;
+  bool hasRefHigh = false;
+
+  if (refLowIt != payload.end() && !refLowIt->second.empty()) {
+    if (!parseDoubleValue(refLowIt->second, refLow)) {
+      return makeError(400, "validation_error", "Invalid reference_low",
+                       "Provide numeric reference_low.");
+    }
+    hasRefLow = true;
+    result.setReferenceLow(refLow);
+  }
+  if (refHighIt != payload.end() && !refHighIt->second.empty()) {
+    if (!parseDoubleValue(refHighIt->second, refHigh)) {
+      return makeError(400, "validation_error", "Invalid reference_high",
+                       "Provide numeric reference_high.");
+    }
+    hasRefHigh = true;
+    result.setReferenceHigh(refHigh);
+  }
+  // Validate that reference_high > reference_low when both are provided
+  if (hasRefLow && hasRefHigh && refHigh <= refLow) {
+    return makeError(400, "validation_error", "Invalid reference range",
+                     "reference_high must be greater than reference_low.");
+  }
+  auto statusIt = payload.find("status");
+  if (statusIt != payload.end() && !statusIt->second.empty()) {
+    try {
+      result.setStatus(core::TestResult::stringToStatus(statusIt->second));
+    } catch (const std::exception &e) {
+      return makeError(400, "validation_error", "Invalid status", e.what());
+    }
+  } else {
+    result.setStatus(core::TestResult::Status::ENTERED);
+  }
+  auto measuredIt = payload.find("measured_date");
+  if (measuredIt != payload.end() && !measuredIt->second.empty()) {
+    std::time_t ts{};
+    if (!parseTimeValue(measuredIt->second, ts)) {
+      return makeError(400, "validation_error", "Invalid measured_date",
+                       "Provide Unix timestamp for measured_date.");
+    }
+    result.setMeasuredDate(ts);
+  } else {
+    result.setMeasuredDate(std::time(nullptr));
+  }
+  auto measuredByIt = payload.find("measured_by");
+  if (measuredByIt != payload.end()) {
+    // Validate measured_by length if provided
+    if (!measuredByIt->second.empty() &&
+        !validateStringLength(measuredByIt->second, 1, 255, validationError)) {
+      return makeError(400, "validation_error", "Invalid measured_by",
+                       validationError);
+    }
+    result.setMeasuredBy(measuredByIt->second);
+  }
+  auto commentIt = payload.find("comment");
+  if (commentIt != payload.end()) {
+    // Validate comment length if provided
+    if (!commentIt->second.empty() &&
+        !validateStringLength(commentIt->second, 1, 5000, validationError)) {
+      return makeError(400, "validation_error", "Invalid comment",
+                       validationError);
+    }
+    result.setComment(commentIt->second);
+  }
+  auto flagIt = payload.find("flag");
+  if (flagIt != payload.end() && !flagIt->second.empty()) {
+    try {
+      result.setFlag(core::TestResult::stringToFlag(flagIt->second));
+    } catch (const std::exception &e) {
+      return makeError(400, "validation_error", "Invalid flag", e.what());
+    }
+  } else {
+    result.setFlag(result.evaluateFlag());
+  }
+
+  if (!database_->createTestResult(result, ctx.actor)) {
+    return makeDbErrorResponse(database_->getLastError());
+  }
+
+  auto created = database_->getTestResultByResultId(result.getResultId());
+  database_->clearError(); // Read-back failure is non-fatal; fall back to
+                           // in-memory object
+  const core::TestResult &responseResult = created ? *created : result;
+  {
+    std::string oidStr;
+    auto parentOrder = database_->getOrder(responseResult.getOrderId());
+    if (parentOrder) {
+      oidStr = parentOrder->getOrderId();
+    }
+    return ApiResponse{
+        201, "{\"data\":" + resultToJson(responseResult, oidStr) + "}",
+        "application/json"};
+  }
+}
+
 ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
   if (!database_) {
     return makeError(500, "internal_error", "Database unavailable",
@@ -2353,376 +2725,15 @@ ApiResponse ApiRouter::handleRequest(const ApiRequest &request) {
     }
 
     if (path == "/api/v1/samples" && isPost) {
-      if (payload.find("sample_id") == payload.end() ||
-          payload["sample_id"].empty()) {
-        return makeError(400, "validation_error", "Missing sample_id",
-                         "Provide sample_id in request body.");
-      }
-      if (payload.find("patient_id") == payload.end() ||
-          payload["patient_id"].empty()) {
-        return makeError(400, "validation_error", "Missing patient_id",
-                         "Provide patient_id in request body.");
-      }
-
-      // Validate sample_id and patient_id length
-      std::string validationError;
-      if (!validateStringLength(payload["sample_id"], 1, 64, validationError)) {
-        return makeError(400, "validation_error", "Invalid sample_id",
-                         validationError);
-      }
-      if (!validateStringLength(payload["patient_id"], 1, 64,
-                                validationError)) {
-        return makeError(400, "validation_error", "Invalid patient_id",
-                         validationError);
-      }
-
-      core::Sample sample(payload["sample_id"], payload["patient_id"]);
-      auto nameIt = payload.find("patient_name");
-      if (nameIt != payload.end()) {
-        // Validate patient_name length if provided
-        if (!nameIt->second.empty() &&
-            !validateStringLength(nameIt->second, 1, 255, validationError)) {
-          return makeError(400, "validation_error", "Invalid patient_name",
-                           validationError);
-        }
-        sample.setPatientName(nameIt->second);
-      }
-      auto descIt = payload.find("description");
-      if (descIt != payload.end()) {
-        // Validate description length if provided
-        if (!descIt->second.empty() &&
-            !validateStringLength(descIt->second, 1, 5000, validationError)) {
-          return makeError(400, "validation_error", "Invalid description",
-                           validationError);
-        }
-        sample.setDescription(descIt->second);
-      }
-      auto statusIt = payload.find("status");
-      if (statusIt != payload.end() && !statusIt->second.empty()) {
-        try {
-          sample.setStatus(core::Sample::stringToStatus(statusIt->second));
-        } catch (const std::exception &e) {
-          return makeError(400, "validation_error", "Invalid status", e.what());
-        }
-      }
-      auto regIt = payload.find("registration_date");
-      if (regIt != payload.end() && !regIt->second.empty()) {
-        std::time_t ts{};
-        if (!parseTimeValue(regIt->second, ts)) {
-          return makeError(400, "validation_error", "Invalid registration_date",
-                           "Provide Unix timestamp for registration_date.");
-        }
-        if (ts <= 0 || ts > std::time(nullptr) + kMaxFutureDateTolerance) {
-          return makeError(400, "validation_error", "Invalid registration_date",
-                           "registration_date must not be in the future.");
-        }
-        sample.setRegistrationDate(ts);
-      }
-
-      if (!database_->createSample(sample, actor)) {
-        return makeDbErrorResponse(database_->getLastError());
-      }
-
-      auto created = database_->getSampleByBarcode(sample.getSampleId());
-      database_->clearError(); // Read-back failure is non-fatal; fall back to
-                               // in-memory object
-      const core::Sample &responseSample = created ? *created : sample;
-      return ApiResponse{201, "{\"data\":" + sampleToJson(responseSample) + "}",
-                         "application/json"};
+      return handleCreateSample(ctx, payload);
     }
 
     if (path == "/api/v1/orders" && isPost) {
-      if (payload.find("order_id") == payload.end() ||
-          payload["order_id"].empty()) {
-        return makeError(400, "validation_error", "Missing order_id",
-                         "Provide order_id in request body.");
-      }
-      if (payload.find("sample_id") == payload.end() ||
-          payload["sample_id"].empty()) {
-        return makeError(400, "validation_error", "Missing sample_id",
-                         "Provide sample_id in request body.");
-      }
-      if (payload.find("test_type") == payload.end() ||
-          payload["test_type"].empty()) {
-        return makeError(400, "validation_error", "Missing test_type",
-                         "Provide test_type in request body.");
-      }
-
-      // Validate required field lengths
-      std::string validationError;
-      if (!validateStringLength(payload["order_id"], 1, 64, validationError)) {
-        return makeError(400, "validation_error", "Invalid order_id",
-                         validationError);
-      }
-      if (!validateStringLength(payload["sample_id"], 1, 64, validationError)) {
-        return makeError(400, "validation_error", "Invalid sample_id",
-                         validationError);
-      }
-      // Validate sample_id references an existing sample
-      auto sampleRef = database_->getSampleByBarcode(payload["sample_id"]);
-      if (!sampleRef) {
-        return makeError(422, "unprocessable_entity", "Sample not found",
-                         "The provided sample_id does not exist.");
-      }
-      if (!validateStringLength(payload["test_type"], 1, 255,
-                                validationError)) {
-        return makeError(400, "validation_error", "Invalid test_type",
-                         validationError);
-      }
-
-      core::Order order(payload["order_id"], payload["sample_id"],
-                        payload["test_type"]);
-      auto statusIt = payload.find("status");
-      if (statusIt != payload.end() && !statusIt->second.empty()) {
-        try {
-          order.setStatus(core::Order::stringToStatus(statusIt->second));
-        } catch (const std::exception &e) {
-          return makeError(400, "validation_error", "Invalid status", e.what());
-        }
-      }
-      auto priorityIt = payload.find("priority");
-      if (priorityIt != payload.end() && !priorityIt->second.empty()) {
-        try {
-          order.setPriority(core::Order::stringToPriority(priorityIt->second));
-        } catch (const std::exception &e) {
-          return makeError(400, "validation_error", "Invalid priority",
-                           e.what());
-        }
-      }
-      auto requestedIt = payload.find("requested_date");
-      if (requestedIt != payload.end() && !requestedIt->second.empty()) {
-        std::time_t ts{};
-        if (!parseTimeValue(requestedIt->second, ts)) {
-          return makeError(400, "validation_error", "Invalid requested_date",
-                           "Provide Unix timestamp for requested_date.");
-        }
-        order.setRequestedDate(ts);
-      }
-      auto completedIt = payload.find("completed_date");
-      if (completedIt != payload.end() && !completedIt->second.empty()) {
-        std::time_t ts{};
-        if (!parseTimeValue(completedIt->second, ts)) {
-          return makeError(400, "validation_error", "Invalid completed_date",
-                           "Provide Unix timestamp for completed_date.");
-        }
-        order.setCompletedDate(ts);
-      }
-      auto requesterIt = payload.find("requested_by");
-      if (requesterIt != payload.end()) {
-        // Validate requested_by length if provided
-        if (!requesterIt->second.empty() &&
-            !validateStringLength(requesterIt->second, 1, 255,
-                                  validationError)) {
-          return makeError(400, "validation_error", "Invalid requested_by",
-                           validationError);
-        }
-        order.setRequestedBy(requesterIt->second);
-      }
-      auto notesIt = payload.find("notes");
-      if (notesIt != payload.end()) {
-        // Validate notes length if provided
-        if (!notesIt->second.empty() &&
-            !validateStringLength(notesIt->second, 1, 5000, validationError)) {
-          return makeError(400, "validation_error", "Invalid notes",
-                           validationError);
-        }
-        order.setNotes(notesIt->second);
-      }
-
-      if (!database_->createOrder(order, actor)) {
-        return makeDbErrorResponse(database_->getLastError());
-      }
-
-      auto created = database_->getOrderByOrderId(order.getOrderId());
-      database_->clearError(); // Read-back failure is non-fatal; fall back to
-                               // in-memory object
-      const core::Order &responseOrder = created ? *created : order;
-      return ApiResponse{201, "{\"data\":" + orderToJson(responseOrder) + "}",
-                         "application/json"};
+      return handleCreateOrder(ctx, payload);
     }
 
     if (path == "/api/v1/results" && isPost) {
-      if (payload.find("result_id") == payload.end() ||
-          payload["result_id"].empty()) {
-        return makeError(400, "validation_error", "Missing result_id",
-                         "Provide result_id in request body.");
-      }
-      if (payload.find("order_id") == payload.end() ||
-          payload["order_id"].empty()) {
-        return makeError(400, "validation_error", "Missing order_id",
-                         "Provide order_id in request body.");
-      }
-      if (payload.find("test_parameter") == payload.end() ||
-          payload["test_parameter"].empty()) {
-        return makeError(400, "validation_error", "Missing test_parameter",
-                         "Provide test_parameter in request body.");
-      }
-      if (payload.find("value") == payload.end() || payload["value"].empty()) {
-        return makeError(400, "validation_error", "Missing value",
-                         "Provide value in request body.");
-      }
-      if (payload.find("unit") == payload.end() || payload["unit"].empty()) {
-        return makeError(400, "validation_error", "Missing unit",
-                         "Provide unit in request body.");
-      }
-
-      int orderId = 0;
-      if (!parseIntValue(payload["order_id"], orderId) || orderId <= 0) {
-        return makeError(400, "validation_error", "Invalid order_id",
-                         "Provide numeric order_id.");
-      }
-      // Validate order exists and has active status (orderId is the numeric PK)
-      auto orderRef = database_->getOrder(orderId);
-      if (!orderRef) {
-        return makeError(422, "unprocessable_entity", "Order not found",
-                         "Provide the numeric order id (orders.id, not the "
-                         "order_id string).");
-      }
-      {
-        auto orderStatus = orderRef->getStatus();
-        if (orderStatus != core::Order::Status::IN_PROGRESS &&
-            orderStatus != core::Order::Status::COMPLETED) {
-          return makeError(
-              409, "conflict", "Order not active",
-              "Results can only be added to IN_PROGRESS or COMPLETED orders.");
-        }
-      }
-
-      // Validate required field lengths
-      std::string validationError;
-      if (!validateStringLength(payload["result_id"], 1, 64, validationError)) {
-        return makeError(400, "validation_error", "Invalid result_id",
-                         validationError);
-      }
-      if (!validateStringLength(payload["test_parameter"], 1, 255,
-                                validationError)) {
-        return makeError(400, "validation_error", "Invalid test_parameter",
-                         validationError);
-      }
-      if (!validateStringLength(payload["value"], 1, 255, validationError)) {
-        return makeError(400, "validation_error", "Invalid value",
-                         validationError);
-      }
-      if (!validateStringLength(payload["unit"], 1, 255, validationError)) {
-        return makeError(400, "validation_error", "Invalid unit",
-                         validationError);
-      }
-
-      core::TestResult result(payload["result_id"], orderId,
-                              payload["test_parameter"]);
-      result.setValue(payload["value"]);
-      result.setUnit(payload["unit"]);
-      auto refRangeIt = payload.find("reference_range");
-      if (refRangeIt != payload.end()) {
-        // Validate reference_range length if provided
-        if (!refRangeIt->second.empty() &&
-            !validateStringLength(refRangeIt->second, 1, 255,
-                                  validationError)) {
-          return makeError(400, "validation_error", "Invalid reference_range",
-                           validationError);
-        }
-        result.setReferenceRange(refRangeIt->second);
-      }
-      auto refLowIt = payload.find("reference_low");
-      auto refHighIt = payload.find("reference_high");
-      double refLow = 0.0;
-      double refHigh = 0.0;
-      bool hasRefLow = false;
-      bool hasRefHigh = false;
-
-      if (refLowIt != payload.end() && !refLowIt->second.empty()) {
-        if (!parseDoubleValue(refLowIt->second, refLow)) {
-          return makeError(400, "validation_error", "Invalid reference_low",
-                           "Provide numeric reference_low.");
-        }
-        hasRefLow = true;
-        result.setReferenceLow(refLow);
-      }
-      if (refHighIt != payload.end() && !refHighIt->second.empty()) {
-        if (!parseDoubleValue(refHighIt->second, refHigh)) {
-          return makeError(400, "validation_error", "Invalid reference_high",
-                           "Provide numeric reference_high.");
-        }
-        hasRefHigh = true;
-        result.setReferenceHigh(refHigh);
-      }
-      // Validate that reference_high > reference_low when both are provided
-      if (hasRefLow && hasRefHigh && refHigh <= refLow) {
-        return makeError(400, "validation_error", "Invalid reference range",
-                         "reference_high must be greater than reference_low.");
-      }
-      auto statusIt = payload.find("status");
-      if (statusIt != payload.end() && !statusIt->second.empty()) {
-        try {
-          result.setStatus(core::TestResult::stringToStatus(statusIt->second));
-        } catch (const std::exception &e) {
-          return makeError(400, "validation_error", "Invalid status", e.what());
-        }
-      } else {
-        result.setStatus(core::TestResult::Status::ENTERED);
-      }
-      auto measuredIt = payload.find("measured_date");
-      if (measuredIt != payload.end() && !measuredIt->second.empty()) {
-        std::time_t ts{};
-        if (!parseTimeValue(measuredIt->second, ts)) {
-          return makeError(400, "validation_error", "Invalid measured_date",
-                           "Provide Unix timestamp for measured_date.");
-        }
-        result.setMeasuredDate(ts);
-      } else {
-        result.setMeasuredDate(std::time(nullptr));
-      }
-      auto measuredByIt = payload.find("measured_by");
-      if (measuredByIt != payload.end()) {
-        // Validate measured_by length if provided
-        if (!measuredByIt->second.empty() &&
-            !validateStringLength(measuredByIt->second, 1, 255,
-                                  validationError)) {
-          return makeError(400, "validation_error", "Invalid measured_by",
-                           validationError);
-        }
-        result.setMeasuredBy(measuredByIt->second);
-      }
-      auto commentIt = payload.find("comment");
-      if (commentIt != payload.end()) {
-        // Validate comment length if provided
-        if (!commentIt->second.empty() &&
-            !validateStringLength(commentIt->second, 1, 5000,
-                                  validationError)) {
-          return makeError(400, "validation_error", "Invalid comment",
-                           validationError);
-        }
-        result.setComment(commentIt->second);
-      }
-      auto flagIt = payload.find("flag");
-      if (flagIt != payload.end() && !flagIt->second.empty()) {
-        try {
-          result.setFlag(core::TestResult::stringToFlag(flagIt->second));
-        } catch (const std::exception &e) {
-          return makeError(400, "validation_error", "Invalid flag", e.what());
-        }
-      } else {
-        result.setFlag(result.evaluateFlag());
-      }
-
-      if (!database_->createTestResult(result, actor)) {
-        return makeDbErrorResponse(database_->getLastError());
-      }
-
-      auto created = database_->getTestResultByResultId(result.getResultId());
-      database_->clearError(); // Read-back failure is non-fatal; fall back to
-                               // in-memory object
-      const core::TestResult &responseResult = created ? *created : result;
-      {
-        std::string oidStr;
-        auto parentOrder = database_->getOrder(responseResult.getOrderId());
-        if (parentOrder) {
-          oidStr = parentOrder->getOrderId();
-        }
-        return ApiResponse{
-            201, "{\"data\":" + resultToJson(responseResult, oidStr) + "}",
-            "application/json"};
-      }
+      return handleCreateResult(ctx, payload);
     }
 
     if (isPut && path.rfind("/api/v1/samples/", 0) == 0) {
