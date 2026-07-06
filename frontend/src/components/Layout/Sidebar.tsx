@@ -1,7 +1,12 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
-export const Sidebar = () => {
+interface SidebarProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
@@ -107,7 +112,22 @@ export const Sidebar = () => {
   };
 
   return (
-    <aside className="fixed inset-y-0 left-0 w-64 bg-[#1A1C20] border-r border-gray-800 flex flex-col z-50 transition-all duration-300">
+    <aside
+      className={`fixed inset-y-0 left-0 w-64 bg-[#1A1C20] border-r border-gray-800 flex flex-col z-50 transform transition-transform duration-300 md:translate-x-0 ${
+        isOpen ? 'translate-x-0' : '-translate-x-full'
+      }`}
+      aria-label="Main navigation"
+    >
+      {/* Mobile close button */}
+      <button
+        onClick={onClose}
+        aria-label="Close navigation"
+        className="md:hidden absolute top-3 right-3 text-gray-400 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0055FF] rounded"
+      >
+        <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
       {/* Header */}
       <div className="flex flex-col items-center py-5 px-4 border-b border-gray-800 bg-[#15171a]">
         {/* Logo */}
@@ -132,6 +152,8 @@ export const Sidebar = () => {
           <Link
             key={item.path}
             to={item.path}
+            onClick={onClose}
+            title={item.name}
             aria-current={isActive(item.path) ? 'page' : undefined}
             className={`group flex items-center px-5 py-3 text-sm font-medium transition-colors border-l-4 ${
               isActive(item.path)
@@ -166,6 +188,8 @@ export const Sidebar = () => {
           <Link
             key={item.path}
             to={item.path}
+            onClick={onClose}
+            title={item.name}
             aria-current={isActive(item.path) ? 'page' : undefined}
             className={`group flex items-center px-5 py-3 text-sm font-medium transition-colors border-l-4 ${
               isActive(item.path)
