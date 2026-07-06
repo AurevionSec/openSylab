@@ -5,6 +5,7 @@ import { Card } from '../components/common/Card';
 import { Button } from '../components/common/Button';
 import { ErrorBanner } from '../components/common/ErrorBanner';
 import { StatusBadge } from '../components/common/StatusBadge';
+import { DetailModal } from '../components/common/DetailModal';
 import { DeleteConfirmDialog } from '../components/common/DeleteConfirmDialog';
 import { OrderCreateModal } from '../components/Orders/OrderCreateModal';
 import { OrderEditModal } from '../components/Orders/OrderEditModal';
@@ -32,6 +33,7 @@ export const Orders = () => {
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [orderToDelete, setOrderToDelete] = useState<Order | null>(null);
+  const [detailOrder, setDetailOrder] = useState<Order | null>(null);
   const itemsPerPage = 20;
 
   const { data: orders, total: totalOrders, loading, error, refetch } = useEntityList(
@@ -236,7 +238,22 @@ export const Orders = () => {
                           {new Date(order.requested_date).toLocaleDateString('de-DE')}
                         </td>
                         <td className="px-3 md:px-6 py-2 md:py-4 whitespace-nowrap text-right text-sm font-medium">
-                          {canWrite && <div className="flex items-center justify-end gap-2">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setDetailOrder(order)}
+                              title="View order details"
+                            >
+                              <span className="flex items-center gap-1">
+                                <svg className="w-4 h-4" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                  <path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
+                                View
+                              </span>
+                            </Button>
+                            {canWrite && <>
                             <Button
                               variant="secondary"
                               size="sm"
@@ -290,7 +307,8 @@ export const Orders = () => {
                                 Delete
                               </span>
                             </Button>
-                          </div>}
+                            </>}
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -408,6 +426,22 @@ export const Orders = () => {
         confirmText="Cancel Order"
         cancelText="Keep"
         outcomeNote="The order is marked CANCELLED (soft-delete). Its audit history is retained."
+      />
+
+      <DetailModal
+        isOpen={detailOrder !== null}
+        onClose={() => setDetailOrder(null)}
+        title={`Order ${detailOrder?.order_id ?? ''}`}
+        fields={detailOrder ? [
+          { label: 'Order ID', value: detailOrder.order_id, mono: true },
+          { label: 'Sample ID', value: detailOrder.sample_id, mono: true },
+          { label: 'Test Type', value: detailOrder.test_type },
+          { label: 'Status', value: detailOrder.status },
+          { label: 'Priority', value: detailOrder.priority },
+          { label: 'Requested By', value: detailOrder.requested_by },
+          { label: 'Requested', value: detailOrder.requested_date ? new Date(detailOrder.requested_date).toLocaleString('de-DE') : '', mono: true },
+          { label: 'Notes', value: detailOrder.notes },
+        ] : []}
       />
     </Layout>
   );

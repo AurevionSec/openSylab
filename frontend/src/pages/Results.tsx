@@ -5,6 +5,7 @@ import { Card } from '../components/common/Card';
 import { Button } from '../components/common/Button';
 import { ErrorBanner } from '../components/common/ErrorBanner';
 import { StatusBadge } from '../components/common/StatusBadge';
+import { DetailModal } from '../components/common/DetailModal';
 import { DeleteConfirmDialog } from '../components/common/DeleteConfirmDialog';
 import { ResultCreateModal } from '../components/Results/ResultCreateModal';
 import { ResultEditModal } from '../components/Results/ResultEditModal';
@@ -31,6 +32,7 @@ export const Results = () => {
   const [selectedResult, setSelectedResult] = useState<TestResult | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [resultToDelete, setResultToDelete] = useState<TestResult | null>(null);
+  const [detailResult, setDetailResult] = useState<TestResult | null>(null);
   const itemsPerPage = 20;
 
   const { data: results, total: totalResults, loading, error, refetch } = useEntityList(
@@ -230,7 +232,22 @@ export const Results = () => {
                           </StatusBadge>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium border-b border-[#E2E8F0]">
-                          {canWrite && <div className="flex items-center justify-end gap-2">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setDetailResult(result)}
+                              title="View result details"
+                            >
+                              <span className="flex items-center gap-1">
+                                <svg className="w-4 h-4" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                  <path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
+                                View
+                              </span>
+                            </Button>
+                            {canWrite && <>
                             <Button
                               variant="secondary"
                               size="sm"
@@ -281,7 +298,8 @@ export const Results = () => {
                                 Delete
                               </span>
                             </Button>
-                          </div>}
+                            </>}
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -365,6 +383,22 @@ export const Results = () => {
         itemName={resultToDelete?.result_id}
         confirmText="Reject"
         outcomeNote="The result is marked REJECTED (soft-delete). Its audit history is retained."
+      />
+
+      <DetailModal
+        isOpen={detailResult !== null}
+        onClose={() => setDetailResult(null)}
+        title={`Result ${detailResult?.result_id ?? ''}`}
+        fields={detailResult ? [
+          { label: 'Result ID', value: detailResult.result_id, mono: true },
+          { label: 'Order ID', value: detailResult.order_id, mono: true },
+          { label: 'Parameter', value: detailResult.parameter },
+          { label: 'Value', value: `${detailResult.value}${detailResult.unit ? ' ' + detailResult.unit : ''}`, mono: true },
+          { label: 'Reference Range', value: (detailResult.reference_min || detailResult.reference_max) ? `${detailResult.reference_min} – ${detailResult.reference_max}` : '', mono: true },
+          { label: 'Flag', value: detailResult.flag },
+          { label: 'Status', value: detailResult.status },
+          { label: 'Reviewed By', value: detailResult.reviewed_by },
+        ] : []}
       />
     </Layout>
   );
