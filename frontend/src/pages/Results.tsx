@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useLocation, Link } from 'react-router-dom';
+import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Layout } from '../components/Layout/Layout';
 import { Card } from '../components/common/Card';
 import { Button } from '../components/common/Button';
@@ -14,17 +14,17 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useAuth } from '../context/AuthContext';
 import { useEntityList } from '../hooks/useEntityList';
 import { useToast } from '../hooks/useToast';
+import { useListParams } from '../hooks/useListParams';
 
 export const Results = () => {
   useDocumentTitle({ module: 'Test Results' });
   const { user } = useAuth();
   const toast = useToast();
   const canWrite = user?.role === 'ADMIN' || user?.role === 'OPERATOR';
-  const location = useLocation();
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [selectedStatus, setSelectedStatus] = useState<string>('');
-  const [selectedFlag, setSelectedFlag] = useState<string>('');
-  const [currentPage, setCurrentPage] = useState(1);
+  const { get, page: currentPage, setParam, setPage } = useListParams();
+  const searchQuery = get('q');
+  const selectedStatus = get('status');
+  const selectedFlag = get('flag');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedResult, setSelectedResult] = useState<TestResult | null>(null);
@@ -43,17 +43,9 @@ export const Results = () => {
     [selectedStatus, selectedFlag, currentPage]
   );
 
-  // Read ?q= from the URL (header global search routes result-id lookups here).
-  // The /results backend endpoint has no server-side text search, so filter the
-  // loaded page client-side by result id / parameter / order id.
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    setSearchQuery(params.get('q') || '');
-    setSelectedFlag(params.get('flag') || '');
-    setSelectedStatus(params.get('status') || '');
-    setCurrentPage(1);
-  }, [location.search]);
-
+  // ?q from the header global search filters the loaded page client-side (the
+  // /results endpoint has no server-side text search); ?status/?flag are server
+  // filters read from the URL via useListParams.
   const displayedResults = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return results;
@@ -68,7 +60,7 @@ export const Results = () => {
   const totalPages = Math.ceil(totalResults / itemsPerPage);
 
   const handlePageChange = (page: number) => {
-    setCurrentPage(page);
+    setPage(page);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -133,11 +125,8 @@ export const Results = () => {
                 </label>
                 <select
                   value={selectedStatus}
-                  onChange={(e) => {
-                    setSelectedStatus(e.target.value);
-                    setCurrentPage(1);
-                  }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  onChange={(e) => setParam('status', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#0055FF] focus:border-transparent"
                 >
                   <option value="">All Statuses</option>
                   {Object.entries(RESULT_STATUSES).map(([key, label]) => (
@@ -154,11 +143,8 @@ export const Results = () => {
                 </label>
                 <select
                   value={selectedFlag}
-                  onChange={(e) => {
-                    setSelectedFlag(e.target.value);
-                    setCurrentPage(1);
-                  }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  onChange={(e) => setParam('flag', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#0055FF] focus:border-transparent"
                 >
                   <option value="">All Flags</option>
                   {Object.entries(RESULT_FLAGS).map(([key, label]) => (

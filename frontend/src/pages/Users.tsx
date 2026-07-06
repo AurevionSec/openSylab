@@ -8,6 +8,7 @@ import type { User, CreateUserPayload, UpdateUserPayload, UserRole } from '../ty
 import { USER_ROLES, ROLE_COLORS } from '../types/user';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { ErrorBanner } from '../components/common/ErrorBanner';
+import { StatusBadge } from '../components/common/StatusBadge';
 import { DeleteConfirmDialog } from '../components/common/DeleteConfirmDialog';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../hooks/useToast';
@@ -160,14 +161,14 @@ export const Users = () => {
                       {user.email || '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${ROLE_COLORS[user.role]}`}>
+                      <StatusBadge colorClass={ROLE_COLORS[user.role]}>
                         {USER_ROLES[user.role]}
-                      </span>
+                      </StatusBadge>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${user.active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                      <StatusBadge colorClass={user.active ? 'bg-green-100 text-green-800 border-green-200' : 'bg-gray-100 text-gray-800 border-gray-300'}>
                         {user.active ? 'Active' : 'Inactive'}
-                      </span>
+                      </StatusBadge>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {user.last_login ? new Date(user.last_login * 1000).toLocaleDateString() : 'Never'}
