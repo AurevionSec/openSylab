@@ -4,6 +4,7 @@ import { Card } from '../components/common/Card';
 import { Button } from '../components/common/Button';
 import { ErrorBanner } from '../components/common/ErrorBanner';
 import { StatusBadge } from '../components/common/StatusBadge';
+import { DetailModal } from '../components/common/DetailModal';
 import { DeleteConfirmDialog } from '../components/common/DeleteConfirmDialog';
 import { SampleCreateModal } from '../components/Samples/SampleCreateModal';
 import { SampleEditModal } from '../components/Samples/SampleEditModal';
@@ -30,6 +31,7 @@ export const Samples = () => {
   const [selectedSampleId, setSelectedSampleId] = useState<string | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [sampleToDelete, setSampleToDelete] = useState<Sample | null>(null);
+  const [detailSample, setDetailSample] = useState<Sample | null>(null);
   const itemsPerPage = 20;
 
   const { data: samples, total: totalSamples, loading, error, refetch } = useEntityList(
@@ -219,7 +221,22 @@ export const Samples = () => {
                           {new Date(sample.created_at).toLocaleDateString('de-DE')}
                         </td>
                         <td className="px-3 md:px-6 py-2 md:py-4 whitespace-nowrap text-right text-sm font-medium">
-                          {canWrite && <div className="flex items-center justify-end gap-2">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setDetailSample(sample)}
+                              title="View sample details"
+                            >
+                              <span className="flex items-center gap-1">
+                                <svg className="w-4 h-4" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                  <path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
+                                View
+                              </span>
+                            </Button>
+                            {canWrite && <>
                             <Button
                               variant="secondary"
                               size="sm"
@@ -274,7 +291,8 @@ export const Samples = () => {
                                 Delete
                               </span>
                             </Button>
-                          </div>}
+                            </>}
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -365,6 +383,20 @@ export const Samples = () => {
         itemName={sampleToDelete?.sample_id}
         confirmText="Archive"
         outcomeNote="The sample is marked ARCHIVED (soft-delete). Its audit history is retained."
+      />
+
+      <DetailModal
+        isOpen={detailSample !== null}
+        onClose={() => setDetailSample(null)}
+        title={`Sample ${detailSample?.sample_id ?? ''}`}
+        fields={detailSample ? [
+          { label: 'Sample ID', value: detailSample.sample_id, mono: true },
+          { label: 'Patient ID', value: detailSample.patient_id, mono: true },
+          { label: 'Patient Name', value: detailSample.patient_name },
+          { label: 'Status', value: detailSample.status },
+          { label: 'Description', value: detailSample.description },
+          { label: 'Created', value: new Date(detailSample.created_at).toLocaleString('de-DE'), mono: true },
+        ] : []}
       />
     </Layout>
   );
