@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { useLocation, Link } from 'react-router-dom';
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Layout } from '../components/Layout/Layout';
 import { Card } from '../components/common/Card';
 import { Button } from '../components/common/Button';
@@ -14,24 +14,18 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useAuth } from '../context/AuthContext';
 import { useEntityList } from '../hooks/useEntityList';
 import { useToast } from '../hooks/useToast';
+import { useListParams } from '../hooks/useListParams';
 
 export const Orders = () => {
   useDocumentTitle({ module: 'Orders' });
   const { user } = useAuth();
   const toast = useToast();
   const canWrite = user?.role === 'ADMIN' || user?.role === 'OPERATOR';
-  const location = useLocation();
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [selectedStatus, setSelectedStatus] = useState<string>('');
-  const [selectedPriority, setSelectedPriority] = useState<string>('');
-  const [currentPage, setCurrentPage] = useState(1);
+  const { get, page: currentPage, setParam, setPage } = useListParams();
+  const searchQuery = get('q');
+  const selectedStatus = get('status');
+  const selectedPriority = get('priority');
 
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const q = params.get('q') || '';
-    setSearchQuery(q);
-    setCurrentPage(1);
-  }, [location.search]);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
@@ -54,7 +48,7 @@ export const Orders = () => {
   const totalPages = Math.ceil(totalOrders / itemsPerPage);
 
   const handlePageChange = (page: number) => {
-    setCurrentPage(page);
+    setPage(page);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -120,11 +114,8 @@ export const Orders = () => {
                 </label>
                 <select
                   value={selectedStatus}
-                  onChange={(e) => {
-                    setSelectedStatus(e.target.value);
-                    setCurrentPage(1);
-                  }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  onChange={(e) => setParam('status', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#0055FF] focus:border-transparent"
                 >
                   <option value="">All Statuses</option>
                   {Object.entries(ORDER_STATUSES).map(([key, label]) => (
@@ -141,11 +132,8 @@ export const Orders = () => {
                 </label>
                 <select
                   value={selectedPriority}
-                  onChange={(e) => {
-                    setSelectedPriority(e.target.value);
-                    setCurrentPage(1);
-                  }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  onChange={(e) => setParam('priority', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#0055FF] focus:border-transparent"
                 >
                   <option value="">All Priorities</option>
                   {Object.entries(ORDER_PRIORITIES).map(([key, label]) => (
