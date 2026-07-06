@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Layout } from '../components/Layout/Layout';
 import { Card } from '../components/common/Card';
+import { StatusBadge } from '../components/common/StatusBadge';
 import { Input } from '../components/common/Input';
 import { Button } from '../components/common/Button';
 import { getCurrentUser, changePassword } from '../services/users';
@@ -106,9 +107,9 @@ export const Profile = () => {
                   Role
                 </label>
                 <div>
-                  <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${ROLE_COLORS[user.role]}`}>
+                  <StatusBadge colorClass={ROLE_COLORS[user.role]}>
                     {USER_ROLES[user.role]}
-                  </span>
+                  </StatusBadge>
                 </div>
               </div>
 
@@ -135,9 +136,9 @@ export const Profile = () => {
                   Account Status
                 </label>
                 <div>
-                  <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${user.active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                  <StatusBadge colorClass={user.active ? 'bg-green-100 text-green-800 border-green-200' : 'bg-gray-100 text-gray-800 border-gray-300'}>
                     {user.active ? 'Active' : 'Inactive'}
-                  </span>
+                  </StatusBadge>
                 </div>
               </div>
 

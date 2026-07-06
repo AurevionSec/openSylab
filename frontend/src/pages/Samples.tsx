@@ -3,6 +3,7 @@ import { Layout } from '../components/Layout/Layout';
 import { Card } from '../components/common/Card';
 import { Button } from '../components/common/Button';
 import { ErrorBanner } from '../components/common/ErrorBanner';
+import { StatusBadge } from '../components/common/StatusBadge';
 import { DeleteConfirmDialog } from '../components/common/DeleteConfirmDialog';
 import { SampleCreateModal } from '../components/Samples/SampleCreateModal';
 import { SampleEditModal } from '../components/Samples/SampleEditModal';
@@ -205,16 +206,14 @@ export const Samples = () => {
                           {sample.description}
                         </td>
                         <td className="px-3 md:px-6 py-2 md:py-2.5 whitespace-nowrap border-b border-[#E2E8F0]">
-                          <span className={`px-2 py-1 text-[10px] font-bold uppercase tracking-wider border inline-block ${
+                          <StatusBadge colorClass={
                             sample.status === 'REGISTERED' ? 'bg-blue-50 text-blue-700 border-blue-200' :
                             sample.status === 'IN_ANALYSIS' ? 'bg-yellow-50 text-yellow-800 border-yellow-200' :
-                            sample.status === 'ANALYZED' ? 'bg-gray-100 text-gray-700 border-gray-300' :
                             sample.status === 'VALIDATED' ? 'bg-green-50 text-green-700 border-green-200' :
-                            sample.status === 'ARCHIVED' ? 'bg-gray-100 text-gray-600 border-gray-300' :
-                            'bg-gray-100 text-gray-600 border-gray-300'
-                          }`}>
+                            'bg-gray-100 text-gray-700 border-gray-300'
+                          }>
                             {sample.status.replace('_', ' ')}
-                          </span>
+                          </StatusBadge>
                         </td>
                         <td className="px-3 md:px-6 py-2 md:py-2.5 whitespace-nowrap text-sm font-mono text-[#5E6C84] border-b border-[#E2E8F0]">
                           {new Date(sample.created_at).toLocaleDateString('de-DE')}
