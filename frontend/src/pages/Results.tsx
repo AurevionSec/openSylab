@@ -4,6 +4,7 @@ import { Layout } from '../components/Layout/Layout';
 import { Card } from '../components/common/Card';
 import { Button } from '../components/common/Button';
 import { ErrorBanner } from '../components/common/ErrorBanner';
+import { StatusBadge } from '../components/common/StatusBadge';
 import { DeleteConfirmDialog } from '../components/common/DeleteConfirmDialog';
 import { ResultCreateModal } from '../components/Results/ResultCreateModal';
 import { ResultEditModal } from '../components/Results/ResultEditModal';
@@ -207,26 +208,26 @@ export const Results = () => {
                           {result.reference_min} - {result.reference_max}
                         </td>
                         <td className="px-6 py-2.5 whitespace-nowrap border-b border-[#E2E8F0]">
-                          <span className={`px-2 py-1 text-[10px] font-bold uppercase tracking-wider border inline-block ${
+                          <StatusBadge colorClass={
                             result.flag === 'CRITICAL' ? 'bg-red-50 text-red-700 border-red-200' :
                             result.flag === 'HIGH' ? 'bg-orange-50 text-orange-700 border-orange-200' :
                             result.flag === 'LOW' ? 'bg-yellow-50 text-yellow-800 border-yellow-200' :
                             result.flag === 'UNDEFINED' ? 'bg-gray-100 text-gray-600 border-gray-300' :
                             'bg-green-50 text-green-700 border-green-200'
-                          }`}>
+                          }>
                             {RESULT_FLAGS[result.flag]}
-                          </span>
+                          </StatusBadge>
                         </td>
                         <td className="px-6 py-2.5 whitespace-nowrap border-b border-[#E2E8F0]">
-                          <span className={`px-2 py-1 text-[10px] font-bold uppercase tracking-wider border inline-block ${
+                          <StatusBadge colorClass={
                             result.status === 'PENDING' ? 'bg-yellow-50 text-yellow-800 border-yellow-200' :
                             result.status === 'VALIDATED' ? 'bg-green-50 text-green-700 border-green-200' :
                             result.status === 'ENTERED' ? 'bg-blue-50 text-blue-700 border-blue-200' :
                             result.status === 'REJECTED' ? 'bg-red-50 text-red-700 border-red-200' :
                             'bg-gray-100 text-gray-600 border-gray-300'
-                          }`}>
+                          }>
                             {RESULT_STATUSES[result.status]}
-                          </span>
+                          </StatusBadge>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium border-b border-[#E2E8F0]">
                           {canWrite && <div className="flex items-center justify-end gap-2">
