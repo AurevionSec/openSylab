@@ -1,10 +1,16 @@
-1. Concept: "Neo-Clinical Industrialism"
+> **Internal design rationale.** This document records the reasoning behind the
+> UI design language for maintainers and contributors. It is not product marketing.
 
-Forget "User Delight". We aim for "User Competence".
+# Design language — "Neo-Clinical Industrialism"
 
-    For physicians: It feels familiar, because it references the aesthetics of printed laboratory reports and expensive medical devices. High contrast, no hidden menus.
+## 1. Concept
 
-    For the freshness factor: We use micro-interactions, monospace fonts, and a strict grid system that feels like the HUD of a fighter jet or a terminal interface from the future.
+The goal is **user competence over user delight**: the interface should make a lab
+technician faster and more accurate, not merely pleasant.
+
+    For clinicians: it feels familiar because it references the aesthetics of printed laboratory reports and professional medical instruments — high contrast, no hidden menus.
+
+    For focus: micro-interactions, a monospace data font, and a strict grid keep the interface calm, dense, and instrument-like rather than consumer-app playful.
 
 2. Color Palette: "Sterile & Slate"
 
@@ -22,7 +28,7 @@ No pure black (#000), no pure white (#FFF). These either blind or look cheap. We
 
     Accents (max 10%):
 
-        Bio-Hazard Green: #CCFF00 or #10B981 (For "Success" or "Validated"). Use extremely sparingly.
+        Success / Validated accent: #10B981 (or #CCFF00 in the dark theme). Use extremely sparingly.
 
         Critical Alert: #FF3B30 (Only for genuine errors).
 
@@ -76,7 +82,7 @@ B. Tables (The Core)
 
 C. Input Forms (Create Sample)
 
-    Current: A vertical list of misery.
+    Current: an undifferentiated vertical list of fields.
 
     New: Grouped fields.
 
@@ -102,7 +108,7 @@ The system must not feel "soft". It must "click". Every click is a definitive de
 
 Visual Reference (Mental Image)
 
-Imagine Braun (design) and Palantir (tech) had a child who listens to techno in a Berlin bunker, but works as a surgeon by day.
+Reference points: the restraint of Braun / Dieter Rams industrial design and the information density of professional operations tooling.
 
     Corners: Slightly rounded (4px). Not 0px (too aggressive), not 12px (too playful).
 
