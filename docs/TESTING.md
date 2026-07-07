@@ -177,9 +177,10 @@ Aktuell getestet:
 - ✅ JWT-Authentifizierung & RBAC (Auth-Required- und abgelehnte-Rollen-Fälle)
 - ✅ HL7/FHIR-Parser, Statistik-Aggregation, Migrations, Audit-Hash-Chain
 - ✅ Frontend Components (46 Tests via Vitest + React Testing Library)
+- ✅ End-to-End Workflows (8 Playwright-Tests: Login, Navigation, API-Read,
+  Mobile-Drawer — starten echtes Backend + Frontend, laufen im CI)
 
 Noch nicht getestet:
-- ⏳ End-to-End Workflows (Playwright, e2e-Suite + CI-Job vorhanden)
 - ⏳ Performance unter Last
 - ⏳ CLI-Interface (schwierig automatisch zu testen)
 
