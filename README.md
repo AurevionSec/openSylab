@@ -1,243 +1,228 @@
 # OpenSylab LIMS
 
-**Open-source LIMS for medical diagnostics — ISO 15189-compliant, self-hosted, MIT-licensed.**
+**Open-source LIMS for medical diagnostics — built around an ISO 15189-oriented audit trail, self-hosted, MIT-licensed.**
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue)](CHANGELOG.md)
-[![License](https://img.shields.io/badge/license-MIT-green)](#license)
-[![Tests](https://img.shields.io/badge/tests-236%20passing-brightgreen)](#tests)
-[![C++](https://img.shields.io/badge/C%2B%2B-17-orange)](src/)
-[![React](https://img.shields.io/badge/React-19-61dafb)](frontend/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue)](frontend/src/)
-[![Security](https://img.shields.io/badge/security-PBKDF2%20%7C%20JWT%20%7C%20TOTP%20%7C%20HMAC--chain-red)](#security)
+[![CI](https://github.com/AurevionSec/openSylab/actions/workflows/ci.yml/badge.svg)](https://github.com/AurevionSec/openSylab/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/AurevionSec/openSylab)](https://github.com/AurevionSec/openSylab/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![C++17](https://img.shields.io/badge/C%2B%2B-17-orange)](src/)
+[![React 19](https://img.shields.io/badge/React-19-61dafb)](frontend/)
+[![TypeScript strict](https://img.shields.io/badge/TypeScript-strict-blue)](frontend/src/)
+[![Security](https://img.shields.io/badge/security-PBKDF2%20%C2%B7%20JWT%20%C2%B7%20TOTP%20%C2%B7%20HMAC--chain-red)](#security)
 
-OpenSylab is a LIMS for small to medium diagnostic laboratories that want to run a complete, ISO 15189-capable system — without enterprise license costs, without US-cloud dependencies, without a database server.
+OpenSylab is a Laboratory Information Management System for small-to-medium diagnostic labs that want a complete, ISO 15189-oriented workflow — Sample → Order → Result → tamper-evident Audit — without enterprise license costs, US-cloud dependencies, or a database server to operate.
+
+![Dashboard](docs/screenshots/dashboard.png)
+
+<details>
+<summary><strong>Table of contents</strong></summary>
+
+- [Why OpenSylab?](#why-opensylab)
+- [Screenshots](#screenshots)
+- [Who is it for?](#who-is-it-for)
+- [Scope & limitations](#scope--limitations)
+- [Features](#features)
+- [Technology stack](#technology-stack)
+- [Quick start](#quick-start)
+- [Configuration](#configuration)
+- [Architecture](#architecture)
+- [API overview](#api-overview)
+- [Tests](#tests)
+- [Contributing](#contributing) · [Security](#security) · [License](#license)
+
+</details>
 
 ---
 
 ## Why OpenSylab?
 
-### ⚖️ ISO 15189 Audit Trail as an Architectural Foundation
+### ⚖️ A tamper-evident audit trail at the database layer
 
-Every CREATE / UPDATE / DELETE operation on samples, orders, results, and users mandatorily creates an `AuditEntry` with `user_id`, `action`, `entity_type`, `entity_id`, and `timestamp` — directly at the database layer, not as an optional feature. No other open-source LIMS solution implements this as an inalienable foundation. Compliance here is not a module you bolt on.
+Every CREATE / UPDATE / DELETE on samples, orders, results, and users writes an `AuditEntry` (`user_id`, `action`, `entity_type`, `entity_id`, `timestamp`) **at the database layer** — not as an optional application-level feature. Each entry is chained with HMAC-SHA256 over its content plus the previous entry's hash, so the trail cannot be silently edited or bypassed; chain integrity is verifiable via `GET /api/v1/audit/verify`. This is the mechanism ISO 15189 traceability expects, enforced by design.
 
 ### 🔌 HL7 v2.5.1 + FHIR R4 — native, no middleware server
 
-Native C++ parsers for HL7 v2.5.1 (`ORU^R01`) and FHIR R4 Bundles (Patient, Specimen, ServiceRequest, Observation) — no separate FHIR middleware server, no Java heap, no dependency on external services. Import and export directly via the REST API.
+Native C++ parsers for HL7 v2.5.1 (`ORU^R01`) and FHIR R4 Bundles (Patient, Specimen, ServiceRequest, Observation) — no separate FHIR middleware server, no Java heap, no external service dependency. Import and export directly via the REST API.
 
-### 🔓 MIT License · Self-Hosted · No Database Server Dependency
+### 🔓 MIT-licensed · self-hosted · no database server
 
-MIT license means: no copyleft, no license-compliance bureaucracy for IT departments, no restrictions on commercial development. SQLite as an embedded database: backup = copy a file, runs on an inexpensive ARM VM, no DBA staff required. Patient data never leaves your own infrastructure.
+MIT means no copyleft and no license-compliance bureaucracy. SQLite as an embedded database means backup is a file copy, it runs on an inexpensive ARM VM, and no DBA staff is required. Patient data never leaves your own infrastructure.
 
-### 🚀 Minimal Resource Footprint via Native C++17 Core
+### 🚀 Minimal footprint via a native C++17 core
 
-No JVM warmup, no interpreter overhead, no framework bloat. OpenSylab runs on hardware where no Java-based LIMS would even start — relevant for edge deployments directly at the analyzer or resource-constrained on-premise environments.
+No JVM warmup, no interpreter overhead, no framework bloat. OpenSylab runs on hardware where a Java-based LIMS would not start — relevant for edge deployments at the analyzer or resource-constrained on-premise environments.
 
-### 🛡️ Security with Concrete Mechanisms
+### 🛡️ Security with concrete mechanisms
 
-PBKDF2-HMAC-SHA256 (210,000 iterations, random salt), HMAC-SHA256 JWT, TOTP/MFA (RFC 6238), RBAC across four roles (ADMIN / OPERATOR / VIEWER / CUSTOM) with auth check before JSON parse, rate-limiting on the login endpoint, TLS enforcement via `--force-https`.
+PBKDF2-HMAC-SHA256 (210,000 iterations, random salt, constant-time compare), HMAC-SHA256 JWT, TOTP/MFA (RFC 6238), RBAC across four roles (ADMIN / OPERATOR / VIEWER / CUSTOM) with the auth check performed before request-body parsing, login rate-limiting, and TLS enforcement via `--force-https`.
 
-### ⚡ Neo-Clinical Industrial UI
+### ⚡ Neo-clinical industrial UI
 
-Design philosophy: "User Competence over User Delight." Monospace data font for tabular digits, high contrast, information density that lab technicians prefer. No generic SaaS styling.
+Design thesis: *user competence over user delight*. A tabular monospace data font so digits align in columns, high contrast, and the information density lab technicians prefer — no generic SaaS styling.
 
 ---
 
 ## Screenshots
 
-### Dashboard
-<!-- SCREENSHOT: Hauptansicht nach Login -->
-<!-- Aufnahme: http://localhost:5173/ (als admin eingeloggt) -->
-<!-- Zeigt: KPI-Kacheln (Proben, Aufträge, Ergebnisse, Kritisch), Aktivitäts-Charts, letzte Proben-Tabelle -->
-![Dashboard](docs/screenshots/dashboard.png)
-*Real-time overview: samples, orders, critical results, and activity chart*
-
-### Sample Management
-<!-- SCREENSHOT: Seite /samples mit mindestens 5 Einträgen verschiedener Status -->
-<!-- Aufnahme: Filter auf "Alle Status", Suche leer, erste Seite -->
-<!-- Zeigt: Tabelle mit sample_id, patient_id, Status-Badge, Aktions-Buttons -->
-![Samples](docs/screenshots/samples.png)
-*Sample list with status filter, barcode scan, and soft-delete (status → ARCHIVED)*
-
-### Order Management
-<!-- SCREENSHOT: Seite /orders mit Aufträgen verschiedener Prioritäten -->
-<!-- Aufnahme: Enthält mindestens je einen NORMAL, URGENT, EMERGENCY-Auftrag -->
-<!-- Zeigt: Prioritäts-Badge-Farben (grau/orange/rot), Status-Workflow-Spalte -->
-![Orders](docs/screenshots/orders.png)
-*Orders by priority (NORMAL / URGENT / EMERGENCY) and status workflow*
-
-### Results & Auto-Flag
-<!-- SCREENSHOT: Seite /results mit Ergebnissen verschiedener Flags -->
-<!-- Aufnahme: Enthält NORMAL (grün), LOW (blau), HIGH (orange), CRITICAL (rot) Flags -->
-<!-- Zeigt: Flag-Farb-Badges, Referenzbereich-Spalte, numerischer Messwert -->
-![Results](docs/screenshots/results.png)
-*Test results with automatic flagging: NORMAL / LOW / HIGH / CRITICAL*
-
-### Record Result — Reference Range & Auto-Flag
-<!-- SCREENSHOT: Modal "Neues Ergebnis" geöffnet, Wert außerhalb Referenzbereich eingegeben -->
-<!-- Aufnahme: Wert = 15.2, Ref Min = 4.0, Ref Max = 11.0 → Flag zeigt automatisch "HIGH" -->
-<!-- Zeigt: Formular mit Auto-Flag-Berechnung in Echtzeit -->
-![Result Create](docs/screenshots/result_create.png)
-*Result entry with automatic flag calculation on deviation from the reference range*
-
-### Audit Log
-<!-- SCREENSHOT: Seite /audit-log mit mehreren Einträgen, Filter-Panel oben -->
-<!-- Aufnahme: Mindestens CREATE, UPDATE, DELETE Aktionen sichtbar; Export-Button sichtbar -->
-<!-- Zeigt: Tabelle mit Timestamp, Benutzer, Aktion, Entity-Typ, Details -->
-![Audit](docs/screenshots/audit.png)
-*Complete ISO-15189-compliant audit trail with filtering and CSV export*
-
-
-### Dark Mode 
-<!-- SCREENSHOT: Dashboard im Dark Mode (sudo-Tastenkombination aktiviert) -->
-<!-- Aufnahme: s-u-d-o eingeben außerhalb Inputs → Terminal-Industrial-Theme -->
-<!-- Zeigt: Acid-Green (#CCFF00), Cyan (#00F0FF) Akzente auf dunklem Hintergrund -->
-![Dark Mode](docs/screenshots/dark_mode.png)
-*Terminal Industrial Dark Mode with neon accents — activated via `sudo` key sequence*
+| | |
+|---|---|
+| ![Samples](docs/screenshots/samples.png) | ![Orders](docs/screenshots/orders.png) |
+| **Sample list** — status filter, barcode scan, soft-delete (→ ARCHIVED) | **Orders** by priority (NORMAL / URGENT / EMERGENCY) and status workflow |
+| ![Results](docs/screenshots/results.png) | ![Result entry](docs/screenshots/result_create.png) |
+| **Results** with automatic flagging: NORMAL / LOW / HIGH / CRITICAL | **Result entry** — auto-flag computed live from the reference range |
+| ![Audit log](docs/screenshots/audit.png) | ![Dark mode](docs/screenshots/dark_mode.png) |
+| **Audit log** — ISO 15189-oriented trail, filtering, CSV export | **Dark theme** — user-selectable terminal-industrial mode |
 
 ---
 
-## Who is OpenSylab for?
+## Who is it for?
 
 | Target audience | Why OpenSylab fits |
 |---|---|
-| **Small to medium diagnostic laboratories** | ISO 15189 audit trail + RBAC without enterprise license costs (LabWare, STARLIMS: from USD 100,000/year) |
-| **Research laboratories in university hospitals** | Complete workflow (Sample → Order → Result → Audit) at clinical compliance level |
-| **Laboratories with data protection requirements (GDPR)** | Self-hosted, no US-cloud dependency, patient data in your own infrastructure |
-| **IT teams without DBA staff** | SQLite embedded: no database server, no connection pool, backup via file copy |
-| **Facilities with KIS integration** | HL7 v2.5.1 + FHIR R4 native — no separate middleware server required |
-
-OpenSylab is **not** suitable for: high-throughput laboratories with >100 concurrent write operations (SQLite single-writer limit), laboratories that require SaaS operation without their own IT infrastructure.
+| **Small-to-medium diagnostic laboratories** *(primary)* | Audit trail + RBAC without the six-figure annual license costs of commercial LIMS |
+| Research laboratories in university hospitals | Complete Sample → Order → Result → Audit workflow, self-hosted |
+| Laboratories with data-protection requirements (GDPR) | Self-hosted, no US-cloud dependency, patient data stays in your infrastructure |
+| IT teams without DBA staff | SQLite embedded: no database server, no connection pool, backup via file copy |
+| Facilities with LIS/KIS integration | HL7 v2.5.1 + FHIR R4 native — no separate middleware server |
 
 ---
 
-## Features — v1.0.0
+## Scope & limitations
 
-### Laboratory Data Management
+OpenSylab is honest about what it is and isn't:
+
+- **Not a certified medical device.** OpenSylab has **not** undergone CE/IVDR marking or FDA clearance. It provides audit-trail and RBAC *mechanisms* that support ISO 15189 workflows, but deploying it in an accredited laboratory requires **your own validation, qualification, and SOPs**. Compliance is granted to a lab's processes, not to a tool.
+- **Default `admin` / `admin` credentials are for development only** — change them before any real use, and set `OPENSYLAB_JWT_SECRET` / `OPENSYLAB_AUDIT_HMAC_KEY` to strong random values in production.
+- **SQLite is single-writer.** OpenSylab is not intended for high-throughput labs with sustained heavy concurrent writes, nor for SaaS operation without your own IT infrastructure.
+- **Provided "as is", without warranty** — see [LICENSE](LICENSE).
+
+---
+
+## Features
+
+<details open>
+<summary><strong>Laboratory data management</strong></summary>
+
 | Feature | Description |
 |---------|-------------|
-| **Sample management** | CRUD, barcode scan (BarcodeDetector API), status workflow: REGISTERED → IN_ANALYSIS → ANALYZED → VALIDATED → ARCHIVED |
-| **Order management** | Linked to samples, priorities (NORMAL / URGENT / EMERGENCY), status workflow, transition validation in the backend |
-| **Result entry** | Auto-flag on input: NORMAL / LOW / HIGH / **CRITICAL** (margin-based: 50 % of the reference interval) — manual override possible |
-| **Soft-delete** | Samples → ARCHIVED, orders → CANCELLED, results → REJECTED — rows are retained for the audit trail |
-| **Reference ranges** | Per result `reference_low` / `reference_high`, flag recalculated on every update |
-| **Pagination** | Server-side pagination on all list endpoints (limit / offset, capped at 1 000) |
-| **Global search** | Header search bar navigates via `?q=` to samples or orders |
-| **Migration framework** | Versioned DB schema migrations with checksums, run at startup |
-| **OpenAPI spec** | Machine-readable spec served at `GET /api/v1/openapi.yaml` |
+| Sample management | CRUD, barcode scan (BarcodeDetector API), workflow REGISTERED → IN_ANALYSIS → ANALYZED → VALIDATED → ARCHIVED |
+| Order management | Linked to samples; priorities (NORMAL / URGENT / EMERGENCY); backend-validated status transitions |
+| Result entry | Auto-flag on input — NORMAL / LOW / HIGH / **CRITICAL** (margin-based: 50 % of the reference interval), manual override possible |
+| Soft-delete | Samples → ARCHIVED, orders → CANCELLED, results → REJECTED — rows retained for the audit trail |
+| Reference ranges | Per-result `reference_low` / `reference_high`; flag recomputed on every edit |
+| Pagination & search | Server-side pagination (limit/offset, capped) and URL-persisted filters on all list endpoints |
+| Migration framework | Versioned schema migrations with checksums, applied at startup |
+| OpenAPI spec | Machine-readable spec served at `GET /api/v1/openapi.yaml` |
 
-### Data Import / Export
+</details>
+
+<details>
+<summary><strong>Import / export</strong></summary>
+
 | Feature | Description |
 |---------|-------------|
-| **Batch CSV import (samples)** | RFC 4180, BOM-tolerant, 5 MB limit, per-row error tracking |
-| **Batch CSV import (results)** | Multiline fields with correct escape state machine |
-| **HL7 v2.5.1** | ORU^R01 import + export via HTTP API (`/api/v1/hl7/import`) with complete field escaping |
-| **FHIR R4** | Bundle import (Patient, Specimen, ServiceRequest, Observation) + export via HTTP API |
-| **Audit log export** | CSV export (ADMIN only) with configurable retention policy |
-| **Statistics** | Dashboard tiles, status distribution, critical results (real-time, backend-aggregated) |
+| CSV import (samples) | RFC 4180, BOM-tolerant, size-limited, per-row error tracking |
+| CSV import (results) | Multiline quoted fields with a correct escape state machine |
+| HL7 v2.5.1 | ORU^R01 import + export via the REST API, with full field escaping |
+| FHIR R4 | Bundle import (Patient, Specimen, ServiceRequest, Observation) + export |
+| Audit-log export | CSV export (ADMIN only) with a configurable retention policy |
+| Statistics | Backend-aggregated dashboard tiles, status distribution, critical-result count |
 
-### Security
+</details>
+
+<details>
+<summary><strong>Security</strong></summary>
+
 | Feature | Description |
 |---------|-------------|
-| **JWT authentication** | HMAC-SHA256, expiry configurable via `OPENSYLAB_JWT_SECRET` |
-| **PBKDF2 password hashing** | 210,000 iterations, random salt, empty-salt guard, constant-time comparison (OWASP 2023) |
-| **RBAC** | 4 roles: ADMIN / OPERATOR / VIEWER / CUSTOM — enforced on all write endpoints, auth check before JSON parse |
-| **Rate-limiting** | 10 attempts / 60 s per IP on `/api/v1/auth/login`, query-string-resistant |
-| **MFA (TOTP)** | RFC 6238 HMAC-SHA1, ±1 time window (90 s), Google Authenticator compatible |
-| **LDAP** | Optional LDAP authentication with local shadow account and role mapping |
-| **Last-admin protection** | `updateUser`, `deleteUser`, `assignUserRole` block demotion of the last admin — transactional, no TOCTOU |
-| **Self-delete guard** | Admin cannot deactivate themselves |
-| **Audit on all writes** | Every CREATE / UPDATE / DELETE produces an AuditEntry with `user_id`, `action`, `entity`, `timestamp` |
-| **HMAC-SHA256 audit hash chain** | Every audit entry carries an HMAC over its content + previous hash; chain integrity verifiable via `GET /api/v1/audit/verify` |
-| **Error sanitization** | HTTP responses contain no SQLite internals |
-| **TLS/HTTPS** | `--tls-cert` / `--tls-key` flags; `--force-https` prevents HTTP operation in production |
+| JWT authentication | HMAC-SHA256, configurable expiry via `OPENSYLAB_JWT_SECRET` |
+| Password hashing | PBKDF2-HMAC-SHA256, 210,000 iterations, random salt, constant-time comparison |
+| RBAC | ADMIN / OPERATOR / VIEWER / CUSTOM — enforced on every write endpoint, checked before body parsing |
+| Rate-limiting | Login endpoint throttled per IP, query-string-resistant |
+| MFA (TOTP) | RFC 6238, ±1 window, Google Authenticator compatible |
+| LDAP (optional) | LDAP auth with a local shadow account and role mapping |
+| Last-admin protection | Demotion/deletion of the last admin blocked transactionally (no TOCTOU) |
+| Audit hash chain | Every entry carries an HMAC over its content + previous hash; verifiable via `/api/v1/audit/verify` |
+| Concurrency-safe DB | All database access serialized; audit chain atomic under concurrent requests |
+| TLS / HTTPS | `--tls-cert` / `--tls-key`; `--force-https` blocks plaintext operation |
 
-### Frontend / UX
+Found a vulnerability? Please follow the responsible-disclosure process in [SECURITY.md](SECURITY.md).
+
+</details>
+
+<details>
+<summary><strong>Frontend / UX</strong></summary>
+
 | Feature | Description |
 |---------|-------------|
-| **React 19 + TypeScript strict** | No `any` types in production code, 0 TypeScript errors |
-| **RBAC in the UI** | `canWrite` guards on all Create/Edit/Delete buttons; sidebar links role-dependent |
-| **Dark mode** | Terminal-industrial aesthetic via `sudo` key sequence (Easter egg) |
-| **Responsive tables** | Secondary columns hidden on tablet (`md:hidden`) |
-| **useEntityList hook** | Universal paginated list hook with abort mechanism, race-condition-safe |
-| **MFA login flow** | Two-step login: credentials → TOTP code |
-| **Secure logout navigation** | Sidebar logout navigates immediately to `/login` |
-| **Health endpoint** | `GET /api/v1/health` — unauthenticated, returns `{"status":"ok","service":"opensylab-lims"}` |
-| **Version SSOT** | `CMakeLists.txt` → `include/version.h` (C++); `package.json` → `VITE_APP_VERSION` (frontend) |
-| **IDatabase interface** | Abstraction layer for testability; `Database` (SQLite) and `PostgreSQLDatabase` both implement `IDatabase` |
+| React 19 + TypeScript strict | No `any` in production code, 0 type errors |
+| RBAC in the UI | Write actions gated by role; read-only detail view for VIEWER |
+| Feedback & a11y | Toasts on every write, focus-trapped modals, `aria-live` errors, skip-link, keyboard nav |
+| URL-persisted state | Filters and pagination live in the query string — deep-linkable and back-button-safe |
+| Responsive shell | Sidebar collapses to an off-canvas drawer on small screens |
+| Dark theme | User-selectable terminal-industrial mode |
+| Test pyramid | 46 Vitest component tests + 8 Playwright end-to-end tests (real backend + frontend) in CI |
+
+</details>
 
 ### Quality
+
 | Metric | Value |
 |--------|------|
-| **Unit tests** | 236 passing |
-| **TypeScript** | strict mode, 0 errors |
-| **npm audit** | 0 vulnerabilities |
-| **Bug hunts (v0.9.0)** | 36 waves, 3 consecutive APPROVED — 28 bugs fixed across 21 files |
-| **Total bug hunts** | 80+ waves total, 120+ bugs fixed |
+| Backend unit tests | 236 passing |
+| Frontend tests | 46 Vitest + 8 Playwright E2E |
+| TypeScript | strict, 0 errors |
+| `npm audit` | 0 vulnerabilities |
+| Security alerts | 0 open (Dependabot · CodeQL · secret scanning) |
 
 ---
 
-## Technology Stack
+## Technology stack
 
-### Backend
-- **Language**: C++17
-- **Database**: SQLite3 (embedded, no external server required)
-- **Auth**: PBKDF2-HMAC-SHA256 (passwords) · HMAC-SHA256 JWT · HMAC-SHA1 TOTP
-- **Cryptography**: OpenSSL 3.x (EVP_MAC API)
-- **JSON**: nlohmann/json
-- **Logging**: spdlog
-- **Build**: CMake 3.15+
-
-### Frontend
-- **Framework**: React 19 + TypeScript (strict mode)
-- **Build**: Vite 7
-- **Routing**: React Router v6
-- **HTTP**: Axios with JWT interceptor + token-expiry guard
-- **Styling**: Tailwind CSS 3
-- **Charts**: Recharts
+**Backend** — C++17 · SQLite3 (embedded) · OpenSSL 3.x (EVP_MAC) · nlohmann/json · spdlog · CMake ≥ 3.15
+**Frontend** — React 19 · TypeScript (strict) · Vite · React Router · Axios · Tailwind CSS · Recharts
 
 ---
 
-## Quick Start
+## Quick start
 
-### Prerequisites
-- CMake ≥ 3.15
-- GCC / Clang with C++17 support
-- OpenSSL
-- Node.js ≥ 18
-- SQLite3 (development libraries)
-
-### Build & Start
+### Docker (fastest — try it in two minutes)
 
 ```bash
-# 1. Repository klonen
+git clone https://github.com/AurevionSec/openSylab.git
+cd openSylab
+cp .env.example .env         # set OPENSYLAB_JWT_SECRET + OPENSYLAB_AUDIT_HMAC_KEY (openssl rand -hex 32)
+docker compose up -d
+```
+
+Then open **http://localhost:9090** and sign in with `admin` / `admin` (change it immediately).
+See [docs/DOCKER.md](docs/DOCKER.md) for details.
+
+### Build from source
+
+Prerequisites: CMake ≥ 3.15 · GCC/Clang with C++17 · OpenSSL · Node.js ≥ 18 · SQLite3 dev libraries.
+
+```bash
+# 1. Clone the repository
 git clone https://github.com/AurevionSec/openSylab.git
 cd openSylab
 
-# 2. Backend bauen
+# 2. Build the backend
 cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --parallel $(nproc)
+cmake --build build --parallel "$(nproc)"
 
-# 3. Server starten (Port 9080, DB wird automatisch angelegt)
-./build/bin/OpenSylab --api --api-port 9080 --db opensylab.db
+# 3. Start the API server (creates the DB automatically)
+./build/bin/OpenSylab --api --api-port 8080 --db opensylab.db
 
-# 4. Frontend bauen & starten
+# 4. Build & serve the frontend
 cd frontend
 npm install
-echo "VITE_API_URL=http://localhost:9080/api/v1" > .env.production
+echo "VITE_API_URL=http://localhost:8080/api/v1" > .env.production
 npm run build
 npx serve dist --listen 5173 --single
 ```
 
-Open browser: **http://localhost:5173**  
-Default login: `admin` / `admin` → **change password immediately!**
-
-### Docker
-
-```bash
-docker compose up -d
-```
-
-Detailed instructions: [docs/DOCKER.md](docs/DOCKER.md)
+Open **http://localhost:5173** · default login `admin` / `admin` → **change the password immediately.**
 
 ---
 
@@ -245,24 +230,24 @@ Detailed instructions: [docs/DOCKER.md](docs/DOCKER.md)
 
 | Environment variable | Default | Description |
 |-------------------|---------|-------------|
-| `OPENSYLAB_JWT_SECRET` | dev-secret | JWT signing key **(in production: generate randomly, ≥32 chars!)** |
-| `OPENSYLAB_AUDIT_HMAC_KEY` | — | HMAC key for audit hash chain **(mandatory in production, ≥32 chars; generate with `openssl rand -hex 32`)** |
+| `OPENSYLAB_JWT_SECRET` | — | JWT signing key — **required in production, ≥ 32 chars** |
+| `OPENSYLAB_AUDIT_HMAC_KEY` | — | HMAC key for the audit hash chain — **required in production, ≥ 32 chars** |
 | `OPENSYLAB_CORS_ORIGIN` | `http://localhost:5173` | Allowed frontend origin |
 | `OPENSYLAB_DB_PATH` | `opensylab.db` | Database path |
-| `OPENSYLAB_TLS_CERT` | — | Path to TLS certificate (PEM) |
-| `OPENSYLAB_TLS_KEY` | — | Path to TLS key (PEM) |
+| `OPENSYLAB_TLS_CERT` / `OPENSYLAB_TLS_KEY` | — | TLS certificate / key (PEM) |
+
+Generate secrets with `openssl rand -hex 32`. Production start with TLS:
 
 ```bash
-# Produktionsstart mit TLS
 OPENSYLAB_JWT_SECRET="$(openssl rand -hex 32)" \
-OPENSYLAB_CORS_ORIGIN="https://lims.meinlabor.de" \
-./build/bin/OpenSylab \
-  --api --api-port 9443 \
-  --tls-cert /etc/ssl/lims.crt \
-  --tls-key  /etc/ssl/lims.key \
-  --force-https \
-  --db /var/lib/opensylab/lims.db
+OPENSYLAB_AUDIT_HMAC_KEY="$(openssl rand -hex 32)" \
+OPENSYLAB_CORS_ORIGIN="https://lims.example.org" \
+./build/bin/OpenSylab --api --api-port 9443 \
+  --tls-cert /etc/ssl/lims.crt --tls-key /etc/ssl/lims.key \
+  --force-https --db /var/lib/opensylab/lims.db
 ```
+
+Secret rotation: [docs/SECRET_ROTATION.md](docs/SECRET_ROTATION.md).
 
 ---
 
@@ -271,107 +256,73 @@ OPENSYLAB_CORS_ORIGIN="https://lims.meinlabor.de" \
 ```
 ┌─────────────────────────────────────────────────┐
 │  Frontend (React 19 / TypeScript)               │
-│  http://localhost:5173                          │
 └──────────────────┬──────────────────────────────┘
                    │ HTTPS / JWT
 ┌──────────────────▼──────────────────────────────┐
-│  REST API  (C++17)                              │
-│  Port 9080/9443  ·  /api/v1/*                  │
+│  REST API (C++17)  ·  /api/v1/*                 │
 │                                                 │
-│  Layer 4: ApiServer   (HTTP-Routing, TLS, CORS) │
-│  Layer 3: JwtAuth     (Token-Validierung, RBAC) │
-│  Layer 2: Utils       (CSV, HL7, FHIR, CLI)     │
-│  Layer 1: Database    (SQLite3-Persistenz)      │
-│  Layer 0: Core        (Domain-Entities)         │
+│  Layer 4: ApiServer   HTTP routing, TLS, CORS   │
+│  Layer 3: JwtAuth     token validation, RBAC    │
+│  Layer 2: Utils       CSV, HL7, FHIR, CLI       │
+│  Layer 1: Database    SQLite3 persistence       │
+│  Layer 0: Core        domain entities           │
 └──────────────────┬──────────────────────────────┘
                    │
 ┌──────────────────▼──────────────────────────────┐
-│  SQLite3  (embedded)  ·  opensylab.db           │
+│  SQLite3 (embedded)  ·  opensylab.db            │
 └─────────────────────────────────────────────────┘
 ```
 
-**Layer rule:** Layer N may only import Layer N-1 — no circular dependencies.
+**Layer rule:** layer N may import only layer N-1 — no circular dependencies.
 
 ---
 
-## API Overview
+## API overview
 
 | Method | Endpoint | Description | Auth |
 |---------|----------|-------------|------|
-| `GET` | `/api/v1/health` | Health check + version | — |
-| `POST` | `/api/v1/auth/login` | JWT login (+ MFA) — rate-limited | — |
-| `GET` | `/api/v1/samples` | Sample list (`?q=`, `?status=`) | JWT |
-| `POST` | `/api/v1/samples` | Create sample | OPERATOR+ |
-| `PUT` | `/api/v1/samples/:id` | Update sample (transition validated) | OPERATOR+ |
-| `GET` | `/api/v1/orders` | Order list | JWT |
-| `POST` | `/api/v1/orders` | Create order | OPERATOR+ |
-| `GET` | `/api/v1/results` | Result list (`?flag=`, `?status=`) | JWT |
-| `POST` | `/api/v1/results` | Enter result | OPERATOR+ |
+| `GET` | `/api/v1/health` | Health check | — |
+| `POST` | `/api/v1/auth/login` | JWT login (+ MFA), rate-limited | — |
+| `GET` / `POST` | `/api/v1/samples` | List / create samples | JWT / OPERATOR+ |
+| `PUT` | `/api/v1/samples/:id` | Update sample (transition-validated) | OPERATOR+ |
+| `GET` / `POST` | `/api/v1/orders` | List / create orders | JWT / OPERATOR+ |
+| `GET` / `POST` | `/api/v1/results` | List / enter results (`?flag=`, `?status=`) | JWT / OPERATOR+ |
 | `GET` | `/api/v1/audit` | Audit log (filtered, exportable) | ADMIN |
-| `GET` | `/api/v1/users` | User list | ADMIN |
-| `POST` | `/api/v1/hl7/import` | HL7 v2.5.1 ORU^R01 import | OPERATOR+ |
-| `POST` | `/api/v1/fhir/import` | FHIR R4 Bundle import | OPERATOR+ |
-| `GET` | `/api/v1/stats` | Dashboard statistics (backend-aggregated) | JWT |
-| `GET` | `/api/v1/audit/verify` | Verify HMAC audit hash chain integrity | ADMIN |
+| `GET` | `/api/v1/audit/verify` | Verify audit hash-chain integrity | ADMIN |
+| `POST` | `/api/v1/hl7/import` · `/api/v1/fhir/import` | HL7 / FHIR import | OPERATOR+ |
+| `GET` | `/api/v1/stats` | Dashboard statistics | JWT |
 | `GET` | `/api/v1/openapi.yaml` | OpenAPI 3.0 specification | — |
 
-Full API documentation: [docs/API.md](docs/API.md)
+The full machine-readable contract is in [`docs/openapi.yaml`](docs/openapi.yaml) — load it in Swagger UI or Redoc.
 
 ---
 
 ## Tests
 
 ```bash
-# Backend-Tests ausführen
-cmake --build build && ./build/bin/opensylab_tests
+# Backend unit tests
+cmake --build build && ctest --test-dir build --output-on-failure
 
-# Frontend-Typprüfung
-cd frontend && npx tsc --noEmit
-
-# CI-äquivalent (mit Timeout)
-timeout 60 ./build/bin/opensylab_tests
+# Frontend: type-check, unit tests, end-to-end
+cd frontend && npx tsc --noEmit && npm test && npm run test:e2e
 ```
 
-**236 unit tests passing** — backend (C++): database, domain entities, API router, CSV import, HL7, FHIR, statistics, utils.
-
-Further details: [docs/TESTING.md](docs/TESTING.md)
-
----
-
-## Versioning
-
-The version number has **one** canonical source per layer:
-- **C++**: `CMakeLists.txt` → `project(VERSION x.y.z)` → generates `include/version.h` in the build tree
-- **Frontend**: `frontend/package.json` → `"version"` → `import.meta.env.VITE_APP_VERSION`
-
-See [docs/VERSIONING.md](docs/VERSIONING.md) for the release process.
+236 backend unit tests · 46 Vitest component tests · 8 Playwright E2E tests — all run in CI. Details: [docs/TESTING.md](docs/TESTING.md).
 
 ---
 
 ## Contributing
 
-1. Fork & branch: `git checkout -b feat/my-feature`
-2. Implement + write tests
-3. `cmake --build build && timeout 60 ./build/bin/opensylab_tests` — all tests green
-4. `cd frontend && npx tsc --noEmit` — 0 TypeScript errors
-5. Open a pull request
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow and the [Code of Conduct](CODE_OF_CONDUCT.md). In short: fork, branch, add tests, ensure `ctest` and `npx tsc --noEmit` are green, then open a PR (CI must pass).
 
----
+## Security
+
+Please report vulnerabilities responsibly — see [SECURITY.md](SECURITY.md). Do not open public issues for security problems.
 
 ## License
 
-MIT — see [LICENSE](LICENSE)
+MIT — see [LICENSE](LICENSE).
 
 ---
 
-## Built with
-
-Developed with [Claude Code](https://claude.ai/code) (Anthropic).
-
----
-
-## Changelog
-
-Full version history: [CHANGELOG.md](CHANGELOG.md)
-
-**Current version: [1.0.0](CHANGELOG.md#100)** — God-file decomposition, full test pyramid (backend + frontend + E2E), governance + security hardening; 236 tests passing.
+**Roadmap:** [ROADMAP.md](ROADMAP.md) · **Changelog:** [CHANGELOG.md](CHANGELOG.md) · **Current version:** [1.0.0](CHANGELOG.md)
