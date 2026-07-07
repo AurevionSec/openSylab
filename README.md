@@ -325,4 +325,4 @@ MIT — see [LICENSE](LICENSE).
 
 ---
 
-**Roadmap:** [ROADMAP.md](ROADMAP.md) · **Changelog:** [CHANGELOG.md](CHANGELOG.md) · **Current version:** [1.0.0](CHANGELOG.md)
+**Roadmap:** [ROADMAP.md](ROADMAP.md) · **Changelog:** [CHANGELOG.md](CHANGELOG.md) · **Current version:** [1.1.0](CHANGELOG.md)
