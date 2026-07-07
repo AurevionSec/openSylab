@@ -1,164 +1,164 @@
-# OpenSylab v1.0.0 - Installation und Deployment
+# OpenSylab v1.1.0 - Installation and Deployment
 
-## Überblick
+## Overview
 
-OpenSylab kann auf verschiedene Arten installiert werden:
+OpenSylab can be installed in several ways:
 
-1. **🐳 Docker (Empfohlen)** - Einfachste und schnellste Installation
-2. **📦 Native Installation** - Für Entwicklung und direkte System-Integration
-3. **☁️ Cloud Deployment** - Für Produktionsumgebungen
+1. **🐳 Docker (Recommended)** - Simplest and fastest installation
+2. **📦 Native Installation** - For development and direct system integration
+3. **☁️ Cloud Deployment** - For production environments
 
-## Systemanforderungen
+## System Requirements
 
 ### Minimum
 - **CPU**: Dual-Core (2 GHz+)
 - **RAM**: 2 GB
-- **Festplatte**: 500 MB freier Speicher
-- **Betriebssystem**: Linux, Windows 10/11, macOS
+- **Disk**: 500 MB free space
+- **Operating System**: Linux, Windows 10/11, macOS
 
-### Empfohlen für Produktion
+### Recommended for Production
 - **CPU**: Quad-Core (2.5 GHz+)
 - **RAM**: 4 GB+
-- **Festplatte**: SSD mit 10 GB+ freiem Speicher
-- **Netzwerk**: LAN/WAN mit stabiler Verbindung
-- **Betriebssystem**: Linux (Ubuntu 22.04+ oder Debian 11+)
+- **Disk**: SSD with 10 GB+ free space
+- **Network**: LAN/WAN with a stable connection
+- **Operating System**: Linux (Ubuntu 22.04+ or Debian 11+)
 
 ---
 
-## 🐳 Installation mit Docker (Empfohlen)
+## 🐳 Installation with Docker (Recommended)
 
-Docker ist die **empfohlene Installationsmethode** für OpenSylab v1.0.0. Sie bietet:
+Docker is the **recommended installation method** for OpenSylab v1.1.0. It offers:
 
-- ✅ Keine manuelle Abhängigkeiten-Installation
-- ✅ Konsistente Umgebung auf allen Betriebssystemen
-- ✅ Einfache Updates und Rollbacks
-- ✅ Isolation und Sicherheit
-- ✅ Production-ready Setup
+- ✅ No manual dependency installation
+- ✅ Consistent environment across all operating systems
+- ✅ Easy updates and rollbacks
+- ✅ Isolation and security
+- ✅ Production-ready setup
 
-### Voraussetzungen
+### Prerequisites
 
 - **Docker**: Version 20.10+ ([Installation](https://docs.docker.com/get-docker/))
-- **Docker Compose**: Version 2.0+ (meist mit Docker enthalten)
+- **Docker Compose**: Version 2.0+ (usually included with Docker)
 
-#### Docker installieren
+#### Installing Docker
 
 **Linux (Ubuntu/Debian):**
 ```bash
-# Docker installieren
+# Install Docker
 curl -fsSL https://get.docker.com -o get-docker.sh
 sudo sh get-docker.sh
 
-# Benutzer zur Docker-Gruppe hinzufügen
+# Add user to the Docker group
 sudo usermod -aG docker $USER
 newgrp docker
 
-# Docker Compose installieren (falls nicht vorhanden)
+# Install Docker Compose (if not already present)
 sudo apt install docker-compose-plugin
 ```
 
 **Windows/macOS:**
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) herunterladen und installieren
+- Download and install [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 
-### Quick Start mit Docker
+### Quick Start with Docker
 
 ```bash
-# Repository klonen
+# Clone the repository
 git clone https://github.com/AurevionSec/openSylab.git
 cd openSylab
 
-# Docker Container starten
+# Start the Docker containers
 docker compose up -d
 
-# Status prüfen
+# Check status
 docker compose ps
 ```
 
-**Das war's!** OpenSylab läuft jetzt (Docker mappt auf die Host-Ports 9090/9080):
+**That's it!** OpenSylab is now running (Docker maps to the host ports 9090/9080):
 - **Frontend**: http://localhost:9090
 - **Backend API**: http://localhost:9080
-- **Default Login**: admin / admin ⚠️ **MUSS geändert werden!**
+- **Default Login**: admin / admin ⚠️ **MUST be changed!**
 
-### Docker Compose Konfiguration
+### Docker Compose Configuration
 
-Die `docker-compose.yml` definiert zwei Services:
+The `docker-compose.yml` defines two services:
 
 ```yaml
 services:
   backend:
-    # C++ Backend mit API-Server (Container-Port 8080 → Host-Port 9080)
+    # C++ backend with API server (container port 8080 → host port 9080)
     ports:
       - "9080:8080"
     volumes:
-      - ./data:/app/data  # Datenbank-Persistenz
+      - ./data:/app/data  # Database persistence
 
   frontend:
-    # React Frontend (nginx auf Container-Port 80 → Host-Port 9090)
+    # React frontend (nginx on container port 80 → host port 9090)
     ports:
       - "9090:80"
     depends_on:
       - backend
 ```
 
-### Docker-Befehle
+### Docker Commands
 
 ```bash
-# Container starten
+# Start containers
 docker compose up -d
 
-# Logs anzeigen
+# Show logs
 docker compose logs -f
 
-# Backend-Logs
+# Backend logs
 docker compose logs -f backend
 
-# Frontend-Logs
+# Frontend logs
 docker compose logs -f frontend
 
-# Container stoppen
+# Stop containers
 docker compose stop
 
-# Container stoppen und entfernen
+# Stop and remove containers
 docker compose down
 
-# Container neu starten
+# Restart containers
 docker compose restart
 
-# Container neu bauen (nach Code-Änderungen)
+# Rebuild containers (after code changes)
 docker compose up -d --build
 ```
 
-### Daten-Persistenz
+### Data Persistence
 
-Die SQLite-Datenbank wird im Volume `./data` gespeichert:
+The SQLite database is stored in the volume `./data`:
 
 ```bash
-# Datenbank-Backup erstellen
+# Create a database backup
 docker compose exec backend sqlite3 /app/data/opensylab.db ".backup /app/data/backup.db"
 
-# Oder mit Host-Befehlen
+# Or using host commands
 cp data/opensylab.db data/backup_$(date +%Y%m%d_%H%M%S).db
 ```
 
-### Production Deployment mit Docker
+### Production Deployment with Docker
 
-Für Produktionsumgebungen:
+For production environments:
 
-1. **HTTPS/TLS konfigurieren** (siehe [README → Configuration](../README.md) und [SECRET_ROTATION.md](SECRET_ROTATION.md))
-2. **Secrets externalisieren** (Environment Variables)
-3. **Reverse Proxy** (nginx/traefik) verwenden
-4. **Regelmäßige Backups** einrichten
-5. **Monitoring** aktivieren
+1. **Configure HTTPS/TLS** (see [README → Configuration](../README.md) and [SECRET_ROTATION.md](SECRET_ROTATION.md))
+2. **Externalize secrets** (Environment Variables)
+3. **Use a reverse proxy** (nginx/traefik)
+4. **Set up regular backups**
+5. **Enable monitoring**
 
-**Beispiel Production Compose:**
+**Example Production Compose:**
 
 ```yaml
 services:
   backend:
-    image: opensylab/backend:1.0.0
+    image: opensylab/backend:1.1.0
     restart: unless-stopped
     environment:
       - OPENSYLAB_DB_PATH=/app/data/opensylab.db
-      - OPENSYLAB_JWT_SECRET=${JWT_SECRET}  # Aus .env
+      - OPENSYLAB_JWT_SECRET=${JWT_SECRET}  # From .env
       - OPENSYLAB_TLS_CERT=/app/certs/cert.pem
       - OPENSYLAB_TLS_KEY=/app/certs/key.pem
     volumes:
@@ -168,7 +168,7 @@ services:
       - opensylab-net
 
   frontend:
-    image: opensylab/frontend:1.0.0
+    image: opensylab/frontend:1.1.0
     restart: unless-stopped
     environment:
       - VITE_API_URL=https://api.yourdomain.com
@@ -196,15 +196,15 @@ networks:
 
 ---
 
-## 📦 Native Installation (Für Entwickler)
+## 📦 Native Installation (For Developers)
 
-Für Entwicklung oder wenn Docker nicht verfügbar ist.
+For development or when Docker is not available.
 
-### Abhängigkeiten
+### Dependencies
 
-#### Benötigte Software
+#### Required Software
 
-- **C++ Compiler**: GCC 9+, Clang 10+, oder MSVC 2019+
+- **C++ Compiler**: GCC 9+, Clang 10+, or MSVC 2019+
 - **CMake**: 3.15+
 - **SQLite3**: Development Libraries
 - **OpenSSL**: 3.x Development Libraries
@@ -212,7 +212,7 @@ Für Entwicklung oder wenn Docker nicht verfügbar ist.
 - **npm**: 9+
 - **Git**
 
-### Installation der Abhängigkeiten
+### Installing the Dependencies
 
 **Ubuntu/Debian:**
 ```bash
@@ -235,36 +235,36 @@ brew install cmake sqlite3 openssl node
 ```
 
 **Windows:**
-1. [Visual Studio 2019+](https://visualstudio.microsoft.com/) mit "Desktop development with C++"
-2. [Node.js](https://nodejs.org/) installieren
-3. SQLite3 und OpenSSL über vcpkg:
+1. [Visual Studio 2019+](https://visualstudio.microsoft.com/) with "Desktop development with C++"
+2. Install [Node.js](https://nodejs.org/)
+3. SQLite3 and OpenSSL via vcpkg:
 ```powershell
 vcpkg install sqlite3:x64-windows openssl:x64-windows
 ```
 
-### Repository klonen
+### Clone the Repository
 
 ```bash
 git clone https://github.com/AurevionSec/openSylab.git
 cd openSylab
 ```
 
-### Backend kompilieren
+### Compile the Backend
 
 ```bash
-# Build-Verzeichnis erstellen
+# Create build directory
 mkdir -p build && cd build
 
-# CMake konfigurieren
+# Configure CMake
 cmake ..
 
-# Kompilieren (parallel mit allen CPU-Kernen)
+# Compile (in parallel with all CPU cores)
 make -j$(nproc)
 
-# Optional: Tests ausführen
+# Optional: run tests
 ./bin/opensylab_tests
 
-# Zurück zum Projektverzeichnis
+# Back to the project directory
 cd ..
 ```
 
@@ -277,22 +277,22 @@ cmake --build . --config Release
 cd ..
 ```
 
-### Frontend einrichten
+### Set Up the Frontend
 
 ```bash
 cd frontend
 
-# Dependencies installieren
+# Install dependencies
 npm install
 
-# Environment-Datei erstellen
+# Create the environment file
 cp .env.example .env.development
 
-# .env.development editieren (optional)
+# Edit .env.development (optional)
 # VITE_API_URL=http://localhost:8080/api/v1
 ```
 
-### Anwendung starten
+### Start the Application
 
 **Terminal 1 - Backend:**
 ```bash
@@ -305,47 +305,47 @@ cd frontend
 npm run dev
 ```
 
-**Zugriff:**
+**Access:**
 - Frontend: http://localhost:5173
 - API: http://localhost:8080/api/v1
 - Default Login: admin / admin
 
-### Development mit HTTPS/TLS
+### Development with HTTPS/TLS
 
-Für lokale HTTPS-Entwicklung:
+For local HTTPS development:
 
 ```bash
-# Self-signed Zertifikat erstellen
+# Create a self-signed certificate
 cd certs
 openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes
 
-# Backend mit TLS starten
+# Start the backend with TLS
 ./build/bin/OpenSylab --api --api-port 8080 \
     --tls --tls-cert certs/cert.pem --tls-key certs/key.pem
 ```
 
 ---
 
-## 🔧 Konfiguration
+## 🔧 Configuration
 
 ### Environment Variables
 
 ```bash
 # Backend
-export OPENSYLAB_DB_PATH=/pfad/zur/datenbank.db
-export OPENSYLAB_JWT_SECRET="$(openssl rand -hex 32)"       # Pflicht in Prod (>=32 Zeichen)
-export OPENSYLAB_AUDIT_HMAC_KEY="$(openssl rand -hex 32)"   # Pflicht in Prod — Server startet sonst nicht
-export OPENSYLAB_CORS_ORIGIN=https://lims.example.org       # erlaubte Frontend-Origin
-export OPENSYLAB_TLS_CERT=/pfad/zu/cert.pem
-export OPENSYLAB_TLS_KEY=/pfad/zu/key.pem
+export OPENSYLAB_DB_PATH=/path/to/database.db
+export OPENSYLAB_JWT_SECRET="$(openssl rand -hex 32)"       # Required in prod (>=32 characters)
+export OPENSYLAB_AUDIT_HMAC_KEY="$(openssl rand -hex 32)"   # Required in prod — server won't start otherwise
+export OPENSYLAB_CORS_ORIGIN=https://lims.example.org       # allowed frontend origin
+export OPENSYLAB_TLS_CERT=/path/to/cert.pem
+export OPENSYLAB_TLS_KEY=/path/to/key.pem
 
 # Frontend
 export VITE_API_URL=http://localhost:8080/api/v1
 ```
 
-### Konfigurationsdatei
+### Configuration File
 
-OpenSylab unterstützt eine optionale Konfigurationsdatei:
+OpenSylab supports an optional configuration file:
 
 ```ini
 # opensylab.conf
@@ -368,24 +368,24 @@ allowed_origins = https://opensylab.yourdomain.com
 
 ---
 
-## 🧪 Tests ausführen
+## 🧪 Running Tests
 
 ### Backend Tests
 
 ```bash
 cd build
 
-# Alle Tests
+# All tests
 make test
 
-# Oder mit ctest
+# Or with ctest
 ctest --output-on-failure
 
-# Oder direkt
+# Or directly
 ./bin/opensylab_tests
 ```
 
-**Erwartetes Ergebnis:**
+**Expected result:**
 ```
 ✓ Passed: 235
 ✗ Failed: 0
@@ -397,10 +397,10 @@ Total:   235
 ```bash
 cd frontend
 
-# Unit Tests
+# Unit tests
 npm test
 
-# Coverage Report
+# Coverage report
 npm run test:coverage
 ```
 
@@ -408,18 +408,18 @@ npm run test:coverage
 
 ## 🚀 Production Deployment
 
-### Checkliste vor Production Deployment
+### Checklist Before Production Deployment
 
-- [ ] **Default-Credentials ändern** (admin/admin)
-- [ ] **JWT-Secret externalisieren** (nicht hardcoded!)
-- [ ] **HTTPS/TLS aktivieren** (kein HTTP in Produktion)
-- [ ] **Firewall konfigurieren** (nur Port 443 öffentlich)
-- [ ] **Regelmäßige Backups** einrichten
-- [ ] **Monitoring** einrichten (Logs, Metriken)
-- [ ] **Security Hardening** durchführen
-- [ ] **Updates planen** (Security Patches)
+- [ ] **Change default credentials** (admin/admin)
+- [ ] **Externalize JWT secret** (not hardcoded!)
+- [ ] **Enable HTTPS/TLS** (no HTTP in production)
+- [ ] **Configure the firewall** (only port 443 public)
+- [ ] **Set up regular backups**
+- [ ] **Set up monitoring** (logs, metrics)
+- [ ] **Perform security hardening**
+- [ ] **Plan updates** (security patches)
 
-✅ **Passwort-Sicherheit**: OpenSylab v0.7.0+ verwendet PBKDF2-HMAC-SHA256 (210.000 Iterationen) — production-ready.
+✅ **Password Security**: OpenSylab v0.7.0+ uses PBKDF2-HMAC-SHA256 (210,000 iterations) — production-ready.
 
 ### Systemd Service (Linux)
 
@@ -446,7 +446,7 @@ WantedBy=multi-user.target
 ```
 
 ```bash
-# Service aktivieren
+# Enable the service
 sudo systemctl enable opensylab-backend
 sudo systemctl start opensylab-backend
 sudo systemctl status opensylab-backend
@@ -493,29 +493,29 @@ server {
 
 ---
 
-## 🔍 Fehlerbehebung
+## 🔍 Troubleshooting
 
-### Docker-Probleme
+### Docker Problems
 
-**Container startet nicht:**
+**Container won't start:**
 ```bash
-# Logs prüfen
+# Check logs
 docker compose logs
 
-# Container-Status
+# Container status
 docker compose ps
 
-# Ports prüfen
+# Check ports
 sudo netstat -tulpn | grep -E '9090|9080'
 ```
 
-**Port bereits belegt:**
+**Port already in use:**
 ```bash
-# Host-Ports in docker-compose.yml ändern
-# z.B. "9091:80" statt "9090:80" (Frontend) oder "9081:8080" (Backend)
+# Change the host ports in docker-compose.yml
+# e.g. "9091:80" instead of "9090:80" (frontend) or "9081:8080" (backend)
 ```
 
-### Native Build-Probleme
+### Native Build Problems
 
 **"sqlite3.h not found":**
 ```bash
@@ -535,97 +535,97 @@ sudo apt install libssl-dev
 sudo dnf install openssl-devel
 ```
 
-**CMake-Version zu alt:**
+**CMake version too old:**
 ```bash
-# Ubuntu - CMake von Kitware
+# Ubuntu - CMake from Kitware
 wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc | sudo apt-key add -
 sudo apt-add-repository 'deb https://apt.kitware.com/ubuntu/ focal main'
 sudo apt update
 sudo apt install cmake
 ```
 
-### Runtime-Probleme
+### Runtime Problems
 
 **"Failed to open database":**
 ```bash
-# Schreibrechte prüfen
+# Check write permissions
 ls -la opensylab.db
 
-# Datenbankpfad explizit angeben
+# Specify the database path explicitly
 ./build/bin/OpenSylab /tmp/opensylab.db
 ```
 
-**"Connection refused" beim Frontend:**
+**"Connection refused" from the frontend:**
 ```bash
-# Backend läuft?
+# Is the backend running?
 curl http://localhost:8080/api/v1/stats
 
-# CORS-Einstellungen prüfen
-# Backend muss Frontend-Origin erlauben
+# Check CORS settings
+# The backend must allow the frontend origin
 ```
 
 **"Invalid credentials":**
 - Default: admin / admin
-- Datenbank prüfen: `sqlite3 opensylab.db "SELECT username, password_hash FROM users;"`
-- Datenbank-Inhalt prüfen: `sqlite3 opensylab.db "SELECT * FROM users;"`
+- Check the database: `sqlite3 opensylab.db "SELECT username, password_hash FROM users;"`
+- Check the database contents: `sqlite3 opensylab.db "SELECT * FROM users;"`
 
 ---
 
-## 📚 Weitere Ressourcen
+## 📚 Further Resources
 
-- **[README.md](../README.md)** - Projektübersicht und Features
-- **[ROADMAP.MD](../ROADMAP.MD)** - Entwicklungs-Roadmap
-- **[CHANGELOG.md](../CHANGELOG.md)** - Versionshistorie
-- **[TODO.md](../TODO.md)** - Geplante Features
-- **[UI_EXTENSIONS_V06.md](../frontend/UI_EXTENSIONS_V06.md)** - UI-Dokumentation
-- **[TESTING.md](TESTING.md)** - Test-Dokumentation
+- **[README.md](../README.md)** - Project overview and features
+- **[ROADMAP.MD](../ROADMAP.MD)** - Development roadmap
+- **[CHANGELOG.md](../CHANGELOG.md)** - Version history
+- **[TODO.md](../TODO.md)** - Planned features
+- **[UI_EXTENSIONS_V06.md](../frontend/UI_EXTENSIONS_V06.md)** - UI documentation
+- **[TESTING.md](TESTING.md)** - Test documentation
 
 ## 💬 Support
 
-Bei Problemen:
+If you run into problems:
 
-1. **Logs prüfen** (Docker: `docker compose logs`, Native: Console-Output)
-2. **Dokumentation lesen** (README, INSTALL, Troubleshooting-Guides)
-3. **GitHub Issues** durchsuchen: https://github.com/AurevionSec/openSylab/issues
-4. **Neues Issue erstellen** mit:
-   - OpenSylab Version
-   - Betriebssystem + Version
-   - Installationsmethode (Docker/Native)
-   - Fehlermeldung (vollständig)
-   - Reproduktionsschritte
+1. **Check the logs** (Docker: `docker compose logs`, Native: console output)
+2. **Read the documentation** (README, INSTALL, troubleshooting guides)
+3. **Search the GitHub Issues**: https://github.com/AurevionSec/openSylab/issues
+4. **Create a new issue** with:
+   - OpenSylab version
+   - Operating system + version
+   - Installation method (Docker/Native)
+   - Error message (complete)
+   - Reproduction steps
 
 ## 🔄 Updates
 
 ### Docker Update
 
 ```bash
-# Neueste Version pullen
+# Pull the latest version
 docker compose pull
 
-# Container neu starten
+# Restart the containers
 docker compose up -d
 ```
 
 ### Native Update
 
 ```bash
-# Repository aktualisieren
+# Update the repository
 git pull origin main
 
-# Backend neu kompilieren
+# Recompile the backend
 cd build
 make clean
 cmake ..
 make -j$(nproc)
 
-# Frontend neu bauen
+# Rebuild the frontend
 cd ../frontend
-npm install  # Falls neue Dependencies
+npm install  # If there are new dependencies
 npm run build
 ```
 
 ---
 
-**Version:** 1.0.0
-**Letzte Aktualisierung:** 2026-07-05
-**Roadmap:** siehe [ROADMAP.md](../ROADMAP.md) — geplant u.a. PostgreSQL-Backend und Multi-Site.
+**Version:** 1.1.0
+**Last updated:** 2026-07-05
+**Roadmap:** see [ROADMAP.md](../ROADMAP.md) — planned items include a PostgreSQL backend and multi-site support.
