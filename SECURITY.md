@@ -8,10 +8,13 @@ and appreciate responsible disclosure.
 Security fixes are provided for the latest released minor version. Older versions
 receive fixes only at the maintainers' discretion.
 
-| Version | Supported |
-|---------|-----------|
-| 0.9.x   | ✅        |
-| < 0.9   | ❌        |
+| Version | Supported                |
+|---------|--------------------------|
+| 1.0.x   | ✅ actively              |
+| 0.9.x   | ⚠️ critical fixes only   |
+| < 0.9   | ❌                       |
+
+This table is updated with each release.
 
 ## Reporting a vulnerability
 
