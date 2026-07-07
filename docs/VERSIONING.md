@@ -10,7 +10,7 @@ Quellen automatisch — keine manuellen Anpassungen nötig.
 
 ```
 CMakeLists.txt                     frontend/package.json
-  project(OpenSylab VERSION 0.7.0)   "version": "0.7.0"
+  project(OpenSylab VERSION 1.0.0)   "version": "1.0.0"
          │                                    │
          ▼ cmake configure_file              ▼ vite define (vite.config.ts)
    include/version.h               import.meta.env.VITE_APP_VERSION
@@ -24,7 +24,7 @@ CMakeLists.txt                     frontend/package.json
 
 ```cmake
 project(OpenSylab
-    VERSION 0.7.0          # ← HIER ändern für neues Release
+    VERSION 1.0.0          # ← HIER ändern für neues Release
     DESCRIPTION "..."
     LANGUAGES CXX
 )
@@ -41,8 +41,8 @@ CMake generiert beim Konfigurieren `include/version.h` aus dem Template
 
 | Makro | Beispielwert |
 |-------|-------------|
-| `OPENSYLAB_VERSION` | `"0.7.0"` |
-| `OPENSYLAB_VERSION_STRING` | `"OpenSylab v0.7.0"` |
+| `OPENSYLAB_VERSION` | `"1.0.0"` |
+| `OPENSYLAB_VERSION_STRING` | `"OpenSylab v1.0.0"` |
 | `OPENSYLAB_VERSION_MAJOR` | `0` |
 | `OPENSYLAB_VERSION_MINOR` | `7` |
 | `OPENSYLAB_VERSION_PATCH` | `0` |
@@ -52,7 +52,7 @@ Verwendung in C++:
 ```cpp
 #include "version.h"
 
-std::cout << OPENSYLAB_VERSION_STRING << "\n";  // "OpenSylab v0.7.0"
+std::cout << OPENSYLAB_VERSION_STRING << "\n";  // "OpenSylab v1.0.0"
 ```
 
 ### Frontend — `package.json`
@@ -60,7 +60,7 @@ std::cout << OPENSYLAB_VERSION_STRING << "\n";  // "OpenSylab v0.7.0"
 ```json
 {
   "name": "frontend",
-  "version": "0.7.0"    ← HIER ändern für neues Release
+  "version": "1.0.0"    ← HIER ändern für neues Release
 }
 ```
 
@@ -79,7 +79,7 @@ export default defineConfig({
 Verwendung im Frontend:
 
 ```tsx
-<span>{import.meta.env.VITE_APP_VERSION}</span>  {/* "0.7.0" */}
+<span>{import.meta.env.VITE_APP_VERSION}</span>  {/* "1.0.0" */}
 ```
 
 > **Hinweis:** `VITE_APP_VERSION` ist ein Build-Zeit-Wert — er ist hartcodiert im
@@ -91,7 +91,7 @@ Verwendung im Frontend:
 
 ```bash
 # 1. Beide SSoTs aktualisieren
-#    CMakeLists.txt: VERSION 0.7.0 → 0.8.0
+#    CMakeLists.txt: VERSION 1.0.0 → 1.1.0
 #    frontend/package.json: "version": "0.8.0"
 
 # 2. C++ neu bauen (generiert version.h)
@@ -130,4 +130,4 @@ OpenSylab folgt [Semantic Versioning 2.0.0](https://semver.org):
 | Neue Features, abwärtskompatibel | `MINOR` |
 | Bugfixes, Sicherheitspatches | `PATCH` |
 
-Aktuelle Version: **0.7.0** — Pre-1.0, API kann sich ändern.
+Aktuelle Version: **1.0.0** — stabil; die API folgt ab 1.0 SemVer (Breaking Changes nur in Major-Releases).

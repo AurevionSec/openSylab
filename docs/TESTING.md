@@ -269,54 +269,32 @@ Für CI/CD-Pipelines:
 
 Der Exit-Code ist 0 bei Erfolg, 1 bei Fehler.
 
-## Zukünftige Erweiterungen
+## Bereits geliefert (Stand v1.0.0)
 
-### v0.8.0 (Nächste Version):
-- **Integration Tests**: API-Endpoint-Tests mit curl/Postman
-- **Frontend Tests**: Jest + React Testing Library
-  - Component Tests
-  - Authentication Context Tests
-  - Protected Routes Tests
-- **RBAC Tests**: Role-based access control validation
-- **JWT Auth Tests**: Token generation and validation
+- **Frontend-Unit-Tests** — 46 Tests via Vitest + React Testing Library (Components, Auth-Context, Protected Routes).
+- **RBAC- & JWT-Auth-Tests** — Auth-Required- und abgelehnte-Rollen-Fälle im Backend.
+- **End-to-End-Tests** — 8 Playwright-Tests (Login, Navigation, API-Read, Mobile-Drawer), starten echtes Backend + Frontend.
+- **CI/CD-Pipeline** — GitHub Actions führt Backend-, Frontend- und E2E-Tests bei jedem Push/PR aus.
 
-### v0.9.0+:
-- **E2E Tests**: Cypress oder Playwright für End-to-End Workflows
-- **Performance Tests**: Load testing mit K6 oder Artillery
-- **Code Coverage**: gcov/lcov für C++ Backend
-- **CI/CD Pipeline**: GitHub Actions automatisierte Tests
-- **Mock Objects**: Bessere Test-Isolierung
-- **API Contract Tests**: OpenAPI Schema Validation
-
-### Frontend Testing (v0.8.0+):
+### Frontend-Tests ausführen
 
 ```bash
 cd frontend
-
-# Unit Tests
-npm test
-
-# Watch Mode
-npm test -- --watch
-
-# Coverage Report
-npm run test:coverage
-
-# E2E Tests (v0.9.0+)
-npm run test:e2e
+npm test              # Vitest Unit-Tests
+npm test -- --watch   # Watch-Mode
+npm run test:e2e      # Playwright E2E (startet Backend + Frontend selbst)
 ```
 
-### API Testing (v0.8.0+):
+### Manueller API-Smoke-Test
 
 ```bash
-# Postman Collection
-newman run tests/api/opensylab-api.postman_collection.json
-
-# Manual API Tests
 curl -X POST http://localhost:8080/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"admin","password":"admin"}'
-
-# Integration Test Suite
-./scripts/run-api-tests.sh
 ```
+
+## Geplant
+
+- **Code-Coverage-Reporting** (gcov/lcov für das C++-Backend, `npm run test:coverage` fürs Frontend).
+- **Last-/Performance-Tests** (z. B. k6).
+- **API-Contract-Tests** gegen `docs/openapi.yaml`.

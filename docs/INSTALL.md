@@ -143,7 +143,7 @@ cp data/opensylab.db data/backup_$(date +%Y%m%d_%H%M%S).db
 
 Für Produktionsumgebungen:
 
-1. **HTTPS/TLS konfigurieren** (siehe [TLS_SETUP.md](TLS_SETUP.md))
+1. **HTTPS/TLS konfigurieren** (siehe [README → Configuration](../README.md) und [SECRET_ROTATION.md](SECRET_ROTATION.md))
 2. **Secrets externalisieren** (Environment Variables)
 3. **Reverse Proxy** (nginx/traefik) verwenden
 4. **Regelmäßige Backups** einrichten
@@ -333,7 +333,9 @@ openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -node
 ```bash
 # Backend
 export OPENSYLAB_DB_PATH=/pfad/zur/datenbank.db
-export OPENSYLAB_JWT_SECRET=your-super-secret-key-here
+export OPENSYLAB_JWT_SECRET="$(openssl rand -hex 32)"       # Pflicht in Prod (>=32 Zeichen)
+export OPENSYLAB_AUDIT_HMAC_KEY="$(openssl rand -hex 32)"   # Pflicht in Prod — Server startet sonst nicht
+export OPENSYLAB_CORS_ORIGIN=https://lims.example.org       # erlaubte Frontend-Origin
 export OPENSYLAB_TLS_CERT=/pfad/zu/cert.pem
 export OPENSYLAB_TLS_KEY=/pfad/zu/key.pem
 
@@ -341,12 +343,12 @@ export OPENSYLAB_TLS_KEY=/pfad/zu/key.pem
 export VITE_API_URL=http://localhost:8080/api/v1
 ```
 
-### Konfigurationsdatei (v0.8.0+)
+### Konfigurationsdatei
 
-Ab v0.8.0 wird eine Konfigurationsdatei unterstützt:
+OpenSylab unterstützt eine optionale Konfigurationsdatei:
 
 ```ini
-# opensylab.conf (verfügbar seit v0.8.0)
+# opensylab.conf
 [database]
 path = /var/lib/opensylab/opensylab.db
 
@@ -571,7 +573,7 @@ curl http://localhost:8080/api/v1/stats
 
 ## 📚 Weitere Ressourcen
 
-- **[README.MD](../README.MD)** - Projektübersicht und Features
+- **[README.md](../README.md)** - Projektübersicht und Features
 - **[ROADMAP.MD](../ROADMAP.MD)** - Entwicklungs-Roadmap
 - **[CHANGELOG.md](../CHANGELOG.md)** - Versionshistorie
 - **[TODO.md](../TODO.md)** - Geplante Features
@@ -626,4 +628,4 @@ npm run build
 
 **Version:** 1.0.0
 **Letzte Aktualisierung:** 2026-07-05
-**Nächste Version:** 1.1.0 (PostgreSQL-Backend, Multi-Site)
+**Roadmap:** siehe [ROADMAP.md](../ROADMAP.md) — geplant u.a. PostgreSQL-Backend und Multi-Site.

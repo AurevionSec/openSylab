@@ -1,7 +1,7 @@
 # OpenSylab Docker Deployment Guide
 
-**Version:** 0.7.0
-**Date:** 2026-05-11
+**Version:** 1.0.0
+**Date:** 2026-07-06
 **Status:** Production-Ready
 
 ---
@@ -22,7 +22,7 @@
 
 ## Overview
 
-OpenSylab v0.7+ provides full Docker support for easy deployment and scalability. The Docker setup includes:
+OpenSylab v1.0+ provides full Docker support for easy deployment and scalability. The Docker setup includes:
 
 - **Backend Container**: C++17 REST API server with SQLite
 - **Frontend Container**: React SPA served by nginx
@@ -61,7 +61,7 @@ OpenSylab v0.7+ provides full Docker support for easy deployment and scalability
 ```bash
 git clone https://github.com/AurevionSec/openSylab.git
 cd openSylab
-git checkout v0.7
+cp .env.example .env   # set OPENSYLAB_JWT_SECRET + OPENSYLAB_AUDIT_HMAC_KEY
 ```
 
 ### 2. Start the Stack
@@ -76,7 +76,7 @@ docker compose logs -f
 
 ### 3. Access the Application
 
-- **Frontend (Web UI)**: http://localhost
+- **Frontend (Web UI)**: http://localhost:9090
 - **Backend (API)**: http://localhost:9080/api/v1
 
 ### 4. Default Credentials
@@ -151,8 +151,9 @@ Both containers use **multi-stage builds** to minimize image size:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `OPENSYLAB_DB_PATH` | `/app/data/opensylab.db` | SQLite database path |
-| `OPENSYLAB_API_PORT` | `8080` | API server port |
-| `OPENSYLAB_JWT_SECRET` | (development default) | **REQUIRED** JWT secret key (min. 32 chars) ⚠️ |
+| `OPENSYLAB_JWT_SECRET` | — | **Required** JWT signing key (min. 32 chars) ⚠️ |
+| `OPENSYLAB_AUDIT_HMAC_KEY` | — | **Required** HMAC key for the audit hash chain (min. 32 chars) ⚠️ — the container refuses to start without it |
+| `OPENSYLAB_CORS_ORIGIN` | `http://localhost:5173` | Allowed frontend origin |
 | `OPENSYLAB_TLS_CERT` | - | TLS certificate path (optional) |
 | `OPENSYLAB_TLS_KEY` | - | TLS private key path (optional) |
 
@@ -163,8 +164,8 @@ services:
   backend:
     environment:
       - OPENSYLAB_DB_PATH=/app/data/opensylab.db
-      - OPENSYLAB_API_PORT=8080
-      - OPENSYLAB_JWT_SECRET=your-secure-random-secret-min-32-characters
+      - OPENSYLAB_JWT_SECRET=${OPENSYLAB_JWT_SECRET:?set in .env}
+      - OPENSYLAB_AUDIT_HMAC_KEY=${OPENSYLAB_AUDIT_HMAC_KEY:?set in .env}
 ```
 
 **⚠️ IMPORTANT - JWT Secret Security:**
@@ -207,8 +208,8 @@ volumes:
 
 | Service | Container Port | Host Port | Description |
 |---------|----------------|-----------|-------------|
-| Frontend | 80 | 80 | Web UI (nginx) |
-| Backend | 8080 | 8080 | REST API |
+| Frontend | 80 | **9090** | Web UI (nginx) |
+| Backend | 8080 | **9080** | REST API |
 
 **Change host ports** in `docker-compose.yml`:
 
@@ -426,7 +427,7 @@ docker compose run --rm frontend npm test
 
 ```bash
 # Pull latest code
-git pull origin v0.7
+git pull
 
 # Rebuild containers
 docker compose build --no-cache
@@ -594,10 +595,10 @@ See `docs/KUBERNETES.md` (planned for v1.0+).
 
 - **GitHub Issues**: https://github.com/AurevionSec/openSylab/issues
 - **Discussions**: https://github.com/AurevionSec/openSylab/discussions
-- **Email**: A@Eddelbuet.tel
+- **Issues**: https://github.com/AurevionSec/openSylab/issues
 
 ---
 
-**Last Updated:** 2026-02-11
-**OpenSylab Version:** v0.7.0
+**Last Updated:** 2026-07-06
+**OpenSylab Version:** v1.0.0
 **Document Version:** 1.2
