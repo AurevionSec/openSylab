@@ -6,28 +6,57 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-Post-1.0 hardening from a multi-agent bug/inconsistency audit (28 findings fixed).
+## [1.1.0] - 2026-07-06
 
-### Security & Correctness
+Post-1.0 hardening, a full UX overhaul, and an outward-presentation pass. Backed by
+multi-agent audits (a 28-finding bug/inconsistency audit, a ~82-finding UX survey,
+and a presentation review). 236 backend + 46 frontend + 8 E2E tests, all green in CI.
 
-- **Concurrency (critical):** serialize the shared SQLite connection with a
-  recursive mutex + `busy_timeout` — concurrent request threads could otherwise
-  collide on transactions and corrupt the audit hash chain.
-- **RBAC:** sample→VALIDATED release now requires ADMIN (matched order/result);
-  JWT effective role derived from the live DB user so role changes apply at once.
-- **Audit trail:** HL7/FHIR exports now log PHI disclosure; `logAudit` fails
-  closed instead of writing a chain-breaking row on HMAC failure.
-- **Data integrity:** CSV result import no longer mis-splits quoted fields or
-  coerces malformed reference bounds to 0.0; NaN/inf values are no longer flagged
-  NORMAL.
-- **Frontend:** user roles normalized (fixes blank badges + edit-dropdown hazard);
-  LOGIN_FAILED shown in the audit log; global search routes orders/results
-  correctly; stale-token no longer blocks login; list refetch races guarded.
+### Added
 
-### Hygiene & Docs
+- **Toast notifications** on every create / update / delete (writes are no longer silent).
+- **Read-only detail view** (`DetailModal`) reachable by every role, including VIEWER.
+- **Responsive sidebar drawer** — off-canvas navigation with a hamburger on small screens.
+- **URL-persisted filters & pagination** on all list pages (deep-linkable, back-button-safe).
+- **Cross-entity navigation** — Sample ↔ Order ↔ Result IDs are now links.
+- Shared **`StatusBadge`** (rectangular tags) and a `useModalA11y` focus-trap hook.
+- **Playwright end-to-end suite** (8 tests: login, navigation, API read, mobile drawer) wired into CI.
+- `CITATION.cff` and a branded social-preview card.
 
-- Externalize compose secrets to `.env`; untrack `.vite` build cache and debug
-  HTML; fix Dockerfile healthcheck; correct port/version/OpenAPI doc drift.
+### Changed
+
+- **Activated the design-token layer** — the project runs Tailwind v4, which ignored
+  `tailwind.config.js`; a v4 `@theme` block now makes the Neo-Clinical palette and the
+  JetBrains Mono data font actually render.
+- **Accessibility** — focus-trapped modals with Esc/restore, `aria-live` error/status
+  regions, a skip-to-content link, `aria-current` navigation, associated form labels.
+- **Flat surfaces** (borders instead of shadows) per the design language.
+- **README rewritten** — English-only, ISO 15189 wording tightened to "-oriented", a
+  Scope & limitations disclaimer, live CI/release badges, Docker-first quick start.
+- **Docs de-staled** — correct Docker ports, current versions, complete env-var tables,
+  fixed dead links; new `docs/README.md` index. Fresh 1.0 screenshots.
+
+### Fixed
+
+- **Concurrency (critical):** serialize the shared SQLite connection with a recursive
+  mutex + `busy_timeout` — concurrent request threads could otherwise collide on
+  transactions and corrupt the audit hash chain.
+- **RBAC:** sample → VALIDATED release now requires ADMIN (matching order/result); the
+  JWT effective role is derived from the live DB user, so role changes apply immediately.
+- **Audit trail:** HL7/FHIR exports now log PHI disclosure; `logAudit` fails closed
+  instead of writing a chain-breaking row on HMAC failure.
+- **Data integrity:** CSV result import no longer mis-splits quoted fields or coerces
+  malformed reference bounds to `0.0`; NaN/inf values are no longer flagged NORMAL; the
+  result-edit modal recomputes the flag when the value/range changes.
+- **Frontend:** user roles normalized (fixes blank badges + an edit-dropdown privilege
+  hazard); LOGIN_FAILED shown in the audit log; global search routes orders/results
+  correctly; a stale token no longer blocks login; list-refetch races guarded; fixed the
+  Tailwind-v4 modal-backdrop regression.
+
+### Security
+
+- Externalize Docker Compose secrets to an untracked `.env`; fix the Dockerfile
+  healthcheck; untrack the `.vite` build cache and debug HTML.
 
 ## [1.0.0] - 2026-07-05
 
