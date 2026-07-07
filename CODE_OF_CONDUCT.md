@@ -56,10 +56,10 @@ an individual is officially representing the community in public spaces.
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported to the community leaders responsible for enforcement through GitHub's
-[private vulnerability reporting](https://github.com/AurevionSec/openSylab/security/advisories/new)
-or by contacting the maintainers privately. All complaints will be reviewed and
-investigated promptly and fairly.
+reported privately to the maintainer by email at **a@eddelbuet.tel**.
+(GitHub's private vulnerability reporting is for security issues only — please do
+not use it for conduct reports.) All complaints will be reviewed and investigated
+promptly and fairly.
 
 All community leaders are obligated to respect the privacy and security of the
 reporter of any incident.

@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: "If you use OpenSylab in your work, please cite it as below."
+title: "OpenSylab LIMS"
+abstract: >-
+  Open-source Laboratory Information Management System for medical diagnostics,
+  with a tamper-evident ISO 15189-oriented audit trail (HMAC-SHA256 hash chain),
+  RBAC, MFA/TOTP, and native HL7 v2.5.1 + FHIR R4 support. Self-hosted, C++17
+  backend with an embedded SQLite database and a React/TypeScript frontend.
+type: software
+authors:
+  - name: "AurevionSec"
+repository-code: "https://github.com/AurevionSec/openSylab"
+url: "https://github.com/AurevionSec/openSylab"
+license: MIT
+version: "1.0.0"
+date-released: "2026-07-05"
+keywords:
+  - LIMS
+  - medical-diagnostics
+  - ISO-15189
+  - audit-trail
+  - HL7
+  - FHIR
+  - RBAC
+  - self-hosted
